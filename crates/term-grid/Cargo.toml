@@ -1,0 +1,17 @@
+[package]
+name = "term-grid"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Cell-grid wgpu pass for rune-term. No Rune and no librio."
+
+[dependencies]
+bytemuck = { version = "1", features = ["derive"] }
+swash = "0.2.10"
+wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10.1"
+core-graphics = "0.24.0"
+core-text = "21.0.0"

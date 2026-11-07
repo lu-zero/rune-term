@@ -1,0 +1,308 @@
+//! The delegate runs on the PTY thread and on the UI thread from `inject_output`.
+//! It enqueues chrome and wakes. It does not write `Model`.
+
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+
+use librio::{Action, ClipboardType, RenderState, SurfaceDelegate, SurfaceDesc, SurfaceId};
+use rune::{Tx, Waker};
+
+use crate::chrome::PANE_MARK;
+use crate::model::Model;
+use crate::surfaces::{HostSurface, Progress};
+
+static QUEUED_INJECT: Mutex<Option<Vec<u8>>> = Mutex::new(None);
+static PUBLISHED: Mutex<Option<Arc<Shared>>> = Mutex::new(None);
+
+pub struct Harness {
+    pub rearms: usize,
+    /// True when a surface flag is still set, or a wakeup arrived before its flag existed.
+    pub frame_flag: bool,
+    pub output_len: usize,
+}
+
+/// Bytes the headless test injects as child output. `inject_output` does not
+/// wake, so `poll` raises that surface's flag itself.
+pub fn queue_inject(bytes: &[u8]) {
+    *QUEUED_INJECT.lock().expect("inject") = Some(bytes.to_vec());
+}
+
+pub(crate) fn take_inject() -> Option<Vec<u8>> {
+    QUEUED_INJECT.lock().expect("inject").take()
+}
+
+pub(crate) fn publish(shared: &Arc<Shared>) {
+    *PUBLISHED.lock().expect("harness") = Some(Arc::clone(shared));
+}
+
+pub fn harness() -> Option<Harness> {
+    PUBLISHED
+        .lock()
+        .expect("harness")
+        .as_ref()
+        .map(|shared| shared.report())
+}
+
+struct Flags {
+    live: HashMap<SurfaceId, Arc<AtomicBool>>,
+    /// Wakeups that arrived before `setup` published the flag.
+    pending: HashSet<SurfaceId>,
+}
+
+pub struct Shared {
+    events: Mutex<Vec<HostEvent>>,
+    waker: Mutex<Option<Waker>>,
+    flags: Mutex<Flags>,
+    output: Mutex<Vec<u8>>,
+    rearms: AtomicUsize,
+}
+
+enum HostEvent {
+    Action {
+        id: SurfaceId,
+        action: Action,
+    },
+    Close(SurfaceId),
+    Clipboard {
+        id: SurfaceId,
+        kind: ClipboardType,
+        len: usize,
+    },
+}
+
+struct Delegate {
+    shared: Arc<Shared>,
+}
+
+impl Shared {
+    pub(crate) fn new() -> Arc<Self> {
+        Arc::new(Self {
+            events: Mutex::new(Vec::new()),
+            waker: Mutex::new(None),
+            flags: Mutex::new(Flags {
+                live: HashMap::new(),
+                pending: HashSet::new(),
+            }),
+            output: Mutex::new(Vec::new()),
+            rearms: AtomicUsize::new(0),
+        })
+    }
+
+    pub(crate) fn delegate(self: &Arc<Self>) -> Arc<dyn SurfaceDelegate> {
+        Arc::new(Delegate {
+            shared: Arc::clone(self),
+        })
+    }
+
+    #[cfg(all(test, not(feature = "pty")))]
+    pub(crate) fn take_output(&self) -> Vec<u8> {
+        std::mem::take(&mut *self.output.lock().expect("output"))
+    }
+
+    pub(crate) fn set_waker(&self, waker: Waker) {
+        *self.waker.lock().expect("waker") = Some(waker);
+    }
+
+    pub(crate) fn insert_flag(&self, id: SurfaceId, flag: Arc<AtomicBool>) {
+        let mut flags = self.flags.lock().expect("flags");
+        if flags.pending.remove(&id) {
+            flag.store(true, Ordering::Release);
+        }
+        flags.live.insert(id, flag);
+    }
+
+    pub(crate) fn remove_flag(&self, id: SurfaceId) {
+        let mut flags = self.flags.lock().expect("flags");
+        flags.live.remove(&id);
+        flags.pending.remove(&id);
+    }
+
+    pub(crate) fn note_rearm(&self) {
+        self.rearms.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn take_events(&self) -> Vec<HostEvent> {
+        std::mem::take(&mut *self.events.lock().expect("events"))
+    }
+
+    fn push(&self, event: HostEvent) {
+        self.events.lock().expect("events").push(event);
+        self.wake();
+    }
+
+    fn wake(&self) {
+        if let Some(waker) = self.waker.lock().expect("waker").as_ref() {
+            waker();
+        }
+    }
+
+    /// `wakeup` sets the flag and wakes only on the false→true edge.
+    fn raise(&self, id: SurfaceId) {
+        let mut flags = self.flags.lock().expect("flags");
+        if let Some(flag) = flags.live.get(&id).cloned() {
+            drop(flags);
+            if !flag.swap(true, Ordering::AcqRel) {
+                self.wake();
+            }
+            return;
+        }
+        if flags.pending.insert(id) {
+            drop(flags);
+            self.wake();
+        }
+    }
+
+    fn report(&self) -> Harness {
+        let flags = self.flags.lock().expect("flags");
+        let frame_flag = !flags.pending.is_empty()
+            || flags.live.values().any(|flag| flag.load(Ordering::Acquire));
+        Harness {
+            rearms: self.rearms.load(Ordering::Acquire),
+            frame_flag,
+            output_len: self.output.lock().expect("output").len(),
+        }
+    }
+}
+
+impl SurfaceDelegate for Delegate {
+    fn wakeup(&self, surface: SurfaceId) {
+        self.shared.raise(surface);
+    }
+
+    fn action(&self, surface: SurfaceId, action: Action) {
+        self.shared.push(HostEvent::Action {
+            id: surface,
+            action,
+        });
+    }
+
+    fn clipboard_write(&self, surface: SurfaceId, kind: ClipboardType, text: String) {
+        let len = text.len();
+        drop(text);
+        self.shared.push(HostEvent::Clipboard {
+            id: surface,
+            kind,
+            len,
+        });
+    }
+
+    fn close_surface(&self, surface: SurfaceId) {
+        self.shared.push(HostEvent::Close(surface));
+    }
+
+    fn output(&self, _surface: SurfaceId, bytes: &[u8]) {
+        self.shared
+            .output
+            .lock()
+            .expect("output")
+            .extend_from_slice(bytes);
+    }
+}
+
+pub fn setup(model: &mut Model, waker: Waker) {
+    model.shared.set_waker(waker);
+    let flag = Arc::new(AtomicBool::new(false));
+    let surface = model
+        .engine
+        .create_surface(&SurfaceDesc::default())
+        .expect("create surface");
+    let id = surface.id();
+    model.shared.insert_flag(id, Arc::clone(&flag));
+    let render = RenderState::new(&surface);
+    model.surfaces.insert(HostSurface {
+        surface,
+        render,
+        mark: PANE_MARK,
+        title: "rune-term".to_string(),
+        bell: false,
+        progress: None,
+        blink: true,
+        frame_flag: flag,
+        resized: AtomicBool::new(false),
+        cols: 0,
+        rows: 0,
+        cell_px: (0, 0),
+        wheel_remainder: 0.0,
+    });
+}
+
+pub fn poll(model: &mut Model, _now: f64, _tx: &mut Tx) -> bool {
+    let events = model.shared.take_events();
+    let mut chrome = false;
+    for event in events {
+        if apply(model, event) {
+            chrome = true;
+        }
+    }
+    if let Some(bytes) = model.pending_inject.take() {
+        if let Some(host) = model.surfaces.primary_mut() {
+            host.surface.inject_output(&bytes);
+            host.frame_flag.store(true, Ordering::Release);
+        }
+    }
+    chrome
+}
+
+fn apply(model: &mut Model, event: HostEvent) -> bool {
+    match event {
+        HostEvent::Action { id, action } => apply_action(model, id, action),
+        HostEvent::Close(id) => {
+            model.shared.remove_flag(id);
+            model.surfaces.remove(id).is_some()
+        }
+        HostEvent::Clipboard { len, .. } => {
+            eprintln!("clipboard write dropped ({len} bytes)");
+            false
+        }
+    }
+}
+
+fn apply_action(model: &mut Model, id: SurfaceId, action: Action) -> bool {
+    match action {
+        Action::SetTitle { title, .. } => {
+            let changed = match model.surfaces.get_mut(id) {
+                Some(host) if host.title != title => {
+                    host.title = title.clone();
+                    true
+                }
+                Some(_) => false,
+                None => return false,
+            };
+            if changed {
+                if let Some(tab) = model.tabs.get_mut(model.active) {
+                    tab.title = title;
+                }
+            }
+            changed
+        }
+        Action::RingBell => {
+            let Some(host) = model.surfaces.get_mut(id) else {
+                return false;
+            };
+            if host.bell {
+                return false;
+            }
+            host.bell = true;
+            true
+        }
+        Action::CursorBlinkingChange => {
+            let Some(host) = model.surfaces.get_mut(id) else {
+                return false;
+            };
+            host.blink = !host.blink;
+            true
+        }
+        Action::Progress { state, value } => {
+            let Some(host) = model.surfaces.get_mut(id) else {
+                return false;
+            };
+            let next = Some(Progress { state, value });
+            if host.progress == next {
+                return false;
+            }
+            host.progress = next;
+            true
+        }
+    }
+}

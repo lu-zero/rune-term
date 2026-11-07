@@ -1,0 +1,10 @@
+[package]
+name = "term-input"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Physical key and cell hit testing for rune-term. No window types."
+
+[dependencies]
+librio = { path = "../../../rio/librio", default-features = false }

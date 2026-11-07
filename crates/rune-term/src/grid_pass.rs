@@ -1,0 +1,42 @@
+//! Snapshot, then upload. Dirty bits stay set until the upload reads them.
+
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+
+use term_grid::GridRenderer;
+
+use crate::grid_source::SurfaceGrid;
+use crate::images;
+use crate::model::Model;
+use crate::search;
+use crate::selection;
+
+pub fn sync(
+    model: &mut Model,
+    grid: &mut GridRenderer,
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+) {
+    let shared = Arc::clone(&model.shared);
+    for host in model.surfaces.iter_mut() {
+        let resized = host.resized.swap(false, Ordering::AcqRel);
+        let flagged = host.frame_flag.load(Ordering::Acquire);
+        if flagged || resized {
+            host.render.update_rearm(&host.frame_flag);
+            shared.note_rearm();
+        }
+        if host.cell_px.0 == 0 || host.cell_px.1 == 0 {
+            let marked = selection::tint(());
+            let _marked = search::tint(marked);
+            images::draw();
+            continue;
+        }
+        let source = SurfaceGrid {
+            render: &mut host.render,
+        };
+        let source = selection::tint(source);
+        let mut source = search::tint(source);
+        grid.upload(device, queue, &mut source, host.cell_px, resized || flagged);
+        images::draw();
+    }
+}
