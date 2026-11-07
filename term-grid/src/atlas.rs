@@ -1,5 +1,5 @@
 //! One 2048² gray atlas, plus a color atlas for system emoji.
-//! The face is Rio's bundled Cascadia Code NF. ASCII is rasterized up
+//! The face is Cascadia Code NF, the file Rio ships. ASCII is rasterized up
 //! front. Every other covered codepoint is rasterized on demand into the
 //! same cell. A codepoint the face does not cover is drawn by the macOS
 //! cascade. The face is OFL; see `CascadiaCode-LICENSE.txt`.
@@ -12,9 +12,8 @@ use swash::{FontRef, NormalizedCoord};
 
 pub const ATLAS_SIZE: u32 = 2048;
 
-/// Same bytes `sugarloaf` embeds as its regular face.
-const FONT: &[u8] =
-    include_bytes!("../../../rio/sugarloaf/src/font/resources/CascadiaCode/CascadiaCodeNF.ttf");
+/// Same bytes Sugarloaf embeds. Vendored so a clone builds without the Rio tree.
+const FONT: &[u8] = include_bytes!("../CascadiaCodeNF.ttf");
 
 /// Rio's default font size, in points.
 const FACE_PX: f32 = 14.0;

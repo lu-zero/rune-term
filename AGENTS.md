@@ -18,12 +18,14 @@ comments, and docs: a pattern being there does not make it correct.
 
 - `cargo fmt --all -- --check` passes before a commit. There is no justfile
   and no git hook.
-- Sibling checkouts (`../rune`, `../rio`, `../wezterm`) are for reading. The
-  exceptions already declared are the path dependencies on
-  `../rune/crates/rune` and `../rio/librio`, and the Cascadia Code NF file
-  the atlas includes from the Rio tree. Never copy WezTerm source in. Never
-  link `sugarloaf`, `rio-window`, `rioterm`, `rio-backend`, or WezTerm's
-  `window` or `mux`.
+- Sibling checkouts (`../rune`, `../rio`, `../wezterm`) are for reading.
+  The workspace depends on upstream `rune` and `librio`. `[patch]` replaces
+  those sources with `https://github.com/lu-zero/rune` branch
+  `physical-key-text` and `https://github.com/lu-zero/rio` branch
+  `librio-update-rearm`. A local checkout replaces that patch entry with a
+  path. Cascadia Code NF is vendored at `term-grid/CascadiaCodeNF.ttf`.
+  Never copy WezTerm source in. Never link `sugarloaf`, `rio-window`,
+  `rioterm`, `rio-backend`, or WezTerm's `window` or `mux`.
 - A change that has to land in Rune or Rio is reported. Those trees are not
   committed from this repository.
 - `docs/todo/` is committed. It is the design, so nothing cites it as

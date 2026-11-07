@@ -15,8 +15,8 @@ name = "rune-term"
 path = "src/main.rs"
 
 [dependencies]
-rune = { path = "../../rune/crates/rune" }
-librio = { path = "../../rio/librio", default-features = false }
+rune.workspace = true
+librio.workspace = true
 term-grid = { path = "../term-grid" }
 term-input = { path = "../term-input" }
 wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }

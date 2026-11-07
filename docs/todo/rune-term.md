@@ -59,36 +59,43 @@ rune-term/                     workspace root
   Cargo.toml                   members = ["term-grid", "term-input", "rune-term"]
   term-grid/                   wgpu pipeline, atlas, dirty-row upload. No rune, no librio.
   term-input/                  PhysicalKeyCode + Mods → KeyEvent, chord predicate, cell hit-test.
-  rune-term/                   binary and AppSpec. Path-depends on rune, librio, the two crates above.
+  rune-term/                   binary and AppSpec. Depends on rune, librio, the two crates above.
 ```
 
-Path dependencies, relative to each package `Cargo.toml`:
+`rune` and `librio` are git dependencies on the upstream repositories. The `[patch]` table replaces those sources with the forks. A local checkout replaces a patch entry with a path.
 
-- `rune-term` → `../../rune/crates/rune`, `../../rio/librio`
-- `term-input` → `../../rio/librio` with `default-features = false` (key types and `key::encode`; no PTY spawn)
-- `term-grid` → `wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }`
+- `rune` → `https://github.com/anomalyco/rune` branch `dev`, patched to `https://github.com/lu-zero/rune` branch `physical-key-text`
+- `librio` → `https://github.com/raphamorim/rio` branch `main`, `default-features = false`, patched to `https://github.com/lu-zero/rio` branch `librio-update-rearm`. Key types and `key::encode`; no PTY spawn unless a feature asks.
+- `term-grid` → `wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }`. Cascadia Code NF is vendored at `term-grid/CascadiaCodeNF.ttf`.
 
 `=30.0.1` is required. Rune's lock and Rio's lock both resolve wgpu `30.0.1` with checksum `527ccdf43…`. `Frame::device` is that crate's `wgpu::Device`. A looser requirement can resolve a different 30.0 patch and fail the type check, or pull a second wgpu. When Rune bumps wgpu, term-grid bumps in the same change. term-grid requests no extra `wgpu::Features`. `default-features = false` keeps term-grid from pulling wgpu's hal backends on its own; Cargo still unions features with Rune's `wgpu` dependency (`std`, `parking_lot`, `metal`, `wgsl`, and the `custom` backend on Apple) when the app links both. Rune's Metal backend panics on features it does not implement.
 
 Feature wiring. `--no-default-features` only drops features of the package you named, so librio must not be depended with its own defaults (`pty`, `graphics` in `librio/Cargo.toml`). Those defaults are what make `Surface::new` spawn a login shell when `shell` is `None`.
 
 ```toml
+# Cargo.toml
+[workspace.dependencies]
+rune = { git = "https://github.com/anomalyco/rune", branch = "dev" }
+librio = { git = "https://github.com/raphamorim/rio", branch = "main", default-features = false }
+
+[patch."https://github.com/anomalyco/rune"]
+rune = { git = "https://github.com/lu-zero/rune", branch = "physical-key-text" }
+
+[patch."https://github.com/raphamorim/rio"]
+librio = { git = "https://github.com/lu-zero/rio", branch = "librio-update-rearm" }
+
 # rune-term/Cargo.toml
 [dependencies]
-rune = { path = "../../rune/crates/rune" }
-librio = { path = "../../rio/librio", default-features = false }
-term-grid = { path = "../term-grid" }
-term-input = { path = "../term-input" }
+rune.workspace = true
+librio.workspace = true
 
 [features]
 default = ["pty"]
 pty = ["librio/pty", "librio/graphics"]
 graphics = ["librio/graphics"]
-
-# term-input/Cargo.toml
-[dependencies]
-librio = { path = "../../rio/librio", default-features = false }
 ```
+
+`term-input` depends with `librio.workspace = true` and enables no features.
 
 `cargo test -p rune-term --no-default-features` builds librio without `pty` and is the inject harness. `cargo test -p rune-term --no-default-features --features graphics` is the same harness plus kitty pixel decode, still with no shell. `cargo build -p rune-term` (default `pty`) is the link check. A `cargo test --workspace` that builds rune-term with default features unifies `librio/pty` on for every crate in that invocation; term-input tests must not call `create_surface` in that configuration. Tests that enable `pty` must not call `create_surface` against the login shell.
 
@@ -836,9 +843,9 @@ Migration: there is no previous rune-term. The rio-vt reflow change is behavior-
 
 ### 1. Depend on `rio-vt` and skip librio
 
-librio's README says to do this for Rust callers. `rio-vt` has the grid, the parser, and the PTY performer. It does not have `RenderState`, `Surface::key`'s mode snapshot, or `key::encode` with the `EncodeContext` already filled from terminal modes. Rebuilding that in rune-term duplicates the host contract Rio just extracted, including kitty placement snapshotting and damage peeking. The C ABI and the `staticlib` are irrelevant to an rlib path dependency; `Cargo.toml` already emits an rlib alongside the staticlib.
+librio's README says to do this for Rust callers. `rio-vt` has the grid, the parser, and the PTY performer. It does not have `RenderState`, `Surface::key`'s mode snapshot, or `key::encode` with the `EncodeContext` already filled from terminal modes. Rebuilding that in rune-term duplicates the host contract Rio just extracted, including kitty placement snapshotting and damage peeking. The C ABI and the `staticlib` are irrelevant to an rlib dependency; `Cargo.toml` already emits an rlib alongside the staticlib.
 
-Rejected. From the workspace root the checkout is `../rio/librio`. Each package manifest depends on `../../rio/librio` with `default-features = false`. Recorded as a decision, not an open question.
+Rejected. Each package depends on `librio` with `default-features = false`. The workspace `[patch]` table points that source at the fork. Recorded as a decision, not an open question.
 
 ### 2. Rewrap in rune-term on a snapshot, leave `resize.rs` alone
 
@@ -916,13 +923,13 @@ The manual macOS marked-text check in the IME PR is a test obligation, not a sec
 - rio-vt: `rio-vt/src/crosswords/mod.rs` `Crosswords::resize`, `snapshot_visible`, `TermDamageState::resize`, `damage_cursor_blink`. `rio-vt/src/crosswords/grid/resize.rs` (Alacritty pairwise, Apache-2.0 header). `rio-vt/src/crosswords/grid/mod.rs` `ReflowRemap`, `Grid::new`. `rio-vt/src/crosswords/grid/storage.rs` `MAX_CACHE_SIZE`. `rio-vt/src/crosswords/square.rs` 8-byte `Square`, `WRAPLINE`. `rio-vt/src/performer/mod.rs` `notify_damage`, `sync_deadline`. `rio-vt/src/event/mod.rs` `TerminalDamage`.
 - Rio frontend, cited to avoid: `frontends/rioterm/src/renderer/utils.rs` `terminal_dimensions`, `frontends/rioterm/src/layout/mod.rs` `set_panel_size`. Sugarloaf, cited to port: `sugarloaf/src/grid/cell.rs`, `sugarloaf/src/grid/shaders/grid.wgsl`, `sugarloaf/src/grid/webgpu.rs`, `sugarloaf/src/sprite/`.
 - WezTerm, cited as the algorithm: `term/src/screen.rs` `rewrap_lines` and `Screen::resize` (blank prune, `is_conpty`), `wezterm-surface/src/line/line.rs` `Line::wrap`, `wezterm-gui/src/termwindow/resize.rs` `apply_dimensions` and `live_resizing`, `mux/src/tab.rs` `adjust_x_size` / `adjust_y_size` / `compute_min_size`, `wezterm-gui/src/resize_increment_calculator.rs`. Issue 535 for exact cell pixels.
-- Licenses: Rune, Rio, and WezTerm are MIT. The reflow file's header remains Alacritty Apache-2.0. Do not paste WezTerm bodies into it. Implementation commits inside Rune or Rio must not add home-directory paths (Rune `AGENTS.md`); this design file lives outside those repos and cites the sibling checkouts by absolute path. Crate path deps are relative to each package manifest: `../../rune/crates/rune` and `../../rio/librio` from `rune-term/Cargo.toml`. `../rune` would not resolve from that file.
+- Licenses: Rune, Rio, and WezTerm are MIT. The reflow file's header remains Alacritty Apache-2.0. Do not paste WezTerm bodies into it. Implementation commits inside Rune or Rio must not add home-directory paths (Rune `AGENTS.md`); this design file lives outside those repos and cites the sibling checkouts by absolute path. The workspace `[patch]` table points `rune` and `librio` at `https://github.com/lu-zero/rune` branch `physical-key-text` and `https://github.com/lu-zero/rio` branch `librio-update-rearm`.
 
 ## Key Decisions
 
 1. **Rune owns the shell; the view does not read cells.** Output wakes a frame through `AppHandle::wake` and a `poll` that returns false. `Tx::live_only` covers keys and mouse. Chrome (title, bell, progress, tabs, focus) is the only reason to commit the view. This keeps `cat` off the view builder, which is the cost model of `AppSpec::view`.
 
-2. **librio is the host API, as an rlib path dependency, despite its README.** `Surface`, `RenderState`, and `key::encode` are the contract. `rio-vt` alone would force rune-term to reimplement that contract. `rio-window`, `rioterm`, `rio-backend`, and Sugarloaf are not linked.
+2. **librio is the host API, as an rlib, despite its README.** `Surface`, `RenderState`, and `key::encode` are the contract. `rio-vt` alone would force rune-term to reimplement that contract. `rio-window`, `rioterm`, `rio-backend`, and Sugarloaf are not linked.
 
 3. **The grid is one `El::effect` per pane on Rune's existing wgpu device.** Cell layout is Sugarloaf's `CellBg` (4), `CellText` (32), and `GridUniforms` (multiple of 16; the 144-byte comment is stale). Stored `CellBg` and `CellText.color` bytes are straight sRGB plus alpha, not Sugarloaf's "Premultiplied RGBA8" comment. The shader premultiplies once after `FLAG_LINEAR_BLENDING`. It targets `EffectSite::srgb_blend`, deletes the Display P3 and Rec.2020 matrices, and blends src `One`, dst `OneMinusSrcAlpha`. No second device, no binding arrays, no depth.
 
@@ -998,7 +1005,7 @@ flowchart TD
 
 - **Files:** workspace `Cargo.toml`; `term-grid/` (`SolidSlot` only); `term-input/` (compiling stubs); `rune-term/` `main.rs`, `app.rs`, `model.rs`, `delegate.rs`, `surfaces.rs` (one surface), `chrome.rs` (one tab), `resize.rs` (frozen `apply` signature, initial size, then `live_only`), `pane_input.rs` (returns false), `grid_pass.rs` (solid, already calls the tint and image stubs), `selection.rs`, `search.rs`, `images.rs`, `ime.rs` (identity stubs), `metrics.rs`, `tests/headless.rs`. In the rio checkout, only `librio/src/render_state.rs` (`update_rearm`). Not `librio/src/lib.rs` and not `rio-vt`.
 - **Depends on:** none.
-- **Description:** Path deps from `rune-term/Cargo.toml` are `../../rune/crates/rune` and `../../rio/librio` with `default-features = false`. Features: `default = ["pty"]`, `pty = ["librio/pty", "librio/graphics"]`, and `graphics = ["librio/graphics"]` so `--no-default-features --features graphics` decodes kitty pixels without a shell. term-input depends on librio the same way, without `pty`. One window, one `Engine` / `Surface`. The delegate's `wakeup` sets that surface's `frame_flag` and calls `AppSpec::setup`'s `Waker` only on the false→true edge. `action`, `close_surface`, and `clipboard_write` enqueue a `HostEvent` (clipboard length only), always call the waker, and do not set the flag. `poll` drains the queue on the UI thread and returns true only when chrome changed. Effect mark paints a solid color through `term-grid::SolidSlot`. `app.rs` already calls `grid_pass::paint`, `resize::apply`, `perform_resize`, and `ime::mount_caret`, and stubs `on_ime` to return false. Headless test is `cargo test -p rune-term --no-default-features`: `inject_output`, set the damage flag, one `update_rearm`, PNG of chrome plus the solid slot. It does not inject DEC 2026. `cargo build -p rune-term` with default features links the PTY binary. No glyph pipeline, no key table, no split math, no `rio-vt` edits.
+- **Description:** Workspace git dependencies on upstream `rune` and `librio`, with `default-features = false` on `librio`. `[patch]` replaces those sources with the forks. Features: `default = ["pty"]`, `pty = ["librio/pty", "librio/graphics"]`, and `graphics = ["librio/graphics"]` so `--no-default-features --features graphics` decodes kitty pixels without a shell. term-input depends on librio the same way, without `pty`. One window, one `Engine` / `Surface`. The delegate's `wakeup` sets that surface's `frame_flag` and calls `AppSpec::setup`'s `Waker` only on the false→true edge. `action`, `close_surface`, and `clipboard_write` enqueue a `HostEvent` (clipboard length only), always call the waker, and do not set the flag. `poll` drains the queue on the UI thread and returns true only when chrome changed. Effect mark paints a solid color through `term-grid::SolidSlot`. `app.rs` already calls `grid_pass::paint`, `resize::apply`, `perform_resize`, and `ime::mount_caret`, and stubs `on_ime` to return false. Headless test is `cargo test -p rune-term --no-default-features`: `inject_output`, set the damage flag, one `update_rearm`, PNG of chrome plus the solid slot. It does not inject DEC 2026. `cargo build -p rune-term` with default features links the PTY binary. No glyph pipeline, no key table, no split math, no `rio-vt` edits.
 - **Parallel with siblings:** nothing precedes it. The reflow PR and the Rune paired-text PR may run beside it. The reflow PR does not edit `render_state.rs`. The Rune PR does not edit rune-term.
 
 ### 2. term-grid wgpu pipeline, atlas, and dirty-row upload

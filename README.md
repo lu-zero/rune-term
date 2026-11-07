@@ -15,10 +15,11 @@ The plan and what is still missing are in [`docs/todo/`](./docs/todo/).
 
 ## Building
 
-Next to this repository: `../rune` on `dev`, with `PhysicalInput::Key`
-carrying `text` and `consumed_mods`, and `../rio` on `librio-update-rearm`,
-with `RenderState::update_rearm`. The atlas compiles in Cascadia Code NF
-from that Rio tree. wgpu is pinned at `=30.0.1`.
+`rune` and `librio` are the upstream git dependencies. `[patch]` replaces
+them with [lu-zero/rune](https://github.com/lu-zero/rune) branch
+`physical-key-text` and [lu-zero/rio](https://github.com/lu-zero/rio) branch
+`librio-update-rearm`. Cascadia Code NF is vendored in `term-grid/`. wgpu
+is pinned at `=30.0.1`.
 
 ```
 cargo run -p rune-term

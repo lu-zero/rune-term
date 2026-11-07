@@ -40,10 +40,9 @@ The numbers are that plan's.
 
 ## Outside this repository
 
-- [~] **4. Rune paired text.** `PhysicalInput::Key` carries `text` and
-      `consumed_mods` in the `../rune` checkout on `dev`. That change is
-      uncommitted.
-- [~] **`RenderState::update_rearm`.** Uncommitted on `../rio`, branch
+- [x] **4. Rune paired text.** `PhysicalInput::Key` carries `text` and
+      `consumed_mods` on `lu-zero/rune` branch `physical-key-text`.
+- [x] **`RenderState::update_rearm`.** On `lu-zero/rio` branch
       `librio-update-rearm`. This tree calls it.
 - [~] **3. Reflow.** Join-then-split is on Rio's local branch
       `rio-vt-reflow`. This tree builds without that branch.

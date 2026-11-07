@@ -11,3 +11,13 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 publish = false
+
+[workspace.dependencies]
+rune = { git = "https://github.com/anomalyco/rune", branch = "dev" }
+librio = { git = "https://github.com/raphamorim/rio", branch = "main", default-features = false }
+
+[patch."https://github.com/anomalyco/rune"]
+rune = { git = "https://github.com/lu-zero/rune", branch = "physical-key-text" }
+
+[patch."https://github.com/raphamorim/rio"]
+librio = { git = "https://github.com/lu-zero/rio", branch = "librio-update-rearm" }
