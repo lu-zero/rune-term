@@ -2,8 +2,11 @@
 
 [`docs/todo/rune-term.md`](./docs/todo/rune-term.md) is the design: crate
 boundaries, the frame path, and the winsize. Read it before a change that
-touches those. Leave the document as it stands unless you were asked to edit
-it. Its header still records an empty workspace.
+touches those. Leave it as it stands unless you were asked to edit it. Its
+header still records an empty workspace.
+[`docs/todo/status.md`](./docs/todo/status.md) is how far that plan has got.
+When a plan item lands or is dropped, update the status page in the same
+change.
 
 ## Slop warning
 
