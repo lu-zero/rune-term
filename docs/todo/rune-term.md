@@ -55,28 +55,28 @@ Sugarloaf's grid (`sugarloaf/src/grid/cell.rs`, `shaders/grid.wgsl`, `grid/webgp
 ### Crate layout
 
 ```
-rune-term/                          workspace root
-  Cargo.toml                        members = ["crates/term-grid", "crates/term-input", "crates/rune-term"]
-  crates/term-grid/                 wgpu pipeline, atlas, dirty-row upload. No rune, no librio.
-  crates/term-input/                PhysicalKeyCode + Mods → KeyEvent, chord predicate, cell hit-test.
-  crates/rune-term/                 binary and AppSpec. Path-depends on rune, librio, the two crates above.
+rune-term/                     workspace root
+  Cargo.toml                   members = ["term-grid", "term-input", "rune-term"]
+  term-grid/                   wgpu pipeline, atlas, dirty-row upload. No rune, no librio.
+  term-input/                  PhysicalKeyCode + Mods → KeyEvent, chord predicate, cell hit-test.
+  rune-term/                   binary and AppSpec. Path-depends on rune, librio, the two crates above.
 ```
 
 Path dependencies, relative to each package `Cargo.toml`:
 
-- `crates/rune-term` → `../../../rune/crates/rune`, `../../../rio/librio`
-- `crates/term-input` → `../../../rio/librio` with `default-features = false` (key types and `key::encode`; no PTY spawn)
-- `crates/term-grid` → `wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }`
+- `rune-term` → `../../rune/crates/rune`, `../../rio/librio`
+- `term-input` → `../../rio/librio` with `default-features = false` (key types and `key::encode`; no PTY spawn)
+- `term-grid` → `wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }`
 
 `=30.0.1` is required. Rune's lock and Rio's lock both resolve wgpu `30.0.1` with checksum `527ccdf43…`. `Frame::device` is that crate's `wgpu::Device`. A looser requirement can resolve a different 30.0 patch and fail the type check, or pull a second wgpu. When Rune bumps wgpu, term-grid bumps in the same change. term-grid requests no extra `wgpu::Features`. `default-features = false` keeps term-grid from pulling wgpu's hal backends on its own; Cargo still unions features with Rune's `wgpu` dependency (`std`, `parking_lot`, `metal`, `wgsl`, and the `custom` backend on Apple) when the app links both. Rune's Metal backend panics on features it does not implement.
 
 Feature wiring. `--no-default-features` only drops features of the package you named, so librio must not be depended with its own defaults (`pty`, `graphics` in `librio/Cargo.toml`). Those defaults are what make `Surface::new` spawn a login shell when `shell` is `None`.
 
 ```toml
-# crates/rune-term/Cargo.toml
+# rune-term/Cargo.toml
 [dependencies]
-rune = { path = "../../../rune/crates/rune" }
-librio = { path = "../../../rio/librio", default-features = false }
+rune = { path = "../../rune/crates/rune" }
+librio = { path = "../../rio/librio", default-features = false }
 term-grid = { path = "../term-grid" }
 term-input = { path = "../term-input" }
 
@@ -85,9 +85,9 @@ default = ["pty"]
 pty = ["librio/pty", "librio/graphics"]
 graphics = ["librio/graphics"]
 
-# crates/term-input/Cargo.toml
+# term-input/Cargo.toml
 [dependencies]
-librio = { path = "../../../rio/librio", default-features = false }
+librio = { path = "../../rio/librio", default-features = false }
 ```
 
 `cargo test -p rune-term --no-default-features` builds librio without `pty` and is the inject harness. `cargo test -p rune-term --no-default-features --features graphics` is the same harness plus kitty pixel decode, still with no shell. `cargo build -p rune-term` (default `pty`) is the link check. A `cargo test --workspace` that builds rune-term with default features unifies `librio/pty` on for every crate in that invocation; term-input tests must not call `create_surface` in that configuration. Tests that enable `pty` must not call `create_surface` against the login shell.
@@ -290,7 +290,7 @@ pub trait GridSource {
 }
 ```
 
-The app adapter reads `RenderState::row_dirty`, `square`, `Square::wide`, `style_at`, `term_colors`, and the cursor fields. term-grid's own tests are CPU packing plus a `Vec<CellSample>` fixture. They do not link Rune. The draw that has to survive Rune's Metal backend is `crates/rune-term/tests/grid_pipeline.rs`, which already depends on term-grid and calls `rune::render::Gpu::headless`, plus one manual window-device check. Sampling a known gray in both `srgb_blend` modes is part of that test, and so is one pixel with alpha 128, so a src-alpha blend of a premultiplied color fails the snapshot.
+The app adapter reads `RenderState::row_dirty`, `square`, `Square::wide`, `style_at`, `term_colors`, and the cursor fields. term-grid's own tests are CPU packing plus a `Vec<CellSample>` fixture. They do not link Rune. The draw that has to survive Rune's Metal backend is `rune-term/tests/grid_pipeline.rs`, which already depends on term-grid and calls `rune::render::Gpu::headless`, plus one manual window-device check. Sampling a known gray in both `srgb_blend` modes is part of that test, and so is one pixel with alpha 128, so a src-alpha blend of a premultiplied color fails the snapshot.
 
 Storage, rough, for the GPU, per pane at 120×40. `FRAMES_IN_FLIGHT = 2`, so the cell buffers exist twice (Sugarloaf's wgpu renderer keeps `bg_cpu: [Vec<CellBg>; FRAMES_IN_FLIGHT]` for the same reason). The factor of 2 in the text line below is two quads, not two frames.
 
@@ -779,7 +779,7 @@ fn perform_resize(tx: &mut Tx, host: &HostSurface, effect: ResizeEffect) {
 }
 ```
 
-`crates/rune-term` module seams the foundation creates, so later PRs replace bodies without editing callers:
+`rune-term` module seams the foundation creates, so later PRs replace bodies without editing callers:
 
 | Module | Foundation body | Replaced by |
 |---|---|---|
@@ -838,7 +838,7 @@ Migration: there is no previous rune-term. The rio-vt reflow change is behavior-
 
 librio's README says to do this for Rust callers. `rio-vt` has the grid, the parser, and the PTY performer. It does not have `RenderState`, `Surface::key`'s mode snapshot, or `key::encode` with the `EncodeContext` already filled from terminal modes. Rebuilding that in rune-term duplicates the host contract Rio just extracted, including kitty placement snapshotting and damage peeking. The C ABI and the `staticlib` are irrelevant to an rlib path dependency; `Cargo.toml` already emits an rlib alongside the staticlib.
 
-Rejected. From the workspace root the checkout is `../rio/librio`. Each package manifest under `crates/` depends on `../../../rio/librio` with `default-features = false`. Recorded as a decision, not an open question.
+Rejected. From the workspace root the checkout is `../rio/librio`. Each package manifest depends on `../../rio/librio` with `default-features = false`. Recorded as a decision, not an open question.
 
 ### 2. Rewrap in rune-term on a snapshot, leave `resize.rs` alone
 
@@ -878,7 +878,7 @@ No network in this design. The PTY is local. Scrollback is process memory, not a
 
 ## Observability
 
-Use `tracing` in `crates/rune-term`. No new dependency in `rio-vt` beyond the tests it already runs.
+Use `tracing` in `rune-term`. No new dependency in `rio-vt` beyond the tests it already runs.
 
 | Event | Fields |
 |---|---|
@@ -916,7 +916,7 @@ The manual macOS marked-text check in the IME PR is a test obligation, not a sec
 - rio-vt: `rio-vt/src/crosswords/mod.rs` `Crosswords::resize`, `snapshot_visible`, `TermDamageState::resize`, `damage_cursor_blink`. `rio-vt/src/crosswords/grid/resize.rs` (Alacritty pairwise, Apache-2.0 header). `rio-vt/src/crosswords/grid/mod.rs` `ReflowRemap`, `Grid::new`. `rio-vt/src/crosswords/grid/storage.rs` `MAX_CACHE_SIZE`. `rio-vt/src/crosswords/square.rs` 8-byte `Square`, `WRAPLINE`. `rio-vt/src/performer/mod.rs` `notify_damage`, `sync_deadline`. `rio-vt/src/event/mod.rs` `TerminalDamage`.
 - Rio frontend, cited to avoid: `frontends/rioterm/src/renderer/utils.rs` `terminal_dimensions`, `frontends/rioterm/src/layout/mod.rs` `set_panel_size`. Sugarloaf, cited to port: `sugarloaf/src/grid/cell.rs`, `sugarloaf/src/grid/shaders/grid.wgsl`, `sugarloaf/src/grid/webgpu.rs`, `sugarloaf/src/sprite/`.
 - WezTerm, cited as the algorithm: `term/src/screen.rs` `rewrap_lines` and `Screen::resize` (blank prune, `is_conpty`), `wezterm-surface/src/line/line.rs` `Line::wrap`, `wezterm-gui/src/termwindow/resize.rs` `apply_dimensions` and `live_resizing`, `mux/src/tab.rs` `adjust_x_size` / `adjust_y_size` / `compute_min_size`, `wezterm-gui/src/resize_increment_calculator.rs`. Issue 535 for exact cell pixels.
-- Licenses: Rune, Rio, and WezTerm are MIT. The reflow file's header remains Alacritty Apache-2.0. Do not paste WezTerm bodies into it. Implementation commits inside Rune or Rio must not add home-directory paths (Rune `AGENTS.md`); this design file lives outside those repos and cites the sibling checkouts by absolute path. Crate path deps are relative to each package manifest: `../../../rune/crates/rune` and `../../../rio/librio` from `crates/rune-term/Cargo.toml`. `../rune` would not resolve from that file.
+- Licenses: Rune, Rio, and WezTerm are MIT. The reflow file's header remains Alacritty Apache-2.0. Do not paste WezTerm bodies into it. Implementation commits inside Rune or Rio must not add home-directory paths (Rune `AGENTS.md`); this design file lives outside those repos and cites the sibling checkouts by absolute path. Crate path deps are relative to each package manifest: `../../rune/crates/rune` and `../../rio/librio` from `rune-term/Cargo.toml`. `../rune` would not resolve from that file.
 
 ## Key Decisions
 
@@ -996,16 +996,16 @@ flowchart TD
 
 ### 1. Foundation: workspace, one window, one surface, headless harness
 
-- **Files:** workspace `Cargo.toml`; `crates/term-grid/` (`SolidSlot` only); `crates/term-input/` (compiling stubs); `crates/rune-term/` `main.rs`, `app.rs`, `model.rs`, `delegate.rs`, `surfaces.rs` (one surface), `chrome.rs` (one tab), `resize.rs` (frozen `apply` signature, initial size, then `live_only`), `pane_input.rs` (returns false), `grid_pass.rs` (solid, already calls the tint and image stubs), `selection.rs`, `search.rs`, `images.rs`, `ime.rs` (identity stubs), `metrics.rs`, `tests/headless.rs`. In the rio checkout, only `librio/src/render_state.rs` (`update_rearm`). Not `librio/src/lib.rs` and not `rio-vt`.
+- **Files:** workspace `Cargo.toml`; `term-grid/` (`SolidSlot` only); `term-input/` (compiling stubs); `rune-term/` `main.rs`, `app.rs`, `model.rs`, `delegate.rs`, `surfaces.rs` (one surface), `chrome.rs` (one tab), `resize.rs` (frozen `apply` signature, initial size, then `live_only`), `pane_input.rs` (returns false), `grid_pass.rs` (solid, already calls the tint and image stubs), `selection.rs`, `search.rs`, `images.rs`, `ime.rs` (identity stubs), `metrics.rs`, `tests/headless.rs`. In the rio checkout, only `librio/src/render_state.rs` (`update_rearm`). Not `librio/src/lib.rs` and not `rio-vt`.
 - **Depends on:** none.
-- **Description:** Path deps from `crates/rune-term/Cargo.toml` are `../../../rune/crates/rune` and `../../../rio/librio` with `default-features = false`. Features: `default = ["pty"]`, `pty = ["librio/pty", "librio/graphics"]`, and `graphics = ["librio/graphics"]` so `--no-default-features --features graphics` decodes kitty pixels without a shell. term-input depends on librio the same way, without `pty`. One window, one `Engine` / `Surface`. The delegate's `wakeup` sets that surface's `frame_flag` and calls `AppSpec::setup`'s `Waker` only on the false→true edge. `action`, `close_surface`, and `clipboard_write` enqueue a `HostEvent` (clipboard length only), always call the waker, and do not set the flag. `poll` drains the queue on the UI thread and returns true only when chrome changed. Effect mark paints a solid color through `term-grid::SolidSlot`. `app.rs` already calls `grid_pass::paint`, `resize::apply`, `perform_resize`, and `ime::mount_caret`, and stubs `on_ime` to return false. Headless test is `cargo test -p rune-term --no-default-features`: `inject_output`, set the damage flag, one `update_rearm`, PNG of chrome plus the solid slot. It does not inject DEC 2026. `cargo build -p rune-term` with default features links the PTY binary. No glyph pipeline, no key table, no split math, no `rio-vt` edits.
+- **Description:** Path deps from `rune-term/Cargo.toml` are `../../rune/crates/rune` and `../../rio/librio` with `default-features = false`. Features: `default = ["pty"]`, `pty = ["librio/pty", "librio/graphics"]`, and `graphics = ["librio/graphics"]` so `--no-default-features --features graphics` decodes kitty pixels without a shell. term-input depends on librio the same way, without `pty`. One window, one `Engine` / `Surface`. The delegate's `wakeup` sets that surface's `frame_flag` and calls `AppSpec::setup`'s `Waker` only on the false→true edge. `action`, `close_surface`, and `clipboard_write` enqueue a `HostEvent` (clipboard length only), always call the waker, and do not set the flag. `poll` drains the queue on the UI thread and returns true only when chrome changed. Effect mark paints a solid color through `term-grid::SolidSlot`. `app.rs` already calls `grid_pass::paint`, `resize::apply`, `perform_resize`, and `ime::mount_caret`, and stubs `on_ime` to return false. Headless test is `cargo test -p rune-term --no-default-features`: `inject_output`, set the damage flag, one `update_rearm`, PNG of chrome plus the solid slot. It does not inject DEC 2026. `cargo build -p rune-term` with default features links the PTY binary. No glyph pipeline, no key table, no split math, no `rio-vt` edits.
 - **Parallel with siblings:** nothing precedes it. The reflow PR and the Rune paired-text PR may run beside it. The reflow PR does not edit `render_state.rs`. The Rune PR does not edit rune-term.
 
 ### 2. term-grid wgpu pipeline, atlas, and dirty-row upload
 
-- **Files:** `crates/term-grid/**` (library target: no rune, no librio), plus a new `crates/rune-term/tests/grid_pipeline.rs` for the Metal check. Does not edit `grid_pass.rs`, `resize.rs`, `pane_input.rs`, or `render_state.rs`.
+- **Files:** `term-grid/**` (library target: no rune, no librio), plus a new `rune-term/tests/grid_pipeline.rs` for the Metal check. Does not edit `grid_pass.rs`, `resize.rs`, `pane_input.rs`, or `render_state.rs`.
 - **Depends on:** Foundation.
-- **Description:** `GridSource` and `CellSample` with no selection bit and no search field. `Atlas::insert(key, bitmap) -> GlyphRect` is frozen here. `sprite.rs` exists and returns `None` so the box-drawing PR can replace that file only. `CellBg` / `CellText` / `GridUniforms` ported from `sugarloaf/src/grid/cell.rs`. WGSL ported from `sugarloaf/src/grid/shaders/grid.wgsl` with the Display P3 and Rec.2020 matrices deleted and `grid_prepare_output_rgb` branching on `FLAG_LINEAR_BLENDING`. Blend is src `One`, dst `OneMinusSrcAlpha`. Two pipelines inside the Metal subset, 2048² `R8Unorm` atlas, two cell-buffer copies, dirty-row upload from a `Vec<CellSample>` fixture. ASCII from a baked bitmap. Cursor uniforms. `Cargo.toml`: `wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }`. CPU tests stay inside term-grid and do not link Rune. `crates/rune-term/tests/grid_pipeline.rs` calls `rune::render::Gpu::headless` for both `srgb_blend` values and includes one alpha-128 pixel. Does not open a window or link librio.
+- **Description:** `GridSource` and `CellSample` with no selection bit and no search field. `Atlas::insert(key, bitmap) -> GlyphRect` is frozen here. `sprite.rs` exists and returns `None` so the box-drawing PR can replace that file only. `CellBg` / `CellText` / `GridUniforms` ported from `sugarloaf/src/grid/cell.rs`. WGSL ported from `sugarloaf/src/grid/shaders/grid.wgsl` with the Display P3 and Rec.2020 matrices deleted and `grid_prepare_output_rgb` branching on `FLAG_LINEAR_BLENDING`. Blend is src `One`, dst `OneMinusSrcAlpha`. Two pipelines inside the Metal subset, 2048² `R8Unorm` atlas, two cell-buffer copies, dirty-row upload from a `Vec<CellSample>` fixture. ASCII from a baked bitmap. Cursor uniforms. `Cargo.toml`: `wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }`. CPU tests stay inside term-grid and do not link Rune. `rune-term/tests/grid_pipeline.rs` calls `rune::render::Gpu::headless` for both `srgb_blend` values and includes one alpha-128 pixel. Does not open a window or link librio.
 - **Parallel with siblings:** yes, with PRs 3, 4, 5, and 6. The new test file is not one of theirs. PR 5 shares no files with this one; it still waits on PR 4.
 
 ### 3. WezTerm-style reflow in rio-vt
@@ -1024,98 +1024,98 @@ flowchart TD
 
 ### 5. Key and mouse mapping from platform text
 
-- **Files:** `crates/term-input/**` only. Does not edit Rune.
+- **Files:** `term-input/**` only. Does not edit Rune.
 - **Depends on:** Foundation (for the crate existing in the workspace) and the Rune paired-text PR.
 - **Description:** `map_key`, `is_app_chord`, `scroll_chord`, `cell_at`. `map_key` copies the platform `text` and `consumed_mods` onto `librio::KeyEvent` and does not synthesize a US-QWERTY string. Numpad keys keep a `Key` (`Char` digit, `NumpadDecimal` → `Char('.')`, `NumpadEnter` → `Enter`, and `NumpadAdd` / `Subtract` / `Multiply` / `Divide`) and encode the platform `text`. An unknown `PhysicalKeyCode` with `text: None` returns `key: None` and empty text. An unknown code with text forwards that string. `cell_at` documents layout points. `cell_w` and `cell_h` are the drawn pitch `f32::from(cell_px) / scale`, not `cell_points`. Callers divide `grid_padding` by `EffectSite::scale`. Modifier mapping is `logo` → `SUPER`, `ctrl` → `CTRL`, never `cmd` → `CTRL`. The same table maps `consumed_mods`. `scroll_chord` is `Some(1)` for Shift+PageUp and `Some(-1)` for Shift+PageDown; plain PageUp is `None`. App-chord behavior is unchanged: `mods.cmd` is still not the chord modifier off macOS. Table tests include "Ctrl off macOS is not an app chord" and "Cmd+C is an app chord on macOS". Encode tests call `librio::key::encode` with `default-features = false`: text `"A"` with shift emits `A`; text `"å"` with alt consumed emits `å`; text `"["` with alt consumed emits `[` and not an ESC prefix; Ctrl+C emits `0x03`; SUPER emits nothing; arrows and plain PageUp emit CSI. No window and no PTY. The wheel sign is not this crate.
 - **Parallel with siblings:** yes, with PRs 2, 3, and 6. Not with PR 4.
 
 ### 6. Tab and split state model
 
-- **Files:** `crates/rune-term/src/chrome.rs` and a new `crates/rune-term/src/split.rs`. Does not edit `app.rs`, `grid_pass.rs`, `resize.rs`, or `pane_input.rs`. The one-tab `Chrome` API the foundation view calls keeps working.
+- **Files:** `rune-term/src/chrome.rs` and a new `rune-term/src/split.rs`. Does not edit `app.rs`, `grid_pass.rs`, `resize.rs`, or `pane_input.rs`. The one-tab `Chrome` API the foundation view calls keeps working.
 - **Depends on:** Foundation.
 - **Description:** `Node` / `Leaf` / `distribute(total_cols, total_rows, tree)`. Divider costs one cell. Left/top first. Never below one cell. Perpendicular splits share the full delta. Pure tests: 80×24 untouched; split of 80 columns → 40 and 39 with a one-cell divider; shrink refuses to eat the last cell; a vertical child of a horizontal split receives the full column delta on both sides. No PTY and no widgets beyond the types.
 - **Parallel with siblings:** yes, with PRs 2, 3, 4, and 5.
 
 ### 7. Wire the grid pass to a live Surface
 
-- **Files:** `crates/rune-term/src/grid_pass.rs` and the `RenderState` adapter beside it (`grid_source.rs`). The foundation already calls `grid_pass::paint` from `app.rs`, so this PR does not edit `app.rs`.
+- **Files:** `rune-term/src/grid_pass.rs` and the `RenderState` adapter beside it (`grid_source.rs`). The foundation already calls `grid_pass::paint` from `app.rs`, so this PR does not edit `app.rs`.
 - **Depends on:** Foundation, term-grid pipeline.
 - **Description:** On damage or `resized`, `RenderState::update_rearm`, which clears the host flag inside the terminal lock. Adapt with `Square::wide()` (`Wide::Spacer` / `LeadingSpacer` emit nothing; `U+10EEEE` is "no glyph", not the wide spacer) and the `rio-grid` `cell_bg` rules (alpha 0 for the default background, opaque indexed colors, `INVERSE` swaps and forces alpha 255). Straight sRGB goes into `CellSample`; the shader premultiplies. Upload dirty rows and draw into the effect slot. `paint` still walks `surfaces.iter_mut()` and still calls `selection::tint`, `search::tint`, and `images::draw`, which are identity until their PRs. Cursor blink flips uniforms without `update_rearm`. Headless test with `--no-default-features`: `inject_output` of a short string, one frame, PNG contains the glyphs, and the test does not inject DEC 2026. Streaming inject of many chunks across frames asserts the view commit counter stays put.
 - **Parallel with siblings:** yes, with PRs 8, 9, and 10. It does not edit `resize.rs`, `pane_input.rs`, or `chrome_view.rs`.
 
 ### 8. Exact winsize and live resize
 
-- **Files:** `crates/rune-term/src/resize.rs` only. Implements the foundation `apply(ResizeRequest) -> ResizeEffect`. Does not edit `app.rs` `perform_resize`, and does not take `Tx`.
+- **Files:** `rune-term/src/resize.rs` only. Implements the foundation `apply(ResizeRequest) -> ResizeEffect`. Does not edit `app.rs` `perform_resize`, and does not take `Tx`.
 - **Depends on:** Foundation, rio-vt reflow.
 - **Description:** `cell_px` is `max(1, round(cell_points * scale))`. `slot_device_px` is `round(slot_points * scale)`, matching `frame::snap`. Cols and rows are `floor(slot_device_px / cell_px)`. The winsize is `cols * cell_px` by `rows * cell_px` and is at most the slot; the difference is `grid_padding`. `live_only` on every `Layout`, including a count change, so the handler does not write the count back into the slot. `resize_surface` when the count or the cell pixels change. A font request takes `scale`, sets `resize_surface` false and `live_only` false, and returns content axes of `content_points(cols, cell_points, scale)` plus chrome, which snaps to at least `cols * cell_px` device pixels. The follow-up `Layout` of that slot returns the requested count. A plain DPI request leaves `window_points` as `None` and runs the same floor on the existing point slot at the new scale. Single pane. Tests: a 1005×710 point slot at scale 1 with a 10×20 cell reports `100 * 10` by `35 * 20` pixels, not 1005×710, with `1000 <= 1005` and `700 <= 710`. Regression, both properties: cell width 7.4 points, scale 2, slot `80 * 7.4` points (1184 device pixels) returns 78 columns, `cell_px` 15, `pixel_width` 1170, padding 14, and `1170 <= 1184`. It does not return 80 or 1200. The same `Layout` again, with `current.cols = 78` and `current.cell_px = 15`, returns 78, `resize_surface` false, and `live_only` true. `Font` for 80 columns returns a content width of 600 points; the follow-up `Layout` returns 80 and `pixel_width` 1200, and the layout after that is still 80 with `resize_surface` false. With the reflow PR merged, an inject of a wrapped line followed by a narrower `resize` asserts the joined line, including the trailing-space case.
 - **Parallel with siblings:** yes, with PRs 7, 9, and 10.
 
 ### 9. Wire keyboard and mouse to the focused pane
 
-- **Files:** `crates/rune-term/src/pane_input.rs` only.
+- **Files:** `rune-term/src/pane_input.rs` only.
 - **Depends on:** Foundation, term-input tables.
 - **Description:** Focused pane `.focusable(true)` and `on_physical_input`. App chords return false without `Surface::key` and without `live_only`. `scroll_chord` of `Some(sign)` runs before `Surface::key`: `Surface::scroll(sign * rows)`, `live_only`, return true. Plain PageUp still goes to `Surface::key` (encode emits CSI). Everything else is `Surface::key`, and `live_only` when that returns true. `on_wheel` adds `dy` divided by the drawn row pitch `f32::from(cell_px.1) / scale` to `HostSurface::wheel_remainder` (no per-event `round`), passes the truncated integer to `Surface::scroll_wheel` with the `cell_at` column and row, and keeps the fraction across momentum. Off macOS, a shifted vertical notch that Rune placed in `dx` (`dy == 0`, shift held) uses `dx` with the same sign. On macOS, shift stays in `dy` and in `mods`, and `scroll_wheel` forces scrollback. Do not call `scroll_wheel` with 0. Return true for the whole gesture, and `live_only` when focus did not change. Clear the remainder when focus leaves the pane. `cell_at` gets layout points and the drawn pitch `f32::from(cell_px) / scale` on both axes. `grid_padding` is divided by `EffectSite::scale`. Mouse goes to `mouse_button` / `mouse_motion`. Tests on a non-pty surface: a key whose platform text is `a` produces `a` on `SurfaceDelegate::output`; a key whose text is `å` with alt consumed produces `å`; a numpad key whose text is that digit produces that digit; Ctrl+C produces `0x03`; macOS Cmd+T returns false and writes nothing; Shift+PageUp calls `Surface::scroll` and does not call `Surface::key`. Wheel, with a drawn row pitch of 20 points: one `dy` of 2 leaves remainder 0.1 and does not call `scroll_wheel`; five events of `dy = 6` produce one line; a positive sum increases `display_offset`; an off-macOS shift event with `dy = 0` and `dx = 40` produces two lines; a zero-line event still returns true and does not commit the view. Hit-test regression, 7.4 pt cell and scale 2, so `cell_px` is 15 and the drawn pitch is 7.5 points, cols and rows 78, right and bottom pad 7 points: the center `(i as f32 + 0.5) * 7.5` returns column `i` for every `i` in `0..78`, and the same center on the other axis returns row `i`. A point in the 7-point pad, past `78 * 7.5 = 585`, returns `None`. The 10×20 cell at scale 1 matches the face size and does not cover this.
 - **Parallel with siblings:** yes, with PRs 7, 8, and 10.
 
 ### 10. Multiple panes from the split tree
 
-- **Files:** `crates/rune-term/src/chrome_view.rs` (new), `crates/rune-term/src/surfaces.rs`, and the tree storage in `chrome.rs`. Does not edit `split.rs`, `grid_pass.rs`, `resize.rs`, `pane_input.rs`, or `ime.rs`. Each leaf calls the frozen `resize::apply` and then `perform_resize` in `app.rs`. It does not edit `resize.rs`. The foundation pane builder already calls `ime::mount_caret`.
+- **Files:** `rune-term/src/chrome_view.rs` (new), `rune-term/src/surfaces.rs`, and the tree storage in `chrome.rs`. Does not edit `split.rs`, `grid_pass.rs`, `resize.rs`, `pane_input.rs`, or `ime.rs`. Each leaf calls the frozen `resize::apply` and then `perform_resize` in `app.rs`. It does not edit `resize.rs`. The foundation pane builder already calls `ime::mount_caret`.
 - **Depends on:** Foundation, tab and split state model.
 - **Description:** Tab strip, one `Surface` and one effect mark per leaf, `distribute` drives explicit point sizes, focus click updates chrome and is not `live_only`. Headless test with two leaves, no real grid required: model has two surfaces, divider costs one cell, focus moves. A non-pty inject on leaf A does not dirty leaf B's flag.
 - **Parallel with siblings:** yes, with PRs 7, 8, and 9. Not parallel with the IME PR.
 
 ### 11. Selection and clipboard
 
-- **Files:** `crates/rune-term/src/selection.rs` (replace the identity stub) and the clipboard-length log in `delegate.rs`. `on_paste` on the pane stays in `pane_input.rs` only if that hook is still the foundation's `return false`; prefer a `selection::on_paste` the foundation pane already calls, so this PR does not edit `pane_input.rs`. Does not edit `term-grid` or `CellSample`.
+- **Files:** `rune-term/src/selection.rs` (replace the identity stub) and the clipboard-length log in `delegate.rs`. `on_paste` on the pane stays in `pane_input.rs` only if that hook is still the foundation's `return false`; prefer a `selection::on_paste` the foundation pane already calls, so this PR does not edit `pane_input.rs`. Does not edit `term-grid` or `CellSample`.
 - **Depends on:** wire grid, wire input.
 - **Description:** Shift or a false `mouse_button` starts `Surface::selection_begin` / `selection_update`. The cell is the `cell_at` result from PR 9, pitch `f32::from(cell_px) / scale`. This PR does not divide the pointer by `cell_points`. Copy chord and `on_paste` call `selection_text` / `paste`. OSC 52 stays denied: the delegate still drops the text and queues only the length. Drag is `live_only`; the wakeup from `mark_fully_damaged` uploads. Tint is a `GridSource` wrapper in `selection.rs` that overrides `cell()` bg/fg. `CellSample` gains no `selected` bit. Tests on a non-pty surface.
 - **Parallel with siblings:** yes, with PRs 12–18. Not with a PR that edits `selection.rs`. Search uses its own wrapper.
 
 ### 12. Scrollback viewport
 
-- **Files:** `crates/rune-term/src/scrollback.rs` (new). Scrollbar is chrome beside the effect, not `El::scroll` on it. Does not edit `pane_input.rs`.
+- **Files:** `rune-term/src/scrollback.rs` (new). Scrollbar is chrome beside the effect, not `El::scroll` on it. Does not edit `pane_input.rs`.
 - **Depends on:** wire grid, wire input.
 - **Description:** Scrollbar range is `Surface::history_size()` (ring length, not eviction) together with `RenderState::display_offset()`. Do not read the private `RenderState.history_size` field. The thumb calls `Surface::scroll` directly. Shift+PageUp / Shift+PageDown already call `Surface::scroll(±rows)` in the input PR; this PR does not add a second "unconsumed PageUp" path. Plain PageUp stays with the PTY. `cursor_visible` stays false while scrolled, which `RenderState` already reports for a scrolled viewport. Tests: inject more than a screen, scroll, snapshot shows history, `display_offset` moves.
 - **Parallel with siblings:** yes, with PRs 11 and 13–18.
 
 ### 13. Search overlay
 
-- **Files:** `crates/rune-term/src/search.rs` (replace the identity stub). Rune overlay or an in-window text field that takes focus, so the pane's physical handler stops. Does not edit `selection.rs` or `term-grid`.
+- **Files:** `rune-term/src/search.rs` (replace the identity stub). Rune overlay or an in-window text field that takes focus, so the pane's physical handler stops. Does not edit `selection.rs` or `term-grid`.
 - **Depends on:** wire grid, multi-pane chrome.
 - **Description:** `Surface::search` returns ring lines: line 0 is the top of the scrollback (`librio/src/lib.rs`). Convert with `Surface::history_size()` and `RenderState::display_offset()`: viewport row `v = ring_line - (history_size - display_offset)`. Drop matches outside `0 <= v < rows`. The search wrapper tints those viewport cells. The grid already places viewport row `v` at device pixels `v * cell_px`; this PR does not convert a pointer and does not use `cell_points` as a stride. It does not paint the raw ring tuple and it does not add a `CellSample` field. The text field is ordinary Rune focus, which is why the pane must be focusable and must not see keys while the field is focused. Tests: inject a known line below some scrollback, scroll so it is on screen, open search, the highlighted viewport row matches, and a physical key does not call `Surface::key` while the field is focused. A match above the viewport is not drawn.
 - **Parallel with siblings:** yes, with PRs 11, 12, and 14–18.
 
 ### 14. IME and preedit
 
-- **Files:** `crates/rune-term/src/ime.rs` (replace the stub) and the `on_ime` method the foundation stubbed in `app.rs`. Does not edit `chrome_view.rs` or `pane_input.rs`. The pane builder already calls `ime::mount_caret`; multi-pane kept that call on every leaf.
+- **Files:** `rune-term/src/ime.rs` (replace the stub) and the `on_ime` method the foundation stubbed in `app.rs`. Does not edit `chrome_view.rs` or `pane_input.rs`. The pane builder already calls `ime::mount_caret`; multi-pane kept that call on every leaf.
 - **Depends on:** wire input and multi-pane chrome. Both edges are real. This PR is not parallel with PR 10.
 - **Description:** `App::on_ime` stores preedit, calls `live_only`, and returns true. The grid draws the preedit. Commit is a text-only `Surface::key` (`key: None`, `text: Some`). `mount_caret` places `El::ime_cursor` at `(cursor_col as f32 * pitch_x, cursor_row as f32 * pitch_y)` with size `(pitch_x, pitch_y)`, where each pitch is `f32::from(cell_px) / scale` (`content_points` of one cell). It does not use `cell_points` as the stride. Updating that rect on every PTY cursor move is forbidden; do it when the view is already committing, or while a composition is open. Headless test through `Runtime`'s IME injection (`Ime::Preedit` / `Ime::Commit`) plus a manual macOS marked-text check. No hidden text field unless that check fails.
 - **Parallel with siblings:** yes, with PRs 11–13 and 15–18, because those do not edit `ime.rs` or `on_ime`. Not with PR 10.
 
 ### 15. Kitty images
 
-- **Files:** `crates/term-grid/src/images.rs` (new), an empty `crates/term-grid/src/sixel.rs`, and `crates/rune-term/src/images.rs` (replace the no-op `draw`). `grid_pass` already calls `images::draw` beside the text pass, so this PR does not edit `grid_pass.rs` or `CellSample`. Not `sprite.rs`.
+- **Files:** `term-grid/src/images.rs` (new), an empty `term-grid/src/sixel.rs`, and `rune-term/src/images.rs` (replace the no-op `draw`). `grid_pass` already calls `images::draw` beside the text pass, so this PR does not edit `grid_pass.rs` or `CellSample`. Not `sprite.rs`.
 - **Depends on:** wire grid.
-- **Description:** Kitty only. Upload placement textures from `kitty_image_rgba` and draw from `kitty_count` / `kitty_geometry`. Bucket by the z cuts `update` already sorts: under-background (`z < i32::MIN / 2`), under-text (`z < 0`, which includes `VIRTUAL_Z_INDEX` of `-1`), then over-text. `images::draw` calls `sixel::draw`, and this PR adds `crates/term-grid/src/sixel.rs` as an empty function so the sixel PR replaces that file and does not edit `images.rs`. `Surface::resize` cell-pixel changes already rescale kitty placements inside rio-vt. Tests: `inject_output` of a small kitty image, with the `graphics` feature and without `pty`, and the PNG contains those pixels. Sixel and iTerm2 are not on `RenderState`. This PR does not draw them.
+- **Description:** Kitty only. Upload placement textures from `kitty_image_rgba` and draw from `kitty_count` / `kitty_geometry`. Bucket by the z cuts `update` already sorts: under-background (`z < i32::MIN / 2`), under-text (`z < 0`, which includes `VIRTUAL_Z_INDEX` of `-1`), then over-text. `images::draw` calls `sixel::draw`, and this PR adds `term-grid/src/sixel.rs` as an empty function so the sixel PR replaces that file and does not edit `images.rs`. `Surface::resize` cell-pixel changes already rescale kitty placements inside rio-vt. Tests: `inject_output` of a small kitty image, with the `graphics` feature and without `pty`, and the PNG contains those pixels. Sixel and iTerm2 are not on `RenderState`. This PR does not draw them.
 - **Parallel with siblings:** yes, with PRs 11–14 and 16–17. Not with PR 18. Box-drawing stays in `sprite.rs`.
 
 ### 16. Settings and palette
 
-- **Files:** `crates/rune-term/src/settings.rs` only. Does not edit `grid_source.rs`. The wire-grid adapter already reads `Model`'s default colors for alpha-0 cells; `term_colors()` stays the VT override.
+- **Files:** `rune-term/src/settings.rs` only. Does not edit `grid_source.rs`. The wire-grid adapter already reads `Model`'s default colors for alpha-0 cells; `term_colors()` stays the VT override.
 - **Depends on:** wire grid and multi-pane chrome.
 - **Description:** Font size writes `Model::cell_points` and calls `resize::apply(ResizeRequest::Font { ... })`, then `perform_resize`. The window pair is chrome plus `content_points(cols, cell_points, scale)` on each axis, so the snapped content slot is at least `cols * cell_px` by `rows * cell_px` device pixels. This call does not resize the PTY. Plain DPI is not this path. Theme background is the window clear and the model default under alpha-0 `CellBg`. No Lua. Tests: changing the default color changes the clear sampled from a transparent cell, and the follow-up layout of the resized window still reports the cols and rows the font request asked for.
 - **Parallel with siblings:** yes, with PRs 11–15 and 17–18.
 
 ### 17. Box-drawing and braille atlas
 
-- **Files:** `crates/term-grid/src/sprite.rs` only. The pipeline PR already calls it and already froze `Atlas::insert`.
+- **Files:** `term-grid/src/sprite.rs` only. The pipeline PR already calls it and already froze `Atlas::insert`.
 - **Depends on:** term-grid pipeline.
 - **Description:** Replace the `None` stub. Port the CPU raster approach from `sugarloaf/src/sprite/` for box-drawing and braille into the gray atlas via `Atlas::insert`. Tests compare a few codepoints against a fixture bitmap. Does not link sugarloaf and does not edit `images.rs` or `upload.rs`.
 - **Parallel with siblings:** yes, with PRs 7–16 and 18. With the kitty PR, because image quads live in `images.rs`.
 
 ### 18. Sixel and iTerm2 snapshot
 
-- **Files:** a new placement-and-pixels snapshot on `RenderState` in `librio/src/render_state.rs` (the kitty getters are not that snapshot), `crates/term-grid/src/sixel.rs` (replace the empty function PR 15 added), and `crates/rune-term/src/sixel.rs`. Does not edit `images.rs`: `images::draw` already calls `sixel::draw`. Do not fold the pixels into `CellSample`.
+- **Files:** a new placement-and-pixels snapshot on `RenderState` in `librio/src/render_state.rs` (the kitty getters are not that snapshot), `term-grid/src/sixel.rs` (replace the empty function PR 15 added), and `rune-term/src/sixel.rs`. Does not edit `images.rs`: `images::draw` already calls `sixel::draw`. Do not fold the pixels into `CellSample`.
 - **Depends on:** kitty images.
 - **Description:** librio copies sixel and iTerm2 atlas placements and their pixels the way `update` already copies kitty direct placements and virtual runs. The draw uses the same under-text / over-text buckets. `Crosswords::resize` already remaps or destroys those placements; this PR only snapshots what survived. Tests inject a tiny sixel and a tiny iTerm2 image and check the PNG. Until this method exists, the kitty PR must not read a placement list that is not on `RenderState`.
 - **Parallel with siblings:** yes, with PRs 11–14 and 16–17, after PR 15.

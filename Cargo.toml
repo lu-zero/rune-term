@@ -1,9 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/term-grid",
-    "crates/term-input",
-    "crates/rune-term",
+    "term-grid",
+    "term-input",
+    "rune-term",
 ]
 
 [workspace.package]

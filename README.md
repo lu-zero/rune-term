@@ -9,9 +9,9 @@ The plan and what is still missing are in [`docs/todo/`](./docs/todo/).
 
 ## Crates
 
-- `crates/term-grid`: the cell pass and the atlas. No Rune and no librio.
-- `crates/term-input`: physical keys to `librio::KeyEvent`. No window types.
-- `crates/rune-term`: the binary.
+- `term-grid`: the cell pass and the atlas. No Rune and no librio.
+- `term-input`: physical keys to `librio::KeyEvent`. No window types.
+- `rune-term`: the binary.
 
 ## Building
 
@@ -35,4 +35,4 @@ cargo test -p rune-term --no-default-features --test headless
 ## License
 
 MIT: [`LICENSE`](./LICENSE). Cascadia Code NF is SIL Open Font License 1.1:
-[`crates/term-grid/CascadiaCode-LICENSE.txt`](./crates/term-grid/CascadiaCode-LICENSE.txt).
+[`term-grid/CascadiaCode-LICENSE.txt`](./term-grid/CascadiaCode-LICENSE.txt).

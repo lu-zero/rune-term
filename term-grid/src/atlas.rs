@@ -14,7 +14,7 @@ pub const ATLAS_SIZE: u32 = 2048;
 
 /// Same bytes `sugarloaf` embeds as its regular face.
 const FONT: &[u8] =
-    include_bytes!("../../../../rio/sugarloaf/src/font/resources/CascadiaCode/CascadiaCodeNF.ttf");
+    include_bytes!("../../../rio/sugarloaf/src/font/resources/CascadiaCode/CascadiaCodeNF.ttf");
 
 /// Rio's default font size, in points.
 const FACE_PX: f32 = 14.0;
