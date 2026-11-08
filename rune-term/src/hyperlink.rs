@@ -48,6 +48,9 @@ pub fn open_mods(mods: Modifiers) -> bool {
 }
 
 pub fn open_uri(uri: &str) {
+    if scheme_policy(uri).is_warn() {
+        eprintln!("opening non-web link scheme: {uri}");
+    }
     let uri = uri.to_owned();
     std::thread::spawn(move || {
         let result = if cfg!(target_os = "macos") {
@@ -63,6 +66,34 @@ pub fn open_uri(uri: &str) {
             eprintln!("open link failed: {err}");
         }
     });
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SchemePolicy {
+    Common,
+    Warn,
+}
+
+impl SchemePolicy {
+    fn is_warn(self) -> bool {
+        self == Self::Warn
+    }
+}
+
+fn scheme_policy(uri: &str) -> SchemePolicy {
+    let Some((scheme, _)) = uri.split_once(':') else {
+        return SchemePolicy::Warn;
+    };
+    if scheme.eq_ignore_ascii_case("http")
+        || scheme.eq_ignore_ascii_case("https")
+        || scheme.eq_ignore_ascii_case("mailto")
+    {
+        SchemePolicy::Common
+    } else if scheme.eq_ignore_ascii_case("file") {
+        SchemePolicy::Warn
+    } else {
+        SchemePolicy::Warn
+    }
 }
 pub fn tint<S: GridSource>(source: S, hover: Option<&HoverLink>) -> Tint<S> {
     Tint {

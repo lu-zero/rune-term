@@ -36,6 +36,8 @@ pub fn on_physical(model: &mut Model, event: &PhysicalInput, tx: &mut Tx) -> boo
                 host.wheel_remainder = 0.0;
                 host.pointer_button = None;
                 host.selecting = false;
+                host.hover_link = None;
+                host.hover_probe = None;
             }
             false
         }
@@ -46,7 +48,22 @@ pub fn on_physical(model: &mut Model, event: &PhysicalInput, tx: &mut Tx) -> boo
 /// Wheel points become fractional lines of the drawn row. A zero-line event
 /// still returns true, so an ancestor scroll does not also move.
 pub fn on_wheel(model: &mut Model, event: WheelEvent, scale: f32, tx: &mut Tx) -> bool {
-    let Some(host) = model.surfaces.primary_mut() else {
+    let mark = model
+        .surfaces
+        .primary()
+        .map(|host| host.mark)
+        .unwrap_or(crate::chrome::PANE_MARK);
+    on_wheel_mark(model, mark, event, scale, tx)
+}
+
+pub fn on_wheel_mark(
+    model: &mut Model,
+    mark: u32,
+    event: WheelEvent,
+    scale: f32,
+    tx: &mut Tx,
+) -> bool {
+    let Some(host) = model.surfaces.by_mark_mut(mark) else {
         return false;
     };
     let pitch_y = drawn_pitch(host.cell_px.1, scale);
@@ -75,11 +92,21 @@ pub fn on_wheel(model: &mut Model, event: WheelEvent, scale: f32, tx: &mut Tx) -
 }
 
 pub fn on_drag(model: &mut Model, drag: &mut Drag, scale: f32, tx: &mut Tx) {
+    let mark = model
+        .surfaces
+        .primary()
+        .map(|host| host.mark)
+        .unwrap_or(crate::chrome::PANE_MARK);
+    on_drag_mark(model, mark, drag, scale, tx);
+}
+
+pub fn on_drag_mark(model: &mut Model, mark: u32, drag: &mut Drag, scale: f32, tx: &mut Tx) {
     let Some(button) = button_code(tx.button()) else {
         return;
     };
     gesture(
         model,
+        mark,
         drag.phase,
         drag.x,
         drag.y,
@@ -95,6 +122,7 @@ pub fn on_drag(model: &mut Model, drag: &mut Drag, scale: f32, tx: &mut Tx) {
 /// left button starts a local selection. Shift makes that return false.
 fn gesture(
     model: &mut Model,
+    mark: u32,
     phase: Phase,
     x: f32,
     y: f32,
@@ -104,7 +132,7 @@ fn gesture(
     scale: f32,
     tx: &mut Tx,
 ) {
-    let Some(host) = model.surfaces.primary_mut() else {
+    let Some(host) = model.surfaces.by_mark_mut(mark) else {
         return;
     };
     let cell = cell_under(host, x, y, scale);
@@ -115,9 +143,11 @@ fn gesture(
                     if let Some(link) =
                         crate::hyperlink::resolve(host, usize::from(row), usize::from(col))
                     {
+                        host.surface.selection_clear();
                         host.pointer_button = None;
                         host.selecting = false;
                         host.hover_link = None;
+                        host.hover_probe = None;
                         crate::hyperlink::open_uri(&link.uri);
                         tx.wake_after(Duration::ZERO);
                         return;
@@ -183,26 +213,73 @@ fn gesture(
 
 /// Bare motion is button 3. A drag already reported the held button.
 pub fn on_pointer_move(model: &mut Model, point: PointerEvent, scale: f32, tx: &mut Tx) {
-    let Some(host) = model.surfaces.primary_mut() else {
+    let mark = model
+        .surfaces
+        .primary()
+        .map(|host| host.mark)
+        .unwrap_or(crate::chrome::PANE_MARK);
+    on_pointer_move_mark(model, mark, point, scale, tx);
+}
+
+pub fn on_pointer_move_mark(
+    model: &mut Model,
+    mark: u32,
+    point: PointerEvent,
+    scale: f32,
+    tx: &mut Tx,
+) {
+    let Some(host) = model.surfaces.by_mark_mut(mark) else {
         return;
     };
     if host.pointer_button.is_none() {
-        let hover = cell_under(host, point.x, point.y, scale).and_then(|(col, row)| {
-            crate::hyperlink::resolve(host, usize::from(row), usize::from(col))
-        });
+        let mods = modifiers(tx.mods());
+        let cell = cell_under(host, point.x, point.y, scale);
+        let hover = match cell {
+            Some((col, row)) => {
+                let (line, column) = (usize::from(row), usize::from(col));
+                if host.hover_probe.as_ref().map(|(l, c, _)| (*l, *c)) == Some((line, column)) {
+                    host.hover_probe
+                        .as_ref()
+                        .and_then(|(_, _, link)| link.clone())
+                } else {
+                    let link = crate::hyperlink::resolve(host, line, column);
+                    host.hover_probe = Some((line, column, link.clone()));
+                    link
+                }
+            }
+            None => {
+                host.hover_probe = None;
+                None
+            }
+        };
         if host.hover_link != hover {
             host.hover_link = hover;
             tx.wake_after(Duration::ZERO);
         }
-        if let Some((col, row)) = cell_under(host, point.x, point.y, scale) {
-            host.surface.mouse_motion(col, row, 3, modifiers(tx.mods()));
+        if let Some((col, row)) = cell {
+            host.surface.mouse_motion(col, row, 3, mods);
         }
     }
     tx.live_only();
 }
 
 pub fn on_secondary(model: &mut Model, point: PointerEvent, scale: f32, tx: &mut Tx) {
-    let Some(host) = model.surfaces.primary_mut() else {
+    let mark = model
+        .surfaces
+        .primary()
+        .map(|host| host.mark)
+        .unwrap_or(crate::chrome::PANE_MARK);
+    on_secondary_mark(model, mark, point, scale, tx);
+}
+
+pub fn on_secondary_mark(
+    model: &mut Model,
+    mark: u32,
+    point: PointerEvent,
+    scale: f32,
+    tx: &mut Tx,
+) {
+    let Some(host) = model.surfaces.by_mark_mut(mark) else {
         return;
     };
     let Some((col, row)) = cell_under(host, point.x, point.y, scale) else {
@@ -1099,7 +1176,23 @@ mod tests {
         clicks: u32,
         mods: librio::Modifiers,
     ) {
-        gesture(model, phase, x, y, clicks, 0, mods, 1.0, &mut Tx::default());
+        let mark = model
+            .surfaces
+            .primary()
+            .map(|host| host.mark)
+            .unwrap_or(crate::chrome::PANE_MARK);
+        gesture(
+            model,
+            mark,
+            phase,
+            x,
+            y,
+            clicks,
+            0,
+            mods,
+            1.0,
+            &mut Tx::default(),
+        );
     }
 
     fn select_hello(model: &mut Model) {

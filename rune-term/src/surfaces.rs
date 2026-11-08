@@ -36,6 +36,7 @@ pub struct HostSurface {
     pub scrollbar_fade_start: f64,
     pub scrollbar_fade_from: f32,
     pub hover_link: Option<crate::hyperlink::HoverLink>,
+    pub(crate) hover_probe: Option<(usize, usize, Option<crate::hyperlink::HoverLink>)>,
 }
 
 pub struct Surfaces {

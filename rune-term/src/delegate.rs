@@ -239,6 +239,7 @@ pub(crate) fn open_host(model: &mut Model, mark: u32, cols: u16, rows: u16) -> S
         scrollbar_fade_start: 0.0,
         scrollbar_fade_from: 0.0,
         hover_link: None,
+        hover_probe: None,
     });
     id
 }

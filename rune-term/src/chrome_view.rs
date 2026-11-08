@@ -100,7 +100,7 @@ fn single(_model: &Model, scale: f32) -> El {
         .grow(1.0)
         .min_h(0.0)
         .min_w(0.0)
-        .child(ime::mount_caret(wire(pane, scale)))
+        .child(ime::mount_caret(wire(pane, PANE_MARK, scale)))
         .child(scrollback::column(scrollback::SHOWN_PANE).pin(
             None,
             Some(0.0),
@@ -153,8 +153,9 @@ fn nodes(node: &Node, model: &Model, scale: f32, cell: (f32, f32)) -> El {
 fn leaf_el(leaf: &Leaf, _model: &Model, scale: f32, cell: (f32, f32)) -> El {
     let surface = leaf.surface;
     let id = leaf.id;
-    let pane = effect(leaf.mark)
-        .key(format!("pane-{}", leaf.mark))
+    let mark = leaf.mark;
+    let pane = effect(mark)
+        .key(format!("pane-{mark}"))
         .grow(1.0)
         .min_w(0.0)
         .h_full()
@@ -172,24 +173,24 @@ fn leaf_el(leaf: &Leaf, _model: &Model, scale: f32, cell: (f32, f32)) -> El {
         .grow(1.0)
         .min_h(0.0)
         .min_w(0.0)
-        .child(ime::mount_caret(wire(pane, scale)))
-        .child(scrollback::column(leaf.mark).pin(None, Some(0.0), Some(0.0), Some(0.0)));
+        .child(ime::mount_caret(wire(pane, mark, scale)))
+        .child(scrollback::column(mark).pin(None, Some(0.0), Some(0.0), Some(0.0)));
     row()
         .w(span(leaf.cols, cell.0, scale))
         .h(span(leaf.rows, cell.1, scale))
         .child(pane)
 }
 
-fn wire(pane: El, scale: f32) -> El {
+fn wire(pane: El, mark: u32, scale: f32) -> El {
     pane.on_physical_input(pane_input::on_physical)
-        .on_wheel(move |model, event, tx| pane_input::on_wheel(model, event, scale, tx))
+        .on_wheel(move |model, event, tx| pane_input::on_wheel_mark(model, mark, event, scale, tx))
         .pointer_buttons([rune::PointerButton::Middle])
-        .on_drag(move |model, drag, tx| pane_input::on_drag(model, drag, scale, tx))
+        .on_drag(move |model, drag, tx| pane_input::on_drag_mark(model, mark, drag, scale, tx))
         .on_secondary_press_local(move |model, point, tx| {
-            pane_input::on_secondary(model, point, scale, tx)
+            pane_input::on_secondary_mark(model, mark, point, scale, tx)
         })
         .on_pointer_move_local(move |model, point, tx| {
-            pane_input::on_pointer_move(model, point, scale, tx)
+            pane_input::on_pointer_move_mark(model, mark, point, scale, tx)
         })
 }
 

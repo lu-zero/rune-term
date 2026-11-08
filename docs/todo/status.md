@@ -67,13 +67,14 @@ The numbers are that plan's.
             (OSC 8 takes precedence). Matching scope/punctuation rules follow
             librio's implementation; rune-term does not add a parallel detector.
       - [~] **19c. Hit-test and interaction.** Bare motion resolves hover and
-            forces redraw; modifier+click (Cmd on macOS, Ctrl elsewhere) opens
-            and consumes the gesture before selection/mouse-report handling.
-            Multi-pane routing and activation-affordance gating still need work.
+            forces redraw; modifier+click (Cmd on macOS, Ctrl elsewhere) opens,
+            clears the local selection, and consumes the gesture before
+            selection/mouse-report handling. Pointer/wheel handlers can target a
+            pane by mark; keyboard focus routing in multi-pane still needs work.
       - [~] **19d. Open action by host OS.** Spawns `open` (macOS), `xdg-open`
             (Linux/FreeDesktop), or `cmd /C start` (Windows) on a background
-            thread and logs spawn failures. No confirmation/policy for
-            non-http(s) schemes yet.
+            thread and logs spawn failures. Non-web schemes are logged; no
+            confirmation/policy hook yet.
 
 ## Outside this repository
 

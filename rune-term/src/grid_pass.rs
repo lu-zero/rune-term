@@ -35,6 +35,7 @@ pub fn sync(
         if flagged || resized {
             host.render.update_rearm(&host.frame_flag);
             shared.note_rearm();
+            host.hover_probe = None;
         }
         // One grid. The selected tab is what it draws. A hidden shell still rearms.
         let mine = Some(host.surface.id()) == active;
