@@ -271,6 +271,21 @@ mod tests {
     }
 
     #[test]
+    fn echo_output_url_is_detected() {
+        let mut model = host();
+        {
+            let host = model.surfaces.primary_mut().unwrap();
+            host.surface.inject_output(b"https://example.com\r\n");
+            host.render.update();
+        }
+        let host = model.surfaces.primary().unwrap();
+        let link = resolve(host, 0, 0).expect("url from echo output");
+        assert!(link.uri.starts_with("https://example.com"), "{}", link.uri);
+        assert_eq!(link.start, 0);
+        assert!(link.end >= 18);
+    }
+
+    #[test]
     fn open_decision_warns_for_non_web_schemes() {
         assert_eq!(open_decision("https://example.com"), OpenDecision::Open);
         assert_eq!(open_decision("http://example.com"), OpenDecision::Open);
