@@ -12,6 +12,7 @@ use rune::{
 use crate::model::Model;
 use crate::surfaces::HostSurface;
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn on_physical(model: &mut Model, event: &PhysicalInput, tx: &mut Tx) -> bool {
     on_physical_mark(model, crate::chrome::PANE_MARK, event, tx)
 }

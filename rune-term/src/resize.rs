@@ -33,6 +33,7 @@ pub enum ResizeRequest {
         cell_points: (f32, f32),
         current: GridMetrics,
     },
+    #[cfg_attr(not(test), allow(dead_code))]
     Font {
         chrome_points: (f32, f32),
         cols: u16,
@@ -40,6 +41,7 @@ pub enum ResizeRequest {
         cell_points: (f32, f32),
         scale: f32,
     },
+    #[cfg_attr(not(test), allow(dead_code))]
     PlainDpi {
         slot_points: (f32, f32),
         scale: f32,
