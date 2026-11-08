@@ -4,7 +4,7 @@ use std::sync::atomic::Ordering;
 
 use rune::compose::DeviceKey;
 use rune::render::{Instance, KIND_EFFECT};
-use rune::{App, AppSpec, Compositor, Frame, Tx};
+use rune::{App, AppSpec, Compositor, Frame, Titlebar, Tx};
 use term_grid::{DrawSlot, GridRenderer, SolidSlot};
 
 use crate::chrome;
@@ -24,6 +24,7 @@ pub fn app() -> App<Model> {
     App::new(spec())
         .compositor(GridCompositor::default())
         .on_ime(ime::on_ime)
+        .titlebar(Titlebar::new(chrome::TITLEBAR_H))
 }
 
 fn spec() -> AppSpec<Model> {
@@ -184,12 +185,12 @@ impl Compositor<Model> for GridCompositor {
         let slot = self.slot.as_ref().expect("solid slot");
         slot.write_color(f.queue, color);
         let bars = self.bars.as_ref().expect("scrollbar");
-        bars.prepare(f.queue, srgb_blend);
         let grid = self.grid.as_ref().expect("grid");
         let mark = chrome::PANE_MARK;
+        let queue = f.queue;
         f.ui.draw_with(f.encoder, f.target, clear, &mut |pass, site| {
             if scrollback::is_scroll(site.mark) {
-                bars.draw(pass, site, &f.rt.state);
+                bars.draw(queue, srgb_blend, pass, site, &f.rt.state);
                 return;
             }
             if site.mark != mark {

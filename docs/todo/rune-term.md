@@ -1126,3 +1126,17 @@ flowchart TD
 - **Depends on:** kitty images.
 - **Description:** librio copies sixel and iTerm2 atlas placements and their pixels the way `update` already copies kitty direct placements and virtual runs. The draw uses the same under-text / over-text buckets. `Crosswords::resize` already remaps or destroys those placements; this PR only snapshots what survived. Tests inject a tiny sixel and a tiny iTerm2 image and check the PNG. Until this method exists, the kitty PR must not read a placement list that is not on `RenderState`.
 - **Parallel with siblings:** yes, with PRs 11–14 and 16–17, after PR 15.
+
+### 19. Hyperlinks and URL opening
+
+- **Files:** `rune-term/src/hyperlink.rs` (new), grid/overlay affordance wiring in `rune-term/src/grid_pass.rs` or a wrapper/overlay as appropriate, pointer handling in `rune-term/src/pane_input.rs` / `selection.rs` integration, and URL detection helpers (pure functions, unit-tested). Reads hyperlink data exposed by `librio`/`RenderState` or `rio-vt`-backed surface state; does not reimplement OSC 8 parsing in rune-term.
+- **Depends on:** wire grid, wire input, selection (hit-test/activation must coexist), multi-pane chrome (focus/pointer routing).
+- **Description:** Support opening links from terminal content without breaking TUI mouse reporting or text selection.
+
+  1. **OSC 8 hyperlinks.** `rio-vt`/`librio` already parse and retain OSC 8 metadata. Surface that data to rune-term (hit-test by cell, hyperlink run/span, URI/id). Render a hover/active affordance (underline/cursor) without changing `term-grid::CellSample` unless a small, justified field is needed. OSC 8 runs take precedence over implicit detection.
+  2. **Implicit URL detection.** Scan console text for URLs when no OSC 8 hyperlink applies. Start with common schemes (`https://`, `http://`, `file://`, `mailto:`); make the matcher deterministic and cheap. Trim trailing punctuation that is usually not part of the URL in prose/terminal output, but preserve balanced cases where practical. Define the source text and coordinates carefully (wrapped lines, wide chars, viewport/history scope) so hit-testing matches what the user sees.
+  3. **Hit-test and activation.** Pointer move/click resolves the cell under the cursor, using the same cell pitch as input/selection (`f32::from(cell_px) / scale`). A modifier+click (platform convention, e.g. Cmd+click on macOS, Ctrl+click elsewhere — decide and document) opens the link; plain click/drag remains available for selection and for applications that have enabled mouse reporting. Show pointer/underline affordance only when activation is possible.
+  4. **Open by host OS.** Dispatch the resolved URI to the system handler: `open` on macOS, `xdg-open` on Linux/FreeDesktop environments, and the Windows shell open path (`cmd /C start "" <url>` or an equivalent API) on Windows. Run it without blocking the UI thread; report or log failures. Treat `file://` and non-web schemes according to platform/security policy (at minimum, do not panic; consider a confirmation hook later).
+  5. **Crate boundary.** Prefer reusing `librio`/`rio-vt` for protocol parsing and terminal state. A standalone protocol/types crate is only warranted if multiple consumers need OSC 8/Kitty-related parsing detached from a full VT core; rune-term itself should not grow a parallel parser.
+
+- **Parallel with siblings:** interacts with selection, search, and kitty/image rendering; coordinate pointer precedence. Not a small drop-in edit to `selection.rs` or `pane_input.rs` without an explicit integration plan.

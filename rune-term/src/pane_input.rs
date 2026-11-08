@@ -1,6 +1,8 @@
 //! The focused pane maps physical keys, the wheel, and the pointer onto the shell.
 //! App chords return false, except copy, paste, search, and tabs, which this shell handles.
 
+use std::time::Duration;
+
 use librio::Modifiers;
 use rune::{
     Drag, Key, KeyEvent, Mods, Phase, PhysicalInput, PhysicalKeyCode, PointerButton, PointerEvent,
@@ -66,6 +68,7 @@ pub fn on_wheel(model: &mut Model, event: WheelEvent, scale: f32, tx: &mut Tx) -
         let (col, row) = cell_for_wheel(host, event.x, event.y, scale);
         let mods = modifiers(event.mods);
         host.surface.scroll_wheel(lines, col, row, mods);
+        crate::scrollback::note_activity(host, tx);
     }
     tx.live_only();
     true
@@ -107,6 +110,20 @@ fn gesture(
     let cell = cell_under(host, x, y, scale);
     match phase {
         Phase::Down => {
+            if button == 0 && crate::hyperlink::open_mods(mods) {
+                if let Some((col, row)) = cell {
+                    if let Some(link) =
+                        crate::hyperlink::resolve(host, usize::from(row), usize::from(col))
+                    {
+                        host.pointer_button = None;
+                        host.selecting = false;
+                        host.hover_link = None;
+                        crate::hyperlink::open_uri(&link.uri);
+                        tx.wake_after(Duration::ZERO);
+                        return;
+                    }
+                }
+            }
             host.pointer_button = Some(button);
             let taken = match cell {
                 Some((col, row)) => host.surface.mouse_button(col, row, button, true, mods),
@@ -170,6 +187,13 @@ pub fn on_pointer_move(model: &mut Model, point: PointerEvent, scale: f32, tx: &
         return;
     };
     if host.pointer_button.is_none() {
+        let hover = cell_under(host, point.x, point.y, scale).and_then(|(col, row)| {
+            crate::hyperlink::resolve(host, usize::from(row), usize::from(col))
+        });
+        if host.hover_link != hover {
+            host.hover_link = hover;
+            tx.wake_after(Duration::ZERO);
+        }
         if let Some((col, row)) = cell_under(host, point.x, point.y, scale) {
             host.surface.mouse_motion(col, row, 3, modifiers(tx.mods()));
         }

@@ -10,6 +10,7 @@ pub const FG: u32 = 0xCECD_C3;
 pub const FG_BRIGHT: u32 = 0xE6E4_D9;
 pub const MUTED: u32 = 0x8785_80;
 pub const TAB_BG: u32 = 0x1C1B_1A;
+pub const ACTIVE_BORDER: u32 = 0x3433_31;
 
 /// Black through bright white.
 pub const ANSI16: [[u8; 3]; 16] = [

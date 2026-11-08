@@ -52,10 +52,28 @@ The numbers are that plan's.
 - [ ] **15. Kitty images.** `images::draw` is empty.
 - [ ] **16. Settings.** The palette and the 14 point face are fixed in the
       tree.
-- [ ] **17. Box-drawing and braille sprites.** Box drawing and legacy
-      computing symbols are stretched from the face. The sprite atlas is
-      still empty.
+- [~] **17. Box-drawing and braille sprites.** Box drawing, braille, and
+      legacy computing sextants/octants are rasterized geometrically into the
+      gray atlas and cached like glyphs. Other sprite families (block elements
+      beyond legacy, powerline, geometric, branch, etc.) still come from the
+      face or cascade.
 - [ ] **18. Sixel and iTerm2.**
+- [~] **19. Hyperlinks and URL opening.** OSC 8 and detected URLs can be
+      hovered and opened, without breaking mouse-reporting apps or selection.
+      - [~] **19a. OSC 8 hyperlinks.** Reads `RenderState::link_at`/`link_run`
+            and underlines the hovered run via a `GridSource` tint. Full hover
+            affordance/pointer polish still pending.
+      - [~] **19b. Implicit URL detection.** Uses `librio::Surface::url_at`
+            (OSC 8 takes precedence). Matching scope/punctuation rules follow
+            librio's implementation; rune-term does not add a parallel detector.
+      - [~] **19c. Hit-test and interaction.** Bare motion resolves hover and
+            forces redraw; modifier+click (Cmd on macOS, Ctrl elsewhere) opens
+            and consumes the gesture before selection/mouse-report handling.
+            Multi-pane routing and activation-affordance gating still need work.
+      - [~] **19d. Open action by host OS.** Spawns `open` (macOS), `xdg-open`
+            (Linux/FreeDesktop), or `cmd /C start` (Windows) on a background
+            thread and logs spawn failures. No confirmation/policy for
+            non-http(s) schemes yet.
 
 ## Outside this repository
 

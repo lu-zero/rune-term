@@ -21,7 +21,7 @@ pub fn area(model: &Model, cx: &mut Cx<Model>) -> El {
     let root = model.tabs.get(model.active).map(|tab| &tab.root);
     let pane = match root {
         Some(Node::Split { .. }) => split_area(model, scale),
-        _ => single(scale),
+        _ => single(model, scale),
     };
     search::mount(model, pane)
 }
@@ -85,7 +85,7 @@ pub fn focus_leaf(model: &mut Model, id: LeafId) -> bool {
     true
 }
 
-fn single(scale: f32) -> El {
+fn single(_model: &Model, scale: f32) -> El {
     let pane = effect(PANE_MARK)
         .key("pane")
         .grow(1.0)
@@ -95,18 +95,23 @@ fn single(scale: f32) -> El {
         .on_layout_tx(move |model: &mut Model, rect, tx: &mut Tx| {
             app::on_pane_layout(model, (rect[2], rect[3]), scale, tx);
         });
-    row()
+    col()
         .w_full()
         .grow(1.0)
         .min_h(0.0)
         .min_w(0.0)
         .child(ime::mount_caret(wire(pane, scale)))
-        .child(scrollback::column(scrollback::SHOWN_PANE))
+        .child(scrollback::column(scrollback::SHOWN_PANE).pin(
+            None,
+            Some(0.0),
+            Some(0.0),
+            Some(0.0),
+        ))
 }
 
 fn split_area(model: &Model, scale: f32) -> El {
     let Some(root) = model.tabs.get(model.active).map(|tab| &tab.root) else {
-        return single(scale);
+        return single(model, scale);
     };
     let cell = model.cell_points;
     col()
@@ -116,12 +121,12 @@ fn split_area(model: &Model, scale: f32) -> El {
         .on_layout_tx(move |model: &mut Model, rect, tx: &mut Tx| {
             layout_tree(model, (rect[2], rect[3]), scale, tx);
         })
-        .child(nodes(root, scale, cell))
+        .child(nodes(root, model, scale, cell))
 }
 
-fn nodes(node: &Node, scale: f32, cell: (f32, f32)) -> El {
+fn nodes(node: &Node, model: &Model, scale: f32, cell: (f32, f32)) -> El {
     match node {
-        Node::Leaf(leaf) => leaf_el(leaf, scale, cell),
+        Node::Leaf(leaf) => leaf_el(leaf, model, scale, cell),
         Node::Split {
             axis: Axis::Horizontal,
             left,
@@ -129,9 +134,9 @@ fn nodes(node: &Node, scale: f32, cell: (f32, f32)) -> El {
         } => row()
             .w(span(node_cells(node).0, cell.0, scale))
             .h_full()
-            .child(nodes(left, scale, cell))
+            .child(nodes(left, model, scale, cell))
             .child(divider(true, scale, cell))
-            .child(nodes(right, scale, cell)),
+            .child(nodes(right, model, scale, cell)),
         Node::Split {
             axis: Axis::Vertical,
             left,
@@ -139,13 +144,13 @@ fn nodes(node: &Node, scale: f32, cell: (f32, f32)) -> El {
         } => col()
             .h(span(node_cells(node).1, cell.1, scale))
             .w_full()
-            .child(nodes(left, scale, cell))
+            .child(nodes(left, model, scale, cell))
             .child(divider(false, scale, cell))
-            .child(nodes(right, scale, cell)),
+            .child(nodes(right, model, scale, cell)),
     }
 }
 
-fn leaf_el(leaf: &Leaf, scale: f32, cell: (f32, f32)) -> El {
+fn leaf_el(leaf: &Leaf, _model: &Model, scale: f32, cell: (f32, f32)) -> El {
     let surface = leaf.surface;
     let id = leaf.id;
     let pane = effect(leaf.mark)
@@ -162,11 +167,17 @@ fn leaf_el(leaf: &Leaf, scale: f32, cell: (f32, f32)) -> El {
                 tx.live_only();
             }
         });
+    let pane = col()
+        .w_full()
+        .grow(1.0)
+        .min_h(0.0)
+        .min_w(0.0)
+        .child(ime::mount_caret(wire(pane, scale)))
+        .child(scrollback::column(leaf.mark).pin(None, Some(0.0), Some(0.0), Some(0.0)));
     row()
         .w(span(leaf.cols, cell.0, scale))
         .h(span(leaf.rows, cell.1, scale))
-        .child(ime::mount_caret(wire(pane, scale)))
-        .child(scrollback::column(leaf.mark))
+        .child(pane)
 }
 
 fn wire(pane: El, scale: f32) -> El {

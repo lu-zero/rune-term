@@ -233,11 +233,17 @@ pub(crate) fn open_host(model: &mut Model, mark: u32, cols: u16, rows: u16) -> S
         wheel_remainder: 0.0,
         pointer_button: None,
         selecting: false,
+        scrollbar_hover: false,
+        scrollbar_active_until: 0.0,
+        scrollbar_opacity: 0.0,
+        scrollbar_fade_start: 0.0,
+        scrollbar_fade_from: 0.0,
+        hover_link: None,
     });
     id
 }
 
-pub fn poll(model: &mut Model, _now: f64, tx: &mut Tx) -> bool {
+pub fn poll(model: &mut Model, now: f64, tx: &mut Tx) -> bool {
     let events = model.shared.take_events();
     let mut chrome = false;
     for event in events {
@@ -250,6 +256,9 @@ pub fn poll(model: &mut Model, _now: f64, tx: &mut Tx) -> bool {
             host.surface.inject_output(&bytes);
             host.frame_flag.store(true, Ordering::Release);
         }
+    }
+    if crate::scrollback::refresh(model, now, tx) {
+        chrome = true;
     }
     chrome
 }

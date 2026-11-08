@@ -2,10 +2,13 @@
 //! wheel can move it without committing the view. The grid is not an
 //! `El::scroll`.
 
+use std::time::Duration;
+
 use rune::{effect, El, Phase, Tx};
 use term_grid::SolidSlot;
 
 use crate::model::Model;
+use crate::surfaces::HostSurface;
 use crate::theme;
 
 /// Points. Reserved on every pane so history appearing does not resize the grid.
@@ -14,6 +17,8 @@ pub const WIDTH: f32 = 8.0;
 pub const SHOWN_PANE: u32 = 0;
 const MIN_THUMB: f32 = 24.0;
 const SCROLL_BIT: u32 = 0x8000_0000;
+const HIDE_DELAY: Duration = Duration::from_millis(400);
+const FADE_DUR: f64 = 0.18;
 
 pub struct Thumb {
     pub top: f32,
@@ -97,6 +102,71 @@ fn host_mut(model: &mut Model, pane: u32) -> Option<&mut crate::surfaces::HostSu
     }
 }
 
+/// Wheel and programmatic scroll keep the bar visible briefly.
+pub fn note_activity(host: &mut HostSurface, tx: &mut Tx) {
+    host.scrollbar_active_until = f64::INFINITY;
+    host.scrollbar_opacity = 1.0;
+    host.scrollbar_fade_start = 0.0;
+    tx.wake_after(HIDE_DELAY);
+}
+
+pub(crate) fn refresh(model: &mut Model, now: f64, tx: &mut Tx) -> bool {
+    let mut wake = false;
+    for host in model.surfaces.iter_mut() {
+        let scrollable = host.surface.history_size() > 0 || host.render.display_offset() > 0;
+        if !scrollable {
+            fade_opacity(host, now, &mut wake);
+            continue;
+        }
+        if host.scrollbar_hover || host.render.display_offset() > 0 {
+            host.scrollbar_active_until = 0.0;
+            host.scrollbar_opacity = 1.0;
+            host.scrollbar_fade_start = 0.0;
+            continue;
+        }
+        if host.scrollbar_active_until.is_infinite() {
+            host.scrollbar_active_until = now + HIDE_DELAY.as_secs_f64();
+            host.scrollbar_opacity = 1.0;
+            host.scrollbar_fade_start = 0.0;
+            wake = true;
+            continue;
+        }
+        if host.scrollbar_active_until > now {
+            host.scrollbar_opacity = 1.0;
+            host.scrollbar_fade_start = 0.0;
+            wake = true;
+            continue;
+        }
+        host.scrollbar_active_until = 0.0;
+        fade_opacity(host, now, &mut wake);
+    }
+    if wake {
+        tx.wake_after(Duration::from_millis(16));
+    }
+    false
+}
+
+fn fade_opacity(host: &mut HostSurface, now: f64, wake: &mut bool) {
+    if host.scrollbar_opacity <= 0.0 {
+        host.scrollbar_opacity = 0.0;
+        host.scrollbar_fade_start = 0.0;
+        return;
+    }
+    if host.scrollbar_fade_start == 0.0 {
+        host.scrollbar_fade_start = now;
+        host.scrollbar_fade_from = host.scrollbar_opacity;
+    }
+    let t = ((now - host.scrollbar_fade_start) / FADE_DUR).clamp(0.0, 1.0);
+    let inv = 1.0 - t;
+    host.scrollbar_opacity = host.scrollbar_fade_from * (inv * inv * inv) as f32;
+    if host.scrollbar_opacity <= 0.0005 {
+        host.scrollbar_opacity = 0.0;
+        host.scrollbar_fade_start = 0.0;
+    } else {
+        *wake = true;
+    }
+}
+
 /// The track. Its thumb is not a child: the compositor paints that from
 /// `display_offset`, so the view stays put while the wheel scrolls.
 pub fn column(pane: u32) -> El {
@@ -104,6 +174,21 @@ pub fn column(pane: u32) -> El {
         .key(format!("scroll-{pane}"))
         .w(WIDTH)
         .h_full()
+        .on_hover_change(move |model: &mut Model, inside, tx| {
+            if let Some(host) = host_mut(model, pane) {
+                host.scrollbar_hover = inside;
+                if inside {
+                    host.scrollbar_active_until = 0.0;
+                    if host.surface.history_size() > 0 || host.render.display_offset() > 0 {
+                        host.scrollbar_opacity = 1.0;
+                        host.scrollbar_fade_start = 0.0;
+                    }
+                } else {
+                    note_activity(host, tx);
+                }
+            }
+            tx.live_only();
+        })
         .on_drag(move |model: &mut Model, drag, tx| {
             drag.data = pointer(model, pane, drag.phase, drag.y, drag.h, drag.data, tx);
         })
@@ -123,6 +208,7 @@ pub(crate) fn pointer(
         tx.live_only();
         return grab;
     };
+    note_activity(host, tx);
     host.render.update();
     let history = host.surface.history_size();
     let rows = host.render.lines();
@@ -164,15 +250,10 @@ impl Bars {
         }
     }
 
-    pub fn prepare(&self, queue: &wgpu::Queue, srgb_blend: bool) {
-        self.track
-            .write_color(queue, premul(theme::TAB_BG, srgb_blend));
-        self.thumb
-            .write_color(queue, premul(theme::MUTED, srgb_blend));
-    }
-
     pub fn draw(
         &self,
+        queue: &wgpu::Queue,
+        srgb_blend: bool,
         pass: &mut wgpu::RenderPass<'_>,
         site: &rune::render::EffectSite<'_>,
         model: &Model,
@@ -180,9 +261,15 @@ impl Bars {
         let Some(host) = host_ref(model, pane_of(site.mark)) else {
             return;
         };
+        let opacity = host.scrollbar_opacity;
+        if opacity <= 0.0 {
+            return;
+        }
         let Some((x, y, w, h)) = scissor(site, site.instance.rect) else {
             return;
         };
+        self.track
+            .write_color(queue, fade(theme::TAB_BG, srgb_blend, opacity));
         pass.set_scissor_rect(x, y, w, h);
         self.track.draw(pass);
         let history = host.surface.history_size();
@@ -202,9 +289,19 @@ impl Bars {
         let Some((x, y, w, h)) = scissor(site, thumb_rect) else {
             return;
         };
+        self.thumb
+            .write_color(queue, fade(theme::MUTED, srgb_blend, opacity));
         pass.set_scissor_rect(x, y, w, h);
         self.thumb.draw(pass);
     }
+}
+
+fn fade(value: u32, srgb_blend: bool, opacity: f32) -> [f32; 4] {
+    let mut c = premul(value, srgb_blend);
+    for ch in &mut c {
+        *ch *= opacity;
+    }
+    c
 }
 
 fn premul(value: u32, srgb_blend: bool) -> [f32; 4] {

@@ -30,6 +30,12 @@ pub struct HostSurface {
     pub pointer_button: Option<u8>,
     /// A local selection is tracking the pointer. The program did not take the press.
     pub selecting: bool,
+    pub scrollbar_hover: bool,
+    pub scrollbar_active_until: f64,
+    pub scrollbar_opacity: f32,
+    pub scrollbar_fade_start: f64,
+    pub scrollbar_fade_from: f32,
+    pub hover_link: Option<crate::hyperlink::HoverLink>,
 }
 
 pub struct Surfaces {

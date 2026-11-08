@@ -30,6 +30,7 @@ pub struct Model {
     pub(crate) search_drawn: String,
     /// The shell the last grid upload drew. A tab change forces the next one.
     pub(crate) grid_shown: Option<librio::SurfaceId>,
+    pub(crate) hover_drawn: Option<crate::hyperlink::HoverLink>,
     pub(crate) shared: Arc<Shared>,
     pub(crate) pending_inject: Option<Vec<u8>>,
 }
@@ -62,6 +63,7 @@ pub fn init() -> Model {
         query: TextEdit::new(""),
         search_drawn: String::new(),
         grid_shown: None,
+        hover_drawn: None,
         shared,
         pending_inject,
     }

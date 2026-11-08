@@ -7,6 +7,7 @@ mod chrome_view;
 mod delegate;
 mod grid_pass;
 mod grid_source;
+mod hyperlink;
 mod images;
 mod ime;
 mod metrics;

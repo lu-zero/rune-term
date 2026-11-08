@@ -62,9 +62,12 @@ pub fn cycle(model: &mut Model, delta: i32) -> bool {
 
 /// Close the selected tab. The last one closes the window.
 pub fn close_active(model: &mut Model, tx: &mut Tx) {
-    let index = model.active;
+    close(model, model.active, tx);
+}
+
+/// Close `index`. The last one closes the window.
+pub fn close(model: &mut Model, index: usize, tx: &mut Tx) {
     let Some(tab) = model.tabs.get(index) else {
-        tx.close_window();
         return;
     };
     let ids = surfaces_of(&tab.root);
@@ -72,15 +75,15 @@ pub fn close_active(model: &mut Model, tx: &mut Tx) {
         model.shared.remove_flag(id);
         model.surfaces.remove(id);
     }
-    if index < model.tabs.len() {
-        model.tabs.remove(index);
-    }
+    model.tabs.remove(index);
     if model.tabs.is_empty() {
         model.active = 0;
         tx.close_window();
         return;
     }
-    if model.active >= model.tabs.len() {
+    if index < model.active {
+        model.active -= 1;
+    } else if model.active >= model.tabs.len() {
         model.active = model.tabs.len() - 1;
     }
     show_active(model);
