@@ -12,7 +12,7 @@ pub const LEAF: LeafId = LeafId(1);
 pub use crate::split::{Leaf, LeafId, Node};
 const TAB_H: f32 = 28.0;
 
-/// Tab strip. A step darker than the cell background.
+/// Tab strip. Dark chrome above the black pane.
 pub fn tab() -> rune::Color {
     theme::linear(theme::TAB_BG)
 }

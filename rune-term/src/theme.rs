@@ -1,11 +1,11 @@
-//! Flexoki dark. The background is base-900, the text is base-200, ANSI
-//! normal is the 600 ink, and bright is the 400 accent.
+//! Flexoki dark on a black page. Text is base-200, ANSI normal is the
+//! 600 ink, and bright is the 400 accent. The page is black.
 //! <https://stephango.com/flexoki>
 
 use rune::color::srgb_decode;
 use rune::Color;
 
-pub const BG: u32 = 0x2827_26;
+pub const BG: u32 = 0x0000_00;
 pub const FG: u32 = 0xCECD_C3;
 pub const FG_BRIGHT: u32 = 0xE6E4_D9;
 pub const MUTED: u32 = 0x8785_80;
