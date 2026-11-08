@@ -135,7 +135,7 @@ fn gesture(
                         host.selecting = false;
                         host.hover_link = None;
                         host.hover_probe = None;
-                        crate::hyperlink::open_uri(&link.uri);
+                        let _ = crate::hyperlink::open_uri(&link.uri);
                         tx.wake_after(Duration::ZERO);
                         return;
                     }
@@ -1423,6 +1423,33 @@ mod tests {
             .surface
             .selection_text()
             .is_none());
+    }
+
+    #[test]
+    fn hover_probe_caches_by_cell() {
+        let mut model = host();
+        sized(&mut model);
+        {
+            let host = model.surfaces.primary_mut().unwrap();
+            host.surface
+                .inject_output(b"\x1b]8;;https://example.com\x07link\x1b]8;;\x07");
+            host.render.update();
+        }
+        let mark = crate::chrome::PANE_MARK;
+        let mut point = PointerEvent::default();
+        point.x = 1.0;
+        point.y = 1.0;
+        on_pointer_move_mark(&mut model, mark, point, 1.0, &mut Tx::default());
+        let probe = model.surfaces.primary().and_then(|h| h.hover_probe.clone());
+        assert!(probe.is_some());
+        let mut point = PointerEvent::default();
+        point.x = 2.0;
+        point.y = 2.0;
+        on_pointer_move_mark(&mut model, mark, point, 1.0, &mut Tx::default());
+        assert_eq!(
+            model.surfaces.primary().and_then(|h| h.hover_probe.clone()),
+            probe
+        );
     }
 
     fn copy_mods() -> Mods {

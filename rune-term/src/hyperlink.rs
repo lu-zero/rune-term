@@ -99,9 +99,19 @@ pub fn open_decision(uri: &str) -> OpenDecision {
     }
 }
 
-pub fn open_uri(uri: &str) {
-    if open_decision(uri) == OpenDecision::WarnAndOpen {
+pub fn open_uri(uri: &str) -> bool {
+    open_uri_with(uri, |_| true)
+}
+
+/// Opens `uri` when `confirm_risky` allows it. `WarnAndOpen` schemes are logged
+/// and passed to the hook; safe web schemes open directly.
+pub fn open_uri_with(uri: &str, confirm_risky: impl FnOnce(&str) -> bool) -> bool {
+    let decision = open_decision(uri);
+    if decision == OpenDecision::WarnAndOpen {
         eprintln!("opening non-web link scheme: {uri}");
+        if !confirm_risky(uri) {
+            return false;
+        }
     }
     #[cfg(test)]
     {
@@ -115,7 +125,7 @@ pub fn open_uri(uri: &str) {
             }
         });
         if captured {
-            return;
+            return true;
         }
     }
     let uri = uri.to_owned();
@@ -133,6 +143,7 @@ pub fn open_uri(uri: &str) {
             eprintln!("open link failed: {err}");
         }
     });
+    true
 }
 pub fn tint<S: GridSource>(source: S, hover: Option<&HoverLink>) -> Tint<S> {
     Tint {
@@ -266,5 +277,15 @@ mod tests {
         assert_eq!(open_decision("mailto:test@example.com"), OpenDecision::Open);
         assert_eq!(open_decision("file:///tmp/x"), OpenDecision::WarnAndOpen);
         assert_eq!(open_decision("ssh://host"), OpenDecision::WarnAndOpen);
+    }
+
+    #[test]
+    fn open_policy_hook_can_block_risky_schemes() {
+        let (_capture, _opened) = capture_opens();
+        assert!(!open_uri_with("file:///tmp/x", |_| false));
+        assert!(take_captured_opens().is_empty());
+        let (_capture, _opened) = capture_opens();
+        assert!(open_uri_with("file:///tmp/x", |_| true));
+        assert_eq!(take_captured_opens(), vec!["file:///tmp/x".to_string()]);
     }
 }
