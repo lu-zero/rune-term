@@ -3,7 +3,6 @@
 
 use crate::atlas::Atlas;
 use crate::cell::{CellBg, CellSample, CellText, CursorSample, GridSource, GridUniforms};
-use crate::sprite;
 
 const SHADER: &str = include_str!("grid.wgsl");
 const FRAMES_IN_FLIGHT: usize = 2;
@@ -346,7 +345,7 @@ fn push_glyph(
     }
     // A wide glyph's bitmap already fills both cells. The spacer cell has width 0.
     let cells = if sample.width >= 2 { 2 } else { 1 };
-    let Some(rect) = sprite::sprite(sample.ch).or_else(|| atlas.ensure(sample.ch, cells)) else {
+    let Some(rect) = atlas.ensure(sample.ch, cells) else {
         return;
     };
     let Ok(x) = u32::try_from(col) else {

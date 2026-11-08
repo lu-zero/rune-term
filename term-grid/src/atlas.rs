@@ -262,6 +262,10 @@ impl Atlas {
         if let Some(hit) = self.extra.get(&key) {
             return *hit;
         }
+        if let Some(rect) = crate::sprite::raster(self, ch, cells) {
+            self.extra.insert(key, Some(rect));
+            return Some(rect);
+        }
         let rect = self.rasterize(ch, cells);
         if rect.is_some_and(|rect| rect.atlas == 0) {
             self.dirty = true;
@@ -496,7 +500,7 @@ impl Atlas {
         })
     }
 
-    fn alloc(&mut self, cells: u8) -> Option<(u32, u32)> {
+    pub(crate) fn alloc(&mut self, cells: u8) -> Option<(u32, u32)> {
         let need = u32::from(cells.max(1));
         let cols = self.cols.max(1);
         let (cell_w, cell_h) = self.cell;
