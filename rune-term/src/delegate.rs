@@ -60,16 +60,9 @@ pub struct Shared {
 }
 
 enum HostEvent {
-    Action {
-        id: SurfaceId,
-        action: Action,
-    },
+    Action { id: SurfaceId, action: Action },
     Close(SurfaceId),
-    Clipboard {
-        id: SurfaceId,
-        kind: ClipboardType,
-        len: usize,
-    },
+    Clipboard { kind: ClipboardType, len: usize },
 }
 
 struct Delegate {
@@ -178,14 +171,10 @@ impl SurfaceDelegate for Delegate {
         });
     }
 
-    fn clipboard_write(&self, surface: SurfaceId, kind: ClipboardType, text: String) {
+    fn clipboard_write(&self, _surface: SurfaceId, kind: ClipboardType, text: String) {
         let len = text.len();
         drop(text);
-        self.shared.push(HostEvent::Clipboard {
-            id: surface,
-            kind,
-            len,
-        });
+        self.shared.push(HostEvent::Clipboard { kind, len });
     }
 
     fn close_surface(&self, surface: SurfaceId) {

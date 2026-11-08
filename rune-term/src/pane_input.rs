@@ -13,6 +13,15 @@ use crate::model::Model;
 use crate::surfaces::HostSurface;
 
 pub fn on_physical(model: &mut Model, event: &PhysicalInput, tx: &mut Tx) -> bool {
+    on_physical_mark(model, crate::chrome::PANE_MARK, event, tx)
+}
+
+pub fn on_physical_mark(
+    model: &mut Model,
+    mark: u32,
+    event: &PhysicalInput,
+    tx: &mut Tx,
+) -> bool {
     match event {
         PhysicalInput::Key {
             key,
@@ -23,6 +32,7 @@ pub fn on_physical(model: &mut Model, event: &PhysicalInput, tx: &mut Tx) -> boo
             consumed_mods,
         } => deliver(
             model,
+            mark,
             code(*key),
             mods_of(*mods),
             *pressed,
@@ -32,7 +42,7 @@ pub fn on_physical(model: &mut Model, event: &PhysicalInput, tx: &mut Tx) -> boo
             tx,
         ),
         PhysicalInput::FocusLost => {
-            if let Some(host) = model.surfaces.primary_mut() {
+            if let Some(host) = target_host(model, mark) {
                 host.wheel_remainder = 0.0;
                 host.pointer_button = None;
                 host.selecting = false;
@@ -47,15 +57,6 @@ pub fn on_physical(model: &mut Model, event: &PhysicalInput, tx: &mut Tx) -> boo
 
 /// Wheel points become fractional lines of the drawn row. A zero-line event
 /// still returns true, so an ancestor scroll does not also move.
-pub fn on_wheel(model: &mut Model, event: WheelEvent, scale: f32, tx: &mut Tx) -> bool {
-    let mark = model
-        .surfaces
-        .primary()
-        .map(|host| host.mark)
-        .unwrap_or(crate::chrome::PANE_MARK);
-    on_wheel_mark(model, mark, event, scale, tx)
-}
-
 pub fn on_wheel_mark(
     model: &mut Model,
     mark: u32,
@@ -89,15 +90,6 @@ pub fn on_wheel_mark(
     }
     tx.live_only();
     true
-}
-
-pub fn on_drag(model: &mut Model, drag: &mut Drag, scale: f32, tx: &mut Tx) {
-    let mark = model
-        .surfaces
-        .primary()
-        .map(|host| host.mark)
-        .unwrap_or(crate::chrome::PANE_MARK);
-    on_drag_mark(model, mark, drag, scale, tx);
 }
 
 pub fn on_drag_mark(model: &mut Model, mark: u32, drag: &mut Drag, scale: f32, tx: &mut Tx) {
@@ -212,15 +204,6 @@ fn gesture(
 }
 
 /// Bare motion is button 3. A drag already reported the held button.
-pub fn on_pointer_move(model: &mut Model, point: PointerEvent, scale: f32, tx: &mut Tx) {
-    let mark = model
-        .surfaces
-        .primary()
-        .map(|host| host.mark)
-        .unwrap_or(crate::chrome::PANE_MARK);
-    on_pointer_move_mark(model, mark, point, scale, tx);
-}
-
 pub fn on_pointer_move_mark(
     model: &mut Model,
     mark: u32,
@@ -261,15 +244,6 @@ pub fn on_pointer_move_mark(
         }
     }
     tx.live_only();
-}
-
-pub fn on_secondary(model: &mut Model, point: PointerEvent, scale: f32, tx: &mut Tx) {
-    let mark = model
-        .surfaces
-        .primary()
-        .map(|host| host.mark)
-        .unwrap_or(crate::chrome::PANE_MARK);
-    on_secondary_mark(model, mark, point, scale, tx);
 }
 
 pub fn on_secondary_mark(
@@ -403,8 +377,16 @@ pub fn on_key(model: &mut Model, event: &KeyEvent, tx: &mut Tx) -> bool {
     )
 }
 
+fn target_host(model: &mut Model, mark: u32) -> Option<&mut HostSurface> {
+    model
+        .surfaces
+        .by_mark_mut(mark)
+        .or_else(|| model.surfaces.primary_mut())
+}
+
 fn deliver(
     model: &mut Model,
+    mark: u32,
     code: term_input::PhysicalKeyCode,
     mods: term_input::Mods,
     pressed: bool,
@@ -455,7 +437,7 @@ fn deliver(
     }
     if let Some(sign) = term_input::scroll_chord(code, mods) {
         if pressed {
-            if let Some(host) = model.surfaces.primary_mut() {
+            if let Some(host) = target_host(model, mark) {
                 host.surface
                     .scroll(sign.saturating_mul(i32::from(host.rows)));
             }
@@ -467,7 +449,7 @@ fn deliver(
     if mapped.key.is_none() && mapped.text.is_none() {
         return false;
     }
-    let Some(host) = model.surfaces.primary_mut() else {
+    let Some(host) = target_host(model, mark) else {
         return false;
     };
     let wrote = host.surface.key(&mapped);
@@ -1067,8 +1049,9 @@ mod tests {
     }
 
     fn wheel(model: &mut Model, dx: f32, dy: f32, mods: Mods) -> bool {
-        on_wheel(
+        on_wheel_mark(
             model,
+            crate::chrome::PANE_MARK,
             WheelEvent::new(dx, dy).mods(mods),
             1.0,
             &mut Tx::default(),

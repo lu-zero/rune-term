@@ -76,9 +76,6 @@ impl Images {
     }
 }
 
-/// Compatibility no-op for call sites that haven't been wired to image state.
-pub fn draw() {}
-
 struct RenderProvider<'a> {
     render: &'a RenderState,
 }
