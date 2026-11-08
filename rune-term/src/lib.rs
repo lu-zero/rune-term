@@ -14,6 +14,7 @@ mod pane_input;
 mod resize;
 mod search;
 mod selection;
+mod split;
 mod surfaces;
 mod theme;
 

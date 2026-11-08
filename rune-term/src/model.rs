@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use librio::Engine;
 
-use crate::chrome::{LeafId, Node, Tab, LEAF};
+use crate::chrome::{Leaf, LeafId, Node, Tab, LEAF, PANE_MARK};
 use crate::delegate::{self, Shared};
 use crate::metrics;
 use crate::surfaces::Surfaces;
@@ -35,7 +35,13 @@ pub fn init() -> Model {
         engine,
         tabs: vec![Tab {
             title: "rune-term".to_string(),
-            root: Node::Leaf(LEAF),
+            root: Node::Leaf(Leaf {
+                id: LEAF,
+                surface: 0,
+                mark: PANE_MARK,
+                cols: 80,
+                rows: 24,
+            }),
             focused: LeafId(LEAF.0),
         }],
         active: 0,

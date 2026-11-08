@@ -1,4 +1,4 @@
-//! One tab and one leaf. The split change extends these types.
+//! One tab strip and one pane. The cell tree is [`crate::split`].
 
 use rune::{col, effect, row, text, Cx, El, Tx};
 
@@ -11,6 +11,8 @@ use crate::theme;
 
 pub const PANE_MARK: u32 = 1;
 pub const LEAF: LeafId = LeafId(1);
+
+pub use crate::split::{Leaf, LeafId, Node};
 const TAB_H: f32 = 28.0;
 
 /// Tab strip. A step darker than the cell background.
@@ -34,14 +36,6 @@ pub fn slot_premul(srgb_blend: bool) -> [f32; 4] {
     } else {
         slot.premul(1.0)
     }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct LeafId(pub u32);
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Node {
-    Leaf(LeafId),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

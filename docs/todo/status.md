@@ -21,7 +21,9 @@ The numbers are that plan's.
       `live_only`. The wrapped-line inject in the plan waits on reflow.
 - [~] **9. Input.** Keys reach the shell. Shift+PageUp and Shift+PageDown
       scroll. Mouse and wheel are unwired.
-- [ ] **6. Split model.** `Node` is a single leaf. There is no divider math.
+- [x] **6. Split model.** The tree is in cells. A divider costs one cell.
+      `distribute` spends a resize left or top first and will not take a
+      leaf's last cell. The view is still one pane.
 - [ ] **10. Multiple panes.**
 - [ ] **11. Selection and clipboard.** `selection` is an identity tint.
       Paste does nothing. OSC 52 does not write the clipboard.
