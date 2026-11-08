@@ -1,5 +1,7 @@
 //! Geometric glyphs rasterized into the gray atlas.
 
+use tiny_skia::{FillRule, LineCap, Paint, Path, PathBuilder, Pixmap, Stroke, Transform};
+
 use crate::atlas::{Atlas, GlyphRect};
 
 pub(crate) fn raster(atlas: &mut Atlas, ch: char, cells: u8) -> Option<GlyphRect> {
@@ -16,6 +18,9 @@ pub(crate) fn raster(atlas: &mut Atlas, ch: char, cells: u8) -> Option<GlyphRect
         | 0x1CEAB
         | 0x1FBE6
         | 0x1FBE7 => legacy(atlas, cp, cells),
+        0xE0B0..=0xE0BF | 0xE0D2 | 0xE0D4 => powerline(atlas, cp, cells),
+        0x25E2..=0x25E5 | 0x25F8..=0x25FA | 0x25FF => geometric(atlas, cp, cells),
+        0xF5D0..=0xF60D => branch(atlas, cp, cells),
         _ => None,
     }
 }
@@ -75,30 +80,68 @@ impl Canvas {
     }
 
     fn line(&mut self, x0: f32, y0: f32, x1: f32, y1: f32, thick: f32) {
-        let half = (thick / 2.0).max(0.5);
-        let min_x = (x0.min(x1) - half - 1.0).floor() as i32;
-        let max_x = (x0.max(x1) + half + 1.0).ceil() as i32;
-        let min_y = (y0.min(y1) - half - 1.0).floor() as i32;
-        let max_y = (y0.max(y1) + half + 1.0).ceil() as i32;
-        let dx = x1 - x0;
-        let dy = y1 - y0;
-        let len2 = dx * dx + dy * dy;
-        for y in min_y..=max_y {
-            for x in min_x..=max_x {
-                let px = x as f32 + 0.5;
-                let py = y as f32 + 0.5;
-                let t = if len2 > 0.0 {
-                    (((px - x0) * dx + (py - y0) * dy) / len2).clamp(0.0, 1.0)
-                } else {
-                    0.0
-                };
-                let cx = x0 + t * dx;
-                let cy = y0 + t * dy;
-                let dist = ((px - cx) * (px - cx) + (py - cy) * (py - cy)).sqrt();
-                let cov = (half + 0.5 - dist).clamp(0.0, 1.0);
-                if cov > 0.0 {
-                    self.blend(x, y, (cov * 255.0).round() as u8);
-                }
+        let mut pb = PathBuilder::new();
+        pb.move_to(x0, y0);
+        pb.line_to(x1, y1);
+        if let Some(path) = pb.finish() {
+            self.stroke_path(&path, thick);
+        }
+    }
+
+    fn stroke_path(&mut self, path: &Path, width: f32) {
+        let Some(mut pixmap) = Pixmap::new(self.w, self.h) else {
+            return;
+        };
+        let mut paint = Paint::default();
+        paint.set_color_rgba8(255, 255, 255, 255);
+        paint.anti_alias = true;
+        let stroke = Stroke {
+            width,
+            line_cap: LineCap::Butt,
+            ..Stroke::default()
+        };
+        pixmap.stroke_path(path, &paint, &stroke, Transform::identity(), None);
+        self.composite(&pixmap);
+    }
+
+    fn fill_path(&mut self, path: &Path) {
+        let Some(mut pixmap) = Pixmap::new(self.w, self.h) else {
+            return;
+        };
+        let mut paint = Paint::default();
+        paint.set_color_rgba8(255, 255, 255, 255);
+        paint.anti_alias = true;
+        pixmap.fill_path(path, &paint, FillRule::Winding, Transform::identity(), None);
+        self.composite(&pixmap);
+    }
+
+    fn triangle(&mut self, x0: f32, y0: f32, x1: f32, y1: f32, x2: f32, y2: f32) {
+        let mut pb = PathBuilder::new();
+        pb.move_to(x0, y0);
+        pb.line_to(x1, y1);
+        pb.line_to(x2, y2);
+        pb.close();
+        if let Some(path) = pb.finish() {
+            self.fill_path(&path);
+        }
+    }
+
+    fn pixel(&mut self, x: i32, y: i32, a: u8) {
+        self.blend(x, y, a);
+    }
+
+    fn flip_horizontal(&mut self) {
+        let w = self.w as usize;
+        for row in self.px.chunks_mut(w) {
+            row.reverse();
+        }
+    }
+
+    fn composite(&mut self, pixmap: &Pixmap) {
+        for (dst, src) in self.px.iter_mut().zip(pixmap.pixels()) {
+            let a = src.alpha();
+            if a > *dst {
+                *dst = a;
             }
         }
     }
@@ -220,6 +263,129 @@ fn box_thickness(cell_h: u32) -> u32 {
     ((cell_h as f32 / 16.0).round().max(1.0)) as u32
 }
 
+#[derive(Clone, Copy)]
+enum Corner {
+    Tl,
+    Tr,
+    Bl,
+    Br,
+}
+
+fn arc(canvas: &mut Canvas, corner: Corner) {
+    let cw = canvas.w;
+    let ch = canvas.h;
+    let thick = box_thickness(ch).max(1);
+    let fw = cw as f32;
+    let fh = ch as f32;
+    let ft = thick as f32;
+    let center_x = (cw.saturating_sub(thick) / 2) as f32 + ft / 2.0;
+    let center_y = (ch.saturating_sub(thick) / 2) as f32 + ft / 2.0;
+    let r = fw.min(fh) / 2.0;
+    let s = 0.25_f32;
+    let mut pb = PathBuilder::new();
+    match corner {
+        Corner::Tl => {
+            pb.move_to(center_x, 0.0);
+            pb.line_to(center_x, center_y - r);
+            pb.cubic_to(
+                center_x,
+                center_y - s * r,
+                center_x - s * r,
+                center_y,
+                center_x - r,
+                center_y,
+            );
+            pb.line_to(0.0, center_y);
+        }
+        Corner::Tr => {
+            pb.move_to(center_x, 0.0);
+            pb.line_to(center_x, center_y - r);
+            pb.cubic_to(
+                center_x,
+                center_y - s * r,
+                center_x + s * r,
+                center_y,
+                center_x + r,
+                center_y,
+            );
+            pb.line_to(fw, center_y);
+        }
+        Corner::Bl => {
+            pb.move_to(center_x, fh);
+            pb.line_to(center_x, center_y + r);
+            pb.cubic_to(
+                center_x,
+                center_y + s * r,
+                center_x - s * r,
+                center_y,
+                center_x - r,
+                center_y,
+            );
+            pb.line_to(0.0, center_y);
+        }
+        Corner::Br => {
+            pb.move_to(center_x, fh);
+            pb.line_to(center_x, center_y + r);
+            pb.cubic_to(
+                center_x,
+                center_y + s * r,
+                center_x + s * r,
+                center_y,
+                center_x + r,
+                center_y,
+            );
+            pb.line_to(fw, center_y);
+        }
+    }
+    if let Some(path) = pb.finish() {
+        canvas.stroke_path(&path, ft);
+    }
+}
+
+fn hline_mid(canvas: &mut Canvas) {
+    let ch = canvas.h;
+    let l = box_thickness(ch).max(1);
+    let top = ch.saturating_sub(l) / 2;
+    canvas.rect(0, top as i32, canvas.w as i32, (top + l) as i32, 0xFF);
+}
+
+fn vline_mid(canvas: &mut Canvas) {
+    let cw = canvas.w;
+    let l = box_thickness(canvas.h).max(1);
+    let left = cw.saturating_sub(l) / 2;
+    canvas.rect(left as i32, 0, (left + l) as i32, canvas.h as i32, 0xFF);
+}
+
+fn diag_ur_ll(canvas: &mut Canvas) {
+    let fw = canvas.w as f32;
+    let fh = canvas.h as f32;
+    let slope_x = (fw / fh).min(1.0);
+    let slope_y = (fh / fw).min(1.0);
+    let thick = box_thickness(canvas.h).max(1) as f32;
+    canvas.line(
+        fw + 0.5 * slope_x,
+        -0.5 * slope_y,
+        -0.5 * slope_x,
+        fh + 0.5 * slope_y,
+        thick,
+    );
+}
+
+fn diag_ul_lr(canvas: &mut Canvas) {
+    let fw = canvas.w as f32;
+    let fh = canvas.h as f32;
+    let slope_x = (fw / fh).min(1.0);
+    let slope_y = (fh / fw).min(1.0);
+    let thick = box_thickness(canvas.h).max(1) as f32;
+    canvas.line(
+        -0.5 * slope_x,
+        -0.5 * slope_y,
+        fw + 0.5 * slope_x,
+        fh + 0.5 * slope_y,
+        thick,
+    );
+}
+
 fn box_drawing(atlas: &mut Atlas, cp: u32, cells: u8) -> Option<GlyphRect> {
     let (cw, ch) = atlas.cell();
     let slot_w = cw * u32::from(cells.max(1));
@@ -337,12 +503,15 @@ fn box_drawing(atlas: &mut Atlas, cp: u32, cells: u8) -> Option<GlyphRect> {
         0x256A => lc(&mut c, ln(L, D, L, D)),
         0x256B => lc(&mut c, ln(D, L, D, L)),
         0x256C => lc(&mut c, ln(D, D, D, D)),
-        0x256D..=0x2570 => arc(&mut c, cp),
-        0x2571 => diagonal_ur_ll(&mut c, l),
-        0x2572 => diagonal_ul_lr(&mut c, l),
+        0x256D => arc(&mut c, Corner::Br),
+        0x256E => arc(&mut c, Corner::Bl),
+        0x256F => arc(&mut c, Corner::Tl),
+        0x2570 => arc(&mut c, Corner::Tr),
+        0x2571 => diag_ur_ll(&mut c),
+        0x2572 => diag_ul_lr(&mut c),
         0x2573 => {
-            diagonal_ur_ll(&mut c, l);
-            diagonal_ul_lr(&mut c, l);
+            diag_ur_ll(&mut c);
+            diag_ul_lr(&mut c);
         }
         0x2574 => lc(&mut c, ln(N, N, N, L)),
         0x2575 => lc(&mut c, ln(L, N, N, N)),
@@ -611,93 +780,413 @@ fn dash_v(c: &mut Canvas, count: i32, thick: u32, desired_gap: u32) {
     }
 }
 
-fn arc(c: &mut Canvas, cp: u32) {
-    let cw = c.w as f32;
-    let ch = c.h as f32;
-    let thick = box_thickness(c.h).max(1);
-    let thick_f = thick as f32;
-    let half = thick_f / 2.0;
-    let cx = (c.w.saturating_sub(thick) / 2) as f32 + half;
-    let cy = (c.h.saturating_sub(thick) / 2) as f32 + half;
-    let r = cw.min(ch) / 2.0;
-    let (sx, sy, ex, ey) = match cp {
-        0x256D => (cx, 0.0, 0.0, cy), // ╭ up -> left
-        0x256E => (cx, 0.0, cw, cy),  // ╮ up -> right
-        0x256F => (cx, ch, cw, cy),   // ╯ down -> right
-        _ => (cx, ch, 0.0, cy),       // ╰ down -> left
-    };
-    let steps = ((r * 3.14159) / 0.75).ceil().max(8.0) as usize;
-    let mut px = sx;
-    let mut py = sy;
-    for i in 1..=steps {
-        let t = i as f32 / steps as f32;
-        let (nx, ny) = arc_point(cp, cx, cy, r, t, sx, sy, ex, ey);
-        c.line(px, py, nx, ny, thick_f);
-        px = nx;
-        py = ny;
+fn powerline(atlas: &mut Atlas, cp: u32, cells: u8) -> Option<GlyphRect> {
+    let (cw, ch) = atlas.cell();
+    let mut c = Canvas::new(cw * u32::from(cells.max(1)), ch);
+    let w = c.w as f32;
+    let h = c.h as f32;
+    match cp {
+        0xE0B0 => c.triangle(0.0, 0.0, w, h / 2.0, 0.0, h),
+        0xE0B2 => c.triangle(w, 0.0, 0.0, h / 2.0, w, h),
+        0xE0B1 => powerline_chevron(&mut c, false),
+        0xE0B3 => powerline_chevron(&mut c, true),
+        0xE0B4 => rounded_cap(&mut c, true, false),
+        0xE0B5 => rounded_cap(&mut c, false, false),
+        0xE0B6 => rounded_cap(&mut c, true, true),
+        0xE0B7 => rounded_cap(&mut c, false, true),
+        0xE0B8 => c.triangle(0.0, 0.0, w, h, 0.0, h),
+        0xE0B9 => diag_ul_lr(&mut c),
+        0xE0BA => c.triangle(w, 0.0, w, h, 0.0, h),
+        0xE0BB => diag_ur_ll(&mut c),
+        0xE0BC => c.triangle(0.0, 0.0, w, 0.0, 0.0, h),
+        0xE0BD => diag_ur_ll(&mut c),
+        0xE0BE => c.triangle(0.0, 0.0, w, 0.0, w, h),
+        0xE0BF => diag_ul_lr(&mut c),
+        0xE0D2 => trapezoids(&mut c, false),
+        0xE0D4 => trapezoids(&mut c, true),
+        _ => return None,
     }
+    commit(atlas, cells.max(1), c)
 }
 
-fn arc_point(
-    cp: u32,
-    cx: f32,
-    cy: f32,
-    r: f32,
-    t: f32,
-    sx: f32,
-    sy: f32,
-    ex: f32,
-    ey: f32,
-) -> (f32, f32) {
-    // Quarter-circle approximation between the stem direction and arm direction.
-    let (a0, a1) = match cp {
-        0x256D => (std::f32::consts::PI, 1.5 * std::f32::consts::PI), // leftward end to upward
-        0x256E => (1.5 * std::f32::consts::PI, 2.0 * std::f32::consts::PI),
-        0x256F => (0.0, 0.5 * std::f32::consts::PI),
-        _ => (0.5 * std::f32::consts::PI, std::f32::consts::PI),
-    };
-    let a = a0 + (a1 - a0) * t;
-    let on_arc_x = cx + r * a.cos();
-    let on_arc_y = cy + r * a.sin();
-    // Blend: start from stem end, sweep through arc center, end at arm end.
-    if t < 0.5 {
-        let s = t * 2.0;
-        (sx + (on_arc_x - sx) * s, sy + (on_arc_y - sy) * s)
+fn powerline_chevron(c: &mut Canvas, flip: bool) {
+    let w = c.w as f32;
+    let h = c.h as f32;
+    let thick = box_thickness(c.h).max(1) as f32;
+    let mut pb = PathBuilder::new();
+    if flip {
+        pb.move_to(w, 0.0);
+        pb.line_to(0.0, h / 2.0);
+        pb.line_to(w, h);
     } else {
-        let s = (t - 0.5) * 2.0;
-        (
-            on_arc_x + (ex - on_arc_x) * s,
-            on_arc_y + (ey - on_arc_y) * s,
-        )
+        pb.move_to(0.0, 0.0);
+        pb.line_to(w, h / 2.0);
+        pb.line_to(0.0, h);
+    }
+    if let Some(path) = pb.finish() {
+        c.stroke_path(&path, thick);
     }
 }
 
-fn diagonal_ur_ll(c: &mut Canvas, thick: u32) {
-    let fw = c.w as f32;
-    let fh = c.h as f32;
-    let sx = (fw / fh).min(1.0);
-    let sy = (fh / fw).min(1.0);
-    c.line(
-        fw + 0.5 * sx,
-        -0.5 * sy,
-        -0.5 * sx,
-        fh + 0.5 * sy,
-        thick as f32,
-    );
+fn rounded_cap(c: &mut Canvas, filled: bool, flip: bool) {
+    let w = c.w as f32;
+    let h = c.h as f32;
+    let r = w.min(h / 2.0);
+    // kappa for quarter-circle cubic approximation
+    let k = r * 0.5522847498;
+    let mut pb = PathBuilder::new();
+    if flip {
+        pb.move_to(w, 0.0);
+        pb.cubic_to(w - k, 0.0, w - r, r - k, w - r, r);
+        pb.line_to(w - r, h - r);
+        pb.cubic_to(w - r, h - r + k, w - k, h, w, h);
+    } else {
+        pb.move_to(0.0, 0.0);
+        pb.cubic_to(k, 0.0, r, r - k, r, r);
+        pb.line_to(r, h - r);
+        pb.cubic_to(r, h - r + k, k, h, 0.0, h);
+    }
+    if filled {
+        pb.close();
+        if let Some(path) = pb.finish() {
+            c.fill_path(&path);
+        }
+    } else if let Some(path) = pb.finish() {
+        c.stroke_path(&path, box_thickness(c.h).max(1) as f32);
+    }
 }
 
-fn diagonal_ul_lr(c: &mut Canvas, thick: u32) {
-    let fw = c.w as f32;
-    let fh = c.h as f32;
-    let sx = (fw / fh).min(1.0);
-    let sy = (fh / fw).min(1.0);
-    c.line(
-        -0.5 * sx,
-        -0.5 * sy,
-        fw + 0.5 * sx,
-        fh + 0.5 * sy,
-        thick as f32,
-    );
+fn trapezoids(c: &mut Canvas, flip: bool) {
+    let w = c.w as f32;
+    let h = c.h as f32;
+    let t = box_thickness(c.h).max(1) as f32;
+    let draw_pair = |c: &mut Canvas| {
+        let mut pb = PathBuilder::new();
+        pb.move_to(0.0, 0.0);
+        pb.line_to(w, 0.0);
+        pb.line_to(w / 2.0, h / 2.0 - t / 2.0);
+        pb.line_to(0.0, h / 2.0 - t / 2.0);
+        pb.close();
+        if let Some(path) = pb.finish() {
+            c.fill_path(&path);
+        }
+        let mut pb = PathBuilder::new();
+        pb.move_to(0.0, h);
+        pb.line_to(w, h);
+        pb.line_to(w / 2.0, h / 2.0 + t / 2.0);
+        pb.line_to(0.0, h / 2.0 + t / 2.0);
+        pb.close();
+        if let Some(path) = pb.finish() {
+            c.fill_path(&path);
+        }
+    };
+    if flip {
+        c.flip_horizontal();
+        draw_pair(c);
+        c.flip_horizontal();
+    } else {
+        draw_pair(c);
+    }
+}
+
+fn geometric(atlas: &mut Atlas, cp: u32, cells: u8) -> Option<GlyphRect> {
+    let (cw, ch) = atlas.cell();
+    let mut c = Canvas::new(cw * u32::from(cells.max(1)), ch);
+    let w = c.w as f32;
+    let h = c.h as f32;
+    let verts = |corner: Corner| -> [(f32, f32); 3] {
+        match corner {
+            Corner::Tl => [(0.0, 0.0), (0.0, h), (w, 0.0)],
+            Corner::Tr => [(0.0, 0.0), (w, h), (w, 0.0)],
+            Corner::Bl => [(0.0, 0.0), (0.0, h), (w, h)],
+            Corner::Br => [(0.0, h), (w, h), (w, 0.0)],
+        }
+    };
+    let fill_corner = |c: &mut Canvas, corner: Corner| {
+        let v = verts(corner);
+        c.triangle(v[0].0, v[0].1, v[1].0, v[1].1, v[2].0, v[2].1);
+    };
+    let outline_corner = |c: &mut Canvas, corner: Corner| {
+        let v = verts(corner);
+        let thick = box_thickness(c.h).max(1) as f32;
+        let mut pb = PathBuilder::new();
+        pb.move_to(v[0].0, v[0].1);
+        pb.line_to(v[1].0, v[1].1);
+        pb.line_to(v[2].0, v[2].1);
+        pb.close();
+        if let Some(path) = pb.finish() {
+            c.stroke_path(&path, thick);
+        }
+    };
+    match cp {
+        0x25E2 => fill_corner(&mut c, Corner::Br),
+        0x25E3 => fill_corner(&mut c, Corner::Bl),
+        0x25E4 => fill_corner(&mut c, Corner::Tl),
+        0x25E5 => fill_corner(&mut c, Corner::Tr),
+        0x25F8 => outline_corner(&mut c, Corner::Tl),
+        0x25F9 => outline_corner(&mut c, Corner::Tr),
+        0x25FA => outline_corner(&mut c, Corner::Bl),
+        0x25FF => outline_corner(&mut c, Corner::Br),
+        _ => return None,
+    }
+    commit(atlas, cells.max(1), c)
+}
+
+fn branch(atlas: &mut Atlas, cp: u32, cells: u8) -> Option<GlyphRect> {
+    let (cw, ch) = atlas.cell();
+    let mut c = Canvas::new(cw * u32::from(cells.max(1)), ch);
+    match cp {
+        0xF5D0 => hline_mid(&mut c),
+        0xF5D1 => vline_mid(&mut c),
+        0xF5D2 => fading_line(&mut c, BranchEdge::Right),
+        0xF5D3 => fading_line(&mut c, BranchEdge::Left),
+        0xF5D4 => fading_line(&mut c, BranchEdge::Bottom),
+        0xF5D5 => fading_line(&mut c, BranchEdge::Top),
+        0xF5D6 => arc(&mut c, Corner::Br),
+        0xF5D7 => arc(&mut c, Corner::Bl),
+        0xF5D8 => arc(&mut c, Corner::Tr),
+        0xF5D9 => arc(&mut c, Corner::Tl),
+        0xF5DA => {
+            vline_mid(&mut c);
+            arc(&mut c, Corner::Tr);
+        }
+        0xF5DB => {
+            vline_mid(&mut c);
+            arc(&mut c, Corner::Br);
+        }
+        0xF5DC => {
+            arc(&mut c, Corner::Tr);
+            arc(&mut c, Corner::Br);
+        }
+        0xF5DD => {
+            vline_mid(&mut c);
+            arc(&mut c, Corner::Tl);
+        }
+        0xF5DE => {
+            vline_mid(&mut c);
+            arc(&mut c, Corner::Bl);
+        }
+        0xF5DF => {
+            arc(&mut c, Corner::Tl);
+            arc(&mut c, Corner::Bl);
+        }
+        0xF5E0 => {
+            arc(&mut c, Corner::Bl);
+            hline_mid(&mut c);
+        }
+        0xF5E1 => {
+            arc(&mut c, Corner::Br);
+            hline_mid(&mut c);
+        }
+        0xF5E2 => {
+            arc(&mut c, Corner::Br);
+            arc(&mut c, Corner::Bl);
+        }
+        0xF5E3 => {
+            arc(&mut c, Corner::Tl);
+            hline_mid(&mut c);
+        }
+        0xF5E4 => {
+            arc(&mut c, Corner::Tr);
+            hline_mid(&mut c);
+        }
+        0xF5E5 => {
+            arc(&mut c, Corner::Tr);
+            arc(&mut c, Corner::Tl);
+        }
+        0xF5E6 => {
+            vline_mid(&mut c);
+            arc(&mut c, Corner::Tl);
+            arc(&mut c, Corner::Tr);
+        }
+        0xF5E7 => {
+            vline_mid(&mut c);
+            arc(&mut c, Corner::Bl);
+            arc(&mut c, Corner::Br);
+        }
+        0xF5E8 => {
+            hline_mid(&mut c);
+            arc(&mut c, Corner::Bl);
+            arc(&mut c, Corner::Tl);
+        }
+        0xF5E9 => {
+            hline_mid(&mut c);
+            arc(&mut c, Corner::Tr);
+            arc(&mut c, Corner::Br);
+        }
+        0xF5EA => {
+            vline_mid(&mut c);
+            arc(&mut c, Corner::Tl);
+            arc(&mut c, Corner::Br);
+        }
+        0xF5EB => {
+            vline_mid(&mut c);
+            arc(&mut c, Corner::Tr);
+            arc(&mut c, Corner::Bl);
+        }
+        0xF5EC => {
+            hline_mid(&mut c);
+            arc(&mut c, Corner::Tl);
+            arc(&mut c, Corner::Br);
+        }
+        0xF5ED => {
+            hline_mid(&mut c);
+            arc(&mut c, Corner::Tr);
+            arc(&mut c, Corner::Bl);
+        }
+        0xF5EE => node(&mut c, true, false, false, false, false),
+        0xF5EF => node(&mut c, false, false, false, false, false),
+        0xF5F0 => node(&mut c, true, false, true, false, false),
+        0xF5F1 => node(&mut c, false, false, true, false, false),
+        0xF5F2 => node(&mut c, true, false, false, false, true),
+        0xF5F3 => node(&mut c, false, false, false, false, true),
+        0xF5F4 => node(&mut c, true, false, true, false, true),
+        0xF5F5 => node(&mut c, false, false, true, false, true),
+        0xF5F6 => node(&mut c, true, false, false, true, false),
+        0xF5F7 => node(&mut c, false, false, false, true, false),
+        0xF5F8 => node(&mut c, true, true, false, false, false),
+        0xF5F9 => node(&mut c, false, true, false, false, false),
+        0xF5FA => node(&mut c, true, true, false, true, false),
+        0xF5FB => node(&mut c, false, true, false, true, false),
+        0xF5FC => node(&mut c, true, false, true, true, false),
+        0xF5FD => node(&mut c, false, false, true, true, false),
+        0xF5FE => node(&mut c, true, false, false, true, true),
+        0xF5FF => node(&mut c, false, false, false, true, true),
+        0xF600 => node(&mut c, true, true, true, false, false),
+        0xF601 => node(&mut c, false, true, true, false, false),
+        0xF602 => node(&mut c, true, true, false, false, true),
+        0xF603 => node(&mut c, false, true, false, false, true),
+        0xF604 => node(&mut c, true, true, true, true, false),
+        0xF605 => node(&mut c, false, true, true, true, false),
+        0xF606 => node(&mut c, true, true, false, true, true),
+        0xF607 => node(&mut c, false, true, false, true, true),
+        0xF608 => node(&mut c, true, false, true, true, true),
+        0xF609 => node(&mut c, false, false, true, true, true),
+        0xF60A => node(&mut c, true, true, true, false, true),
+        0xF60B => node(&mut c, false, true, true, false, true),
+        0xF60C => node(&mut c, true, true, true, true, true),
+        0xF60D => node(&mut c, false, true, true, true, true),
+        _ => return None,
+    }
+    commit(atlas, cells.max(1), c)
+}
+
+#[derive(Clone, Copy)]
+enum BranchEdge {
+    Top,
+    Bottom,
+    Left,
+    Right,
+}
+
+fn fading_line(canvas: &mut Canvas, to: BranchEdge) {
+    let w = canvas.w;
+    let h = canvas.h;
+    let thick = box_thickness(h).max(1);
+    let h_top = h.saturating_sub(thick) / 2;
+    let h_bottom = h_top + thick;
+    let v_left = w.saturating_sub(thick) / 2;
+    let v_right = v_left + thick;
+    let (mut color, inc) = match to {
+        BranchEdge::Top => (0.0_f32, 255.0 / h as f32),
+        BranchEdge::Bottom => (255.0, -255.0 / h as f32),
+        BranchEdge::Left => (0.0, 255.0 / w as f32),
+        BranchEdge::Right => (255.0, -255.0 / w as f32),
+    };
+    match to {
+        BranchEdge::Top | BranchEdge::Bottom => {
+            for y in 0..h {
+                let a = color.round().clamp(0.0, 255.0) as u8;
+                for x in v_left..v_right {
+                    canvas.pixel(x as i32, y as i32, a);
+                }
+                color += inc;
+            }
+        }
+        BranchEdge::Left | BranchEdge::Right => {
+            for x in 0..w {
+                let a = color.round().clamp(0.0, 255.0) as u8;
+                for y in h_top..h_bottom {
+                    canvas.pixel(x as i32, y as i32, a);
+                }
+                color += inc;
+            }
+        }
+    }
+}
+
+fn node(canvas: &mut Canvas, filled: bool, up: bool, right: bool, down: bool, left: bool) {
+    let w = canvas.w;
+    let h = canvas.h;
+    let thick = box_thickness(h).max(1);
+    let ft = thick as f32;
+    let h_top = h.saturating_sub(thick) / 2;
+    let h_bottom = h_top + thick;
+    let v_left = w.saturating_sub(thick) / 2;
+    let v_right = v_left + thick;
+    let cx = v_left as f32 + ft / 2.0;
+    let cy = h_top as f32 + ft / 2.0;
+    let r = cx.min(cy).min(w as f32 - cx).min(h as f32 - cy);
+    if up {
+        canvas.rect(
+            v_left as i32,
+            0,
+            v_right as i32,
+            (cy - r + ft / 2.0).ceil() as i32,
+            0xFF,
+        );
+    }
+    if right {
+        canvas.rect(
+            (cx + r - ft / 2.0).floor() as i32,
+            h_top as i32,
+            w as i32,
+            h_bottom as i32,
+            0xFF,
+        );
+    }
+    if down {
+        canvas.rect(
+            v_left as i32,
+            (cy + r - ft / 2.0).floor() as i32,
+            v_right as i32,
+            h as i32,
+            0xFF,
+        );
+    }
+    if left {
+        canvas.rect(
+            0,
+            h_top as i32,
+            (cx - r + ft / 2.0).ceil() as i32,
+            h_bottom as i32,
+            0xFF,
+        );
+    }
+    let path = if filled {
+        circle_path(cx, cy, r)
+    } else {
+        circle_path(cx, cy, (r - ft / 2.0).max(0.5))
+    };
+    if let Some(path) = path {
+        if filled {
+            canvas.fill_path(&path);
+        } else {
+            canvas.stroke_path(&path, ft);
+        }
+    }
+}
+
+fn circle_path(cx: f32, cy: f32, r: f32) -> Option<Path> {
+    let k = r * 0.5522847498;
+    let mut pb = PathBuilder::new();
+    pb.move_to(cx + r, cy);
+    pb.cubic_to(cx + r, cy + k, cx + k, cy + r, cx, cy + r);
+    pb.cubic_to(cx - k, cy + r, cx - r, cy + k, cx - r, cy);
+    pb.cubic_to(cx - r, cy - k, cx - k, cy - r, cx, cy - r);
+    pb.cubic_to(cx + k, cy - r, cx + r, cy - k, cx + r, cy);
+    pb.close();
+    pb.finish()
 }
 
 fn block(atlas: &mut Atlas, cp: u32, cells: u8) -> Option<GlyphRect> {
@@ -910,6 +1399,39 @@ mod tests {
     fn block_elements_rasterize() {
         let mut atlas = Atlas::with_cell(10, 20);
         for cp in 0x2580u32..=0x259F {
+            let ch = char::from_u32(cp).unwrap();
+            let rect = raster(&mut atlas, ch, 1).unwrap_or_else(|| panic!("U+{cp:04X}"));
+            assert!(has_ink(&atlas, rect), "U+{cp:04X} empty");
+        }
+    }
+
+    #[test]
+    fn powerline_and_extra_rasterize() {
+        let mut atlas = Atlas::with_cell(10, 20);
+        for cp in (0xE0B0u32..=0xE0BF).chain([0xE0D2, 0xE0D4]) {
+            let ch = char::from_u32(cp).unwrap();
+            let rect = raster(&mut atlas, ch, 1).unwrap_or_else(|| panic!("U+{cp:04X}"));
+            assert!(has_ink(&atlas, rect), "U+{cp:04X} empty");
+        }
+    }
+
+    #[test]
+    fn geometric_triangles_rasterize() {
+        let mut atlas = Atlas::with_cell(10, 20);
+        for cp in (0x25E2u32..=0x25E5)
+            .chain(0x25F8..=0x25FA)
+            .chain(std::iter::once(0x25FF))
+        {
+            let ch = char::from_u32(cp).unwrap();
+            let rect = raster(&mut atlas, ch, 1).unwrap_or_else(|| panic!("U+{cp:04X}"));
+            assert!(has_ink(&atlas, rect), "U+{cp:04X} empty");
+        }
+    }
+
+    #[test]
+    fn branch_drawing_rasterizes() {
+        let mut atlas = Atlas::with_cell(10, 20);
+        for cp in 0xF5D0u32..=0xF60D {
             let ch = char::from_u32(cp).unwrap();
             let rect = raster(&mut atlas, ch, 1).unwrap_or_else(|| panic!("U+{cp:04X}"));
             assert!(has_ink(&atlas, rect), "U+{cp:04X} empty");
