@@ -3,6 +3,7 @@
 
 mod app;
 mod chrome;
+mod chrome_view;
 mod delegate;
 mod grid_pass;
 mod grid_source;

@@ -50,20 +50,41 @@ impl Surfaces {
         self.inner.remove(&id)
     }
 
+    pub fn get(&self, id: SurfaceId) -> Option<&HostSurface> {
+        self.inner.get(&id)
+    }
+
     pub fn get_mut(&mut self, id: SurfaceId) -> Option<&mut HostSurface> {
         self.inner.get_mut(&id)
+    }
+
+    pub fn len(&self) -> usize {
+        self.inner.len()
     }
 
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut HostSurface> {
         self.inner.values_mut()
     }
 
+    /// The original pane. A later leaf keeps its own entry, and input
+    /// still addresses this one until a chord targets the focused leaf.
     pub fn primary(&self) -> Option<&HostSurface> {
-        self.inner.values().next()
+        self.marked(crate::chrome::PANE_MARK)
+            .or_else(|| self.inner.values().next())
     }
 
     pub fn primary_mut(&mut self) -> Option<&mut HostSurface> {
-        self.inner.values_mut().next()
+        let id = self
+            .inner
+            .iter()
+            .find(|(_, host)| host.mark == crate::chrome::PANE_MARK)
+            .map(|(id, _)| *id)
+            .or_else(|| self.inner.keys().next().copied());
+        id.and_then(|id| self.inner.get_mut(&id))
+    }
+
+    fn marked(&self, mark: u32) -> Option<&HostSurface> {
+        self.inner.values().find(|host| host.mark == mark)
     }
 }
 

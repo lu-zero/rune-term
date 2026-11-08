@@ -25,7 +25,12 @@ The numbers are that plan's.
 - [x] **6. Split model.** The tree is in cells. A divider costs one cell.
       `distribute` spends a resize left or top first and will not take a
       leaf's last cell. The view is still one pane.
-- [ ] **10. Multiple panes.**
+- [x] **10. Multiple panes.** A tab can hold more than one leaf. Each
+      leaf has a surface and an effect mark. A split sizes the leaves
+      from `distribute`, and the divider costs one cell. A click on a
+      leaf moves focus. Injecting into one leaf does not dirty the
+      other. One leaf still fills the window. Keys, the wheel, and the
+      compositor still address the first pane.
 - [ ] **11. Selection and clipboard.** `selection` is an identity tint.
       Paste does nothing. OSC 52 does not write the clipboard.
 - [ ] **12. Scrollback viewport.** Page scrolling exists. There is no

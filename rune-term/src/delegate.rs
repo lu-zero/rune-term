@@ -202,6 +202,12 @@ impl SurfaceDelegate for Delegate {
 
 pub fn setup(model: &mut Model, waker: Waker) {
     model.shared.set_waker(waker);
+    let id = open_host(model, PANE_MARK, 0, 0);
+    crate::chrome_view::attach_initial(model, id);
+}
+
+/// One surface, one damage flag, one effect mark.
+pub(crate) fn open_host(model: &mut Model, mark: u32, cols: u16, rows: u16) -> SurfaceId {
     let flag = Arc::new(AtomicBool::new(false));
     let surface = model
         .engine
@@ -213,19 +219,20 @@ pub fn setup(model: &mut Model, waker: Waker) {
     model.surfaces.insert(HostSurface {
         surface,
         render,
-        mark: PANE_MARK,
+        mark,
         title: "rune-term".to_string(),
         bell: false,
         progress: None,
         blink: true,
         frame_flag: flag,
         resized: AtomicBool::new(false),
-        cols: 0,
-        rows: 0,
+        cols,
+        rows,
         cell_px: (0, 0),
         wheel_remainder: 0.0,
         pointer_button: None,
     });
+    id
 }
 
 pub fn poll(model: &mut Model, _now: f64, _tx: &mut Tx) -> bool {

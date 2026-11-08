@@ -1,12 +1,9 @@
-//! One tab strip and one pane. The cell tree is [`crate::split`].
+//! One tab strip. The panes are [`crate::chrome_view`]. The cell tree is [`crate::split`].
 
-use rune::{col, effect, row, text, Cx, El, Tx};
+use rune::{col, row, text, Cx, El};
 
-use crate::app;
-use crate::ime;
+use crate::chrome_view;
 use crate::model::Model;
-use crate::pane_input;
-use crate::selection;
 use crate::theme;
 
 pub const PANE_MARK: u32 = 1;
@@ -46,7 +43,6 @@ pub struct Tab {
 }
 
 pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
-    let scale = cx.env().scale;
     let label = tab_label(model);
     let tab_bg = tab();
     let tab = row()
@@ -58,27 +54,7 @@ pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
         // they are not drawn over the content.
         .pl(cx.titlebar_inset() + 12.0)
         .child(text(label).color(text_color()));
-    let pane = effect(PANE_MARK)
-        .key("pane")
-        .w_full()
-        .grow(1.0)
-        .min_h(0.0)
-        .focusable(true)
-        .on_layout_tx(move |model: &mut Model, rect, tx: &mut Tx| {
-            app::on_pane_layout(model, (rect[2], rect[3]), scale, tx);
-        })
-        .on_physical_input(pane_input::on_physical)
-        .on_paste(selection::on_paste)
-        .on_wheel(move |model, event, tx| pane_input::on_wheel(model, event, scale, tx))
-        .pointer_buttons([rune::PointerButton::Middle])
-        .on_drag(move |model, drag, tx| pane_input::on_drag(model, drag, scale, tx))
-        .on_secondary_press_local(move |model, point, tx| {
-            pane_input::on_secondary(model, point, scale, tx)
-        })
-        .on_pointer_move_local(move |model, point, tx| {
-            pane_input::on_pointer_move(model, point, scale, tx)
-        });
-    let pane = ime::mount_caret(pane);
+    let pane = chrome_view::area(model, cx);
     col().w_full().h_full().fill(tab_bg).child(tab).child(pane)
 }
 
