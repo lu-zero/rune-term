@@ -61,7 +61,7 @@ struct CachedImage {
 
 pub struct ImagePass {
     pipeline: wgpu::RenderPipeline,
-    uniform_layout: wgpu::BindGroupLayout,
+    _uniform_layout: wgpu::BindGroupLayout,
     image_layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     uniform: wgpu::Buffer,
@@ -190,7 +190,7 @@ impl ImagePass {
         });
         Self {
             pipeline,
-            uniform_layout,
+            _uniform_layout: uniform_layout,
             image_layout,
             sampler,
             uniform,

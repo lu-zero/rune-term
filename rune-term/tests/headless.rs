@@ -6,12 +6,16 @@
 #![cfg(not(feature = "pty"))]
 
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use rune::color::srgb_encode;
 use rune::Color;
 
+static LOCK: Mutex<()> = Mutex::new(());
+
 #[test]
 fn chrome_and_a_solid_slot() {
+    let _guard = LOCK.lock().expect("headless lock");
     let path =
         std::env::temp_dir().join(format!("rune-term-foundation-{}.png", std::process::id()));
     let _ = std::fs::remove_file(&path);
@@ -138,6 +142,7 @@ fn read_png(path: &PathBuf) -> (u32, u32, Vec<u8>) {
 #[cfg(feature = "graphics")]
 #[test]
 fn kitty_image_pixels_appear() {
+    let _guard = LOCK.lock().expect("headless lock");
     let path = std::env::temp_dir().join(format!("rune-term-kitty-{}.png", std::process::id()));
     let _ = std::fs::remove_file(&path);
     // 2x2 solid red RGBA image, displayed over 4 columns and 2 rows.

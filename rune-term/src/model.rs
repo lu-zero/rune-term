@@ -10,6 +10,7 @@ use crate::surfaces::Surfaces;
 
 pub struct Preedit {
     pub text: String,
+    pub cursor: Option<(usize, usize)>,
 }
 
 pub struct Model {
