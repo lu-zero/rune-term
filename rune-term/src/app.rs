@@ -5,11 +5,13 @@ use std::sync::atomic::Ordering;
 use rune::compose::DeviceKey;
 use rune::render::{Instance, KIND_EFFECT};
 use rune::{App, AppSpec, Compositor, Frame, Titlebar, Tx};
+use term_grid::images::ImageBucket;
 use term_grid::{DrawSlot, GridRenderer, SolidSlot};
 
 use crate::chrome;
 use crate::delegate;
 use crate::grid_pass;
+use crate::images::Images;
 use crate::ime;
 use crate::model::{self, Model};
 use crate::pane_input;
@@ -105,6 +107,7 @@ pub fn fit_layout(model: &mut Model, slot: (f32, f32), scale: f32) -> Option<Res
 struct GridCompositor {
     slot: Option<SolidSlot>,
     grid: Option<GridRenderer>,
+    images: Option<Images>,
     bars: Option<Bars>,
     key: Option<DeviceKey>,
     format: Option<wgpu::TextureFormat>,
@@ -122,12 +125,14 @@ impl GridCompositor {
             && self.format == Some(format)
             && self.slot.is_some()
             && self.grid.is_some()
+            && self.images.is_some()
             && self.bars.is_some();
         if same {
             return;
         }
         self.slot = Some(SolidSlot::new(device, format));
         self.grid = Some(GridRenderer::new(device, queue, format));
+        self.images = Some(Images::new(device, format));
         self.bars = Some(Bars::new(device, format));
         self.key = Some(key);
         self.format = Some(format);
@@ -150,6 +155,7 @@ impl Compositor<Model> for GridCompositor {
         grid_pass::sync(
             &mut f.rt.state,
             self.grid.as_mut().expect("grid"),
+            self.images.as_mut().expect("images"),
             f.device,
             f.queue,
         );
@@ -161,16 +167,18 @@ impl Compositor<Model> for GridCompositor {
             &f.rt.instances,
             f.size,
         );
+        let mut pane_origin = [0.0, 0.0];
         if let Some((rect, scale)) = pane {
             let margin = if scale.is_finite() && scale > 0.0 {
                 f32::from(resize::margin_px(scale))
             } else {
                 0.0
             };
+            pane_origin = [rect[0] + margin, rect[1] + margin];
             self.grid.as_mut().expect("grid").publish(
                 f.queue,
                 DrawSlot {
-                    origin: [rect[0] + margin, rect[1] + margin],
+                    origin: pane_origin,
                     size: [
                         (rect[2] - margin * 2.0).max(0.0),
                         (rect[3] - margin * 2.0).max(0.0),
@@ -186,8 +194,10 @@ impl Compositor<Model> for GridCompositor {
         slot.write_color(f.queue, color);
         let bars = self.bars.as_ref().expect("scrollbar");
         let grid = self.grid.as_ref().expect("grid");
+        let images = self.images.as_mut().expect("images");
         let mark = chrome::PANE_MARK;
         let queue = f.queue;
+        let device = f.device;
         f.ui.draw_with(f.encoder, f.target, clear, &mut |pass, site| {
             if scrollback::is_scroll(site.mark) {
                 bars.draw(queue, srgb_blend, pass, site, &f.rt.state);
@@ -203,7 +213,28 @@ impl Compositor<Model> for GridCompositor {
             };
             pass.set_scissor_rect(x, y, w, h);
             slot.draw(pass);
-            grid.draw(pass);
+            grid.draw_bg(pass);
+            images.draw_bucket(
+                device,
+                queue,
+                pass,
+                ImageBucket::UnderText,
+                pane_origin,
+                site.origin,
+                site.size,
+                srgb_blend,
+            );
+            grid.draw_text(pass);
+            images.draw_bucket(
+                device,
+                queue,
+                pass,
+                ImageBucket::OverText,
+                pane_origin,
+                site.origin,
+                site.size,
+                srgb_blend,
+            );
         });
     }
 }

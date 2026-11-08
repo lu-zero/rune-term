@@ -134,3 +134,38 @@ fn read_png(path: &PathBuf) -> (u32, u32, Vec<u8>) {
     buf.truncate(info.buffer_size());
     (info.width, info.height, buf)
 }
+
+#[cfg(feature = "graphics")]
+#[test]
+fn kitty_image_pixels_appear() {
+    let path = std::env::temp_dir().join(format!("rune-term-kitty-{}.png", std::process::id()));
+    let _ = std::fs::remove_file(&path);
+    // 2x2 solid red RGBA image, displayed over 4 columns and 2 rows.
+    let seq = b"\x1b_Ga=T,f=32,s=2,v=2,c=4,r=2,i=1,q=2;/wAA//8AAP//AAD//wAA/w==\x1b\\";
+    rune_term::queue_inject(seq);
+    rune_term::app()
+        .args([
+            "--snap".to_string(),
+            path.display().to_string(),
+            "--scale".to_string(),
+            "1".to_string(),
+            "--frames".to_string(),
+            "1".to_string(),
+            "--size".to_string(),
+            "800x500".to_string(),
+        ])
+        .run();
+
+    let (width, height, pixels) = read_png(&path);
+    assert_eq!((width, height), (800, 500));
+    let red = pixels
+        .chunks_exact(4)
+        .filter(|px| px[0] >= 220 && px[1] <= 40 && px[2] <= 40 && px[3] >= 250)
+        .count();
+    assert!(
+        red > 20,
+        "expected kitty image pixels, got {red} red pixels ({})",
+        path.display()
+    );
+    let _ = std::fs::remove_file(&path);
+}

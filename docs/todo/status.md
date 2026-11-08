@@ -49,7 +49,10 @@ The numbers are that plan's.
       rows they occupy. A match above the viewport is not drawn.
 - [ ] **14. IME.** The caret element is the pane unchanged, and `on_ime`
       returns false.
-- [ ] **15. Kitty images.** `images::draw` is empty.
+- [x] **15. Kitty images.** Kitty placements are read from `RenderState`,
+      uploaded/cached by image stamp, and drawn in z-buckets (under-text and
+      over-text) around the grid pass. Headless `graphics` test injects a small
+      kitty image and verifies pixels. Sixel/iTerm2 remain item 18.
 - [ ] **16. Settings.** The palette and the 14 point face are fixed in the
       tree.
 - [~] **17. Box-drawing and braille sprites.** Box drawing, block elements

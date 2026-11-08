@@ -7,7 +7,7 @@ use term_grid::GridRenderer;
 
 use crate::grid_source::SurfaceGrid;
 use crate::hyperlink;
-use crate::images;
+use crate::images::Images;
 use crate::model::Model;
 use crate::search;
 use crate::selection;
@@ -15,6 +15,7 @@ use crate::selection;
 pub fn sync(
     model: &mut Model,
     grid: &mut GridRenderer,
+    images: &mut Images,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
 ) {
@@ -40,7 +41,6 @@ pub fn sync(
         // One grid. The selected tab is what it draws. A hidden shell still rearms.
         let mine = Some(host.surface.id()) == active;
         if !mine || host.cell_px.0 == 0 || host.cell_px.1 == 0 {
-            images::draw();
             continue;
         }
         let hits = search::collect(&host.surface, &host.render, &shown);
@@ -57,10 +57,12 @@ pub fn sync(
             host.cell_px,
             resized || flagged || force_search || force_hover || switched,
         );
+        images.sync(device, queue, &host.render, host.cell_px);
         drew = true;
-        images::draw();
     }
-    if drew {
+    if !drew {
+        images.clear();
+    } else {
         model.search_drawn = shown;
         model.grid_shown = active;
         model.hover_drawn = hover;

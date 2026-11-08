@@ -217,6 +217,11 @@ impl GridRenderer {
     }
 
     pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
+        self.draw_bg(pass);
+        self.draw_text(pass);
+    }
+
+    pub fn draw_bg(&self, pass: &mut wgpu::RenderPass<'_>) {
         if !self.ready || self.bg.is_empty() {
             return;
         }
@@ -224,9 +229,13 @@ impl GridRenderer {
         pass.set_pipeline(&self.bg_pipeline);
         pass.set_bind_group(0, &gpu.bg_bind, &[]);
         pass.draw(0..3, 0..1);
-        if self.text_count == 0 {
+    }
+
+    pub fn draw_text(&self, pass: &mut wgpu::RenderPass<'_>) {
+        if !self.ready || self.bg.is_empty() || self.text_count == 0 {
             return;
         }
+        let gpu = &self.slots[self.frame];
         pass.set_pipeline(&self.text_pipeline);
         pass.set_bind_group(0, &gpu.text_bind, &[]);
         pass.set_bind_group(1, &self.atlas_bind, &[]);

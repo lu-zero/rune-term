@@ -5,7 +5,9 @@ mod atlas;
 mod cell;
 #[cfg(target_os = "macos")]
 mod fallback;
+pub mod images;
 mod renderer;
+mod sixel;
 mod solid;
 mod sprite;
 
