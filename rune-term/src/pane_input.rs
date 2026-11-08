@@ -16,12 +16,7 @@ pub fn on_physical(model: &mut Model, event: &PhysicalInput, tx: &mut Tx) -> boo
     on_physical_mark(model, crate::chrome::PANE_MARK, event, tx)
 }
 
-pub fn on_physical_mark(
-    model: &mut Model,
-    mark: u32,
-    event: &PhysicalInput,
-    tx: &mut Tx,
-) -> bool {
+pub fn on_physical_mark(model: &mut Model, mark: u32, event: &PhysicalInput, tx: &mut Tx) -> bool {
     match event {
         PhysicalInput::Key {
             key,
@@ -365,8 +360,14 @@ pub fn on_key(model: &mut Model, event: &KeyEvent, tx: &mut Tx) -> bool {
         .physical_key()
         .map(code)
         .unwrap_or_else(|| logical_code(&event.key));
+    let mark = model
+        .surfaces
+        .primary()
+        .map(|host| host.mark)
+        .unwrap_or(crate::chrome::PANE_MARK);
     deliver(
         model,
+        mark,
         code,
         mods_of(event.mods),
         true,
@@ -378,10 +379,11 @@ pub fn on_key(model: &mut Model, event: &KeyEvent, tx: &mut Tx) -> bool {
 }
 
 fn target_host(model: &mut Model, mark: u32) -> Option<&mut HostSurface> {
-    model
-        .surfaces
-        .by_mark_mut(mark)
-        .or_else(|| model.surfaces.primary_mut())
+    if model.surfaces.by_mark(mark).is_some() {
+        model.surfaces.by_mark_mut(mark)
+    } else {
+        model.surfaces.primary_mut()
+    }
 }
 
 fn deliver(

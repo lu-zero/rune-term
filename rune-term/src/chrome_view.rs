@@ -189,16 +189,18 @@ fn leaf_el(leaf: &Leaf, _model: &Model, scale: f32, cell: (f32, f32)) -> El {
 }
 
 fn wire(pane: El, mark: u32, scale: f32) -> El {
-    pane.on_physical_input(pane_input::on_physical)
-        .on_wheel(move |model, event, tx| pane_input::on_wheel_mark(model, mark, event, scale, tx))
-        .pointer_buttons([rune::PointerButton::Middle])
-        .on_drag(move |model, drag, tx| pane_input::on_drag_mark(model, mark, drag, scale, tx))
-        .on_secondary_press_local(move |model, point, tx| {
-            pane_input::on_secondary_mark(model, mark, point, scale, tx)
-        })
-        .on_pointer_move_local(move |model, point, tx| {
-            pane_input::on_pointer_move_mark(model, mark, point, scale, tx)
-        })
+    pane.on_physical_input(move |model, event, tx| {
+        pane_input::on_physical_mark(model, mark, event, tx)
+    })
+    .on_wheel(move |model, event, tx| pane_input::on_wheel_mark(model, mark, event, scale, tx))
+    .pointer_buttons([rune::PointerButton::Middle])
+    .on_drag(move |model, drag, tx| pane_input::on_drag_mark(model, mark, drag, scale, tx))
+    .on_secondary_press_local(move |model, point, tx| {
+        pane_input::on_secondary_mark(model, mark, point, scale, tx)
+    })
+    .on_pointer_move_local(move |model, point, tx| {
+        pane_input::on_pointer_move_mark(model, mark, point, scale, tx)
+    })
 }
 
 fn divider(horizontal: bool, scale: f32, cell: (f32, f32)) -> El {
