@@ -1,5 +1,5 @@
 //! The focused pane maps physical keys, the wheel, and the pointer onto the shell.
-//! App chords return false, except copy and search, which this shell handles.
+//! App chords return false, except copy, paste, and search, which this shell handles.
 
 use librio::Modifiers;
 use rune::{
@@ -321,6 +321,10 @@ fn deliver(
             crate::search::open(model);
             return true;
         }
+        if pressed && code == term_input::PhysicalKeyCode::KeyV {
+            tx.request_paste();
+            return true;
+        }
         return false;
     }
     if let Some(sign) = term_input::scroll_chord(code, mods) {
@@ -551,7 +555,7 @@ mod tests {
     use super::*;
     use crate::delegate;
     use crate::model;
-    use rune::PhysicalKeyCode as Code;
+    use rune::{Env, PhysicalKeyCode as Code, Runtime};
 
     fn host() -> Model {
         let mut model = model::init();
@@ -1105,5 +1109,34 @@ mod tests {
         let mut model = host();
         crate::selection::on_paste(&mut model, "pasted", &mut Tx::default());
         assert_eq!(model.shared.take_output(), b"pasted");
+    }
+
+    #[test]
+    fn the_paste_chord_reads_the_clipboard_into_the_shell() {
+        let board = rune::clipboard::memory();
+        board.set_text("pasted");
+        let mut rt = Runtime::new(
+            host(),
+            crate::chrome::view,
+            (800.0, 500.0),
+            Env::new(true, 1.0),
+        );
+        rt.use_clipboard(&board);
+        rt.frame(0.0);
+        let (x, y) = rt.find("pane").expect("pane");
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        rt.frame(0.0);
+        rt.physical_input(PhysicalInput::Key {
+            key: Code::KeyV,
+            mods: copy_mods(),
+            pressed: true,
+            repeat: false,
+            text: None,
+            consumed_mods: Mods::default(),
+        });
+        rt.frame(0.0);
+        rt.frame(0.0);
+        assert_eq!(rt.state.shared.take_output(), b"pasted");
     }
 }

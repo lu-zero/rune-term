@@ -55,7 +55,14 @@ pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
         .pl(cx.titlebar_inset() + 12.0)
         .child(text(label).color(text_color()));
     let pane = chrome_view::area(model, cx);
-    col().w_full().h_full().fill(tab_bg).child(tab).child(pane)
+    // Rune delivers Cmd+V to the root handler, not to the focused pane.
+    col()
+        .w_full()
+        .h_full()
+        .fill(tab_bg)
+        .on_paste(crate::selection::on_paste)
+        .child(tab)
+        .child(pane)
 }
 
 fn tab_label(model: &Model) -> String {

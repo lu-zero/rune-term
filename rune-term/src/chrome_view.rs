@@ -171,7 +171,6 @@ fn leaf_el(leaf: &Leaf, scale: f32, cell: (f32, f32)) -> El {
 
 fn wire(pane: El, scale: f32) -> El {
     pane.on_physical_input(pane_input::on_physical)
-        .on_paste(crate::selection::on_paste)
         .on_wheel(move |model, event, tx| pane_input::on_wheel(model, event, scale, tx))
         .pointer_buttons([rune::PointerButton::Middle])
         .on_drag(move |model, drag, tx| pane_input::on_drag(model, drag, scale, tx))
