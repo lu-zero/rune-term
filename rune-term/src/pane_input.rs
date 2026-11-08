@@ -1407,6 +1407,39 @@ mod tests {
         assert!(model.shared.take_output().is_empty());
     }
 
+    #[test]
+    fn mod_click_opens_link_without_mouse_report() {
+        let mut model = host();
+        sized(&mut model);
+        {
+            let host = model.surfaces.primary_mut().unwrap();
+            host.surface.inject_output(
+                b"\x1b]8;;https://example.com\x07link\x1b]8;;\x07\x1b[?1000h\x1b[?1006h",
+            );
+            host.render.update();
+        }
+        let (_capture, _opened) = crate::hyperlink::capture_opens();
+        let mods = if cfg!(target_os = "macos") {
+            librio::Modifiers::SUPER
+        } else {
+            librio::Modifiers::CTRL
+        };
+        gesture_at(&mut model, Phase::Down, 1.0, 1.0, 1, mods);
+        let opened = crate::hyperlink::take_captured_opens();
+        assert_eq!(opened, vec!["https://example.com".to_string()]);
+        assert!(
+            !model.shared.take_output().starts_with(b"\x1b[<"),
+            "mod+click must not produce mouse report"
+        );
+        assert!(model
+            .surfaces
+            .primary()
+            .unwrap()
+            .surface
+            .selection_text()
+            .is_none());
+    }
+
     fn copy_mods() -> Mods {
         if cfg!(target_os = "macos") {
             Mods {

@@ -13,6 +13,44 @@ pub struct HoverLink {
     pub uri: String,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OpenDecision {
+    Open,
+    WarnAndOpen,
+}
+
+#[cfg(test)]
+thread_local! {
+    static TEST_OPENER: std::cell::RefCell<Option<Vec<String>>> = const {
+        std::cell::RefCell::new(None)
+    };
+}
+
+#[cfg(test)]
+pub(crate) struct OpenCapture;
+
+#[cfg(test)]
+impl Drop for OpenCapture {
+    fn drop(&mut self) {
+        TEST_OPENER.with(|slot| *slot.borrow_mut() = None);
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn capture_opens() -> (OpenCapture, std::rc::Rc<std::cell::RefCell<Vec<String>>>) {
+    let opened = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+    let shared = opened.clone();
+    TEST_OPENER.with(|slot| {
+        *slot.borrow_mut() = Some(Vec::new());
+    });
+    (OpenCapture, shared)
+}
+
+#[cfg(test)]
+pub(crate) fn take_captured_opens() -> Vec<String> {
+    TEST_OPENER.with(|slot| slot.borrow_mut().take().unwrap_or_default())
+}
+
 /// Resolve a link under a viewport cell. OSC 8 takes precedence.
 pub fn resolve(host: &HostSurface, line: usize, col: usize) -> Option<HoverLink> {
     if let Some(uri) = host.render.link_at(line, col) {
@@ -47,9 +85,38 @@ pub fn open_mods(mods: Modifiers) -> bool {
     }
 }
 
+pub fn open_decision(uri: &str) -> OpenDecision {
+    let Some((scheme, _)) = uri.split_once(':') else {
+        return OpenDecision::WarnAndOpen;
+    };
+    if scheme.eq_ignore_ascii_case("http")
+        || scheme.eq_ignore_ascii_case("https")
+        || scheme.eq_ignore_ascii_case("mailto")
+    {
+        OpenDecision::Open
+    } else {
+        OpenDecision::WarnAndOpen
+    }
+}
+
 pub fn open_uri(uri: &str) {
-    if scheme_policy(uri).is_warn() {
+    if open_decision(uri) == OpenDecision::WarnAndOpen {
         eprintln!("opening non-web link scheme: {uri}");
+    }
+    #[cfg(test)]
+    {
+        let captured = TEST_OPENER.with(|slot| {
+            let mut slot = slot.borrow_mut();
+            if let Some(uris) = slot.as_mut() {
+                uris.push(uri.to_owned());
+                true
+            } else {
+                false
+            }
+        });
+        if captured {
+            return;
+        }
     }
     let uri = uri.to_owned();
     std::thread::spawn(move || {
@@ -66,34 +133,6 @@ pub fn open_uri(uri: &str) {
             eprintln!("open link failed: {err}");
         }
     });
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum SchemePolicy {
-    Common,
-    Warn,
-}
-
-impl SchemePolicy {
-    fn is_warn(self) -> bool {
-        self == Self::Warn
-    }
-}
-
-fn scheme_policy(uri: &str) -> SchemePolicy {
-    let Some((scheme, _)) = uri.split_once(':') else {
-        return SchemePolicy::Warn;
-    };
-    if scheme.eq_ignore_ascii_case("http")
-        || scheme.eq_ignore_ascii_case("https")
-        || scheme.eq_ignore_ascii_case("mailto")
-    {
-        SchemePolicy::Common
-    } else if scheme.eq_ignore_ascii_case("file") {
-        SchemePolicy::Warn
-    } else {
-        SchemePolicy::Warn
-    }
 }
 pub fn tint<S: GridSource>(source: S, hover: Option<&HoverLink>) -> Tint<S> {
     Tint {
@@ -205,5 +244,27 @@ mod tests {
         assert!(tinted.cell(0, 0).underline);
         assert!(tinted.cell(0, 4).underline);
         assert!(!tinted.cell(0, 6).underline);
+    }
+
+    #[test]
+    fn implicit_url_resolves_when_no_osc8_link() {
+        let mut model = host();
+        {
+            let host = model.surfaces.primary_mut().unwrap();
+            host.surface.inject_output(b"go https://example.com ok");
+            host.render.update();
+        }
+        let host = model.surfaces.primary().unwrap();
+        let link = resolve(host, 0, 5).expect("implicit url");
+        assert!(link.uri.starts_with("https://example.com"), "{}", link.uri);
+    }
+
+    #[test]
+    fn open_decision_warns_for_non_web_schemes() {
+        assert_eq!(open_decision("https://example.com"), OpenDecision::Open);
+        assert_eq!(open_decision("http://example.com"), OpenDecision::Open);
+        assert_eq!(open_decision("mailto:test@example.com"), OpenDecision::Open);
+        assert_eq!(open_decision("file:///tmp/x"), OpenDecision::WarnAndOpen);
+        assert_eq!(open_decision("ssh://host"), OpenDecision::WarnAndOpen);
     }
 }
