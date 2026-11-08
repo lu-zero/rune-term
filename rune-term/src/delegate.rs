@@ -10,6 +10,7 @@ use rune::{Tx, Waker};
 
 use crate::chrome::PANE_MARK;
 use crate::model::Model;
+use crate::split;
 use crate::surfaces::{HostSurface, Progress};
 
 static QUEUED_INJECT: Mutex<Option<Vec<u8>>> = Mutex::new(None);
@@ -236,11 +237,11 @@ pub(crate) fn open_host(model: &mut Model, mark: u32, cols: u16, rows: u16) -> S
     id
 }
 
-pub fn poll(model: &mut Model, _now: f64, _tx: &mut Tx) -> bool {
+pub fn poll(model: &mut Model, _now: f64, tx: &mut Tx) -> bool {
     let events = model.shared.take_events();
     let mut chrome = false;
     for event in events {
-        if apply(model, event) {
+        if apply(model, event, tx) {
             chrome = true;
         }
     }
@@ -253,18 +254,52 @@ pub fn poll(model: &mut Model, _now: f64, _tx: &mut Tx) -> bool {
     chrome
 }
 
-fn apply(model: &mut Model, event: HostEvent) -> bool {
+fn apply(model: &mut Model, event: HostEvent, tx: &mut Tx) -> bool {
     match event {
         HostEvent::Action { id, action } => apply_action(model, id, action),
-        HostEvent::Close(id) => {
-            model.shared.remove_flag(id);
-            model.surfaces.remove(id).is_some()
-        }
+        HostEvent::Close(id) => drop_closed(model, id, tx),
         HostEvent::Clipboard { kind, len, .. } => {
             eprintln!("clipboard write dropped ({kind:?}, {len} bytes)");
             #[cfg(all(test, not(feature = "pty")))]
             record_clipboard_drop(kind, len);
             false
+        }
+    }
+}
+
+/// The shell exited. Drop its leaf. The window closes with the last surface.
+fn drop_closed(model: &mut Model, id: SurfaceId, tx: &mut Tx) -> bool {
+    model.shared.remove_flag(id);
+    if model.surfaces.remove(id).is_none() {
+        return false;
+    }
+    drop_leaf(model, id);
+    if model.surfaces.len() == 0 {
+        tx.close_window();
+    }
+    true
+}
+
+fn drop_leaf(model: &mut Model, surface: SurfaceId) {
+    for index in 0..model.tabs.len() {
+        match split::detach(model.tabs[index].root.clone(), surface) {
+            split::Detach::Missing(_) => continue,
+            split::Detach::Rest(root) => {
+                if !split::contains_leaf(&root, model.tabs[index].focused) {
+                    model.tabs[index].focused = split::first_leaf(&root);
+                }
+                model.tabs[index].root = root;
+                return;
+            }
+            split::Detach::Empty => {
+                model.tabs.remove(index);
+                if model.tabs.is_empty() {
+                    model.active = 0;
+                } else if model.active > index || model.active >= model.tabs.len() {
+                    model.active = model.active.saturating_sub(1);
+                }
+                return;
+            }
         }
     }
 }
@@ -329,7 +364,29 @@ fn record_clipboard_drop(kind: ClipboardType, len: usize) {
 #[cfg(all(test, not(feature = "pty")))]
 mod tests {
     use super::*;
+    use crate::chrome::Node;
     use crate::model;
+    use crate::split::Axis;
+    use rune::{Env, Runtime, Shell};
+
+    fn host() -> Model {
+        let mut model = model::init();
+        setup(&mut model, std::sync::Arc::new(|| {}));
+        model
+    }
+
+    fn latch(model: Model, expect_chrome: bool) -> Runtime<Model> {
+        let mut rt = Runtime::new(
+            model,
+            crate::chrome::view,
+            (800.0, 500.0),
+            Env::new(true, 1.0),
+        );
+        rt.update(|model, tx| {
+            assert_eq!(poll(model, 0.0, tx), expect_chrome);
+        });
+        rt
+    }
 
     #[test]
     fn osc52_drops_the_payload_and_keeps_the_length() {
@@ -347,5 +404,51 @@ mod tests {
             *CLIPBOARD_DROP.lock().expect("clipboard drop"),
             Some((ClipboardType::Clipboard, 5))
         );
+    }
+
+    #[test]
+    fn the_last_shell_closes_the_window() {
+        let model = host();
+        let id = model.surfaces.primary().unwrap().surface.id();
+        model.shared.delegate().close_surface(id);
+        let rt = latch(model, true);
+        assert!(rt.state.surfaces.primary().is_none());
+        assert!(rt.state.tabs.is_empty());
+        assert_eq!(rt.shell_request, Some(Shell::Close));
+    }
+
+    #[test]
+    fn a_remaining_pane_keeps_the_window() {
+        let mut model = host();
+        assert!(crate::chrome_view::split_focused(
+            &mut model,
+            Axis::Horizontal
+        ));
+        let right = match &model.tabs[0].root {
+            Node::Split { right, .. } => match right.as_ref() {
+                Node::Leaf(leaf) => leaf.surface,
+                other => panic!("expected the new leaf, got {other:?}"),
+            },
+            other => panic!("expected a split, got {other:?}"),
+        };
+        let left = model.surfaces.primary().unwrap().surface.id();
+        assert_ne!(left, right);
+        model.shared.delegate().close_surface(right);
+        let rt = latch(model, true);
+        assert!(rt.shell_request.is_none());
+        assert_eq!(rt.state.surfaces.len(), 1);
+        assert_eq!(rt.state.surfaces.primary().unwrap().surface.id(), left);
+        assert!(matches!(rt.state.tabs[0].root, Node::Leaf(_)));
+        assert_eq!(rt.state.tabs[0].focused, crate::chrome::LEAF);
+    }
+
+    #[test]
+    fn an_unknown_close_leaves_the_window() {
+        let model = host();
+        model.shared.delegate().close_surface(usize::MAX);
+        let rt = latch(model, false);
+        assert!(rt.shell_request.is_none());
+        assert_eq!(rt.state.surfaces.len(), 1);
+        assert_eq!(rt.state.tabs.len(), 1);
     }
 }

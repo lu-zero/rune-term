@@ -65,6 +65,67 @@ impl Node {
     }
 }
 
+/// What remains after removing the leaf that owns a surface.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Detach {
+    /// That surface is not in this tree.
+    Missing(Node),
+    /// A sibling remains. The divider beside the closed leaf is gone.
+    Rest(Node),
+    /// That leaf was the whole tree.
+    Empty,
+}
+
+/// Remove the leaf whose `surface` is `id`. One id matches one leaf.
+pub(crate) fn detach(node: Node, surface: SurfaceId) -> Detach {
+    match node {
+        Node::Leaf(leaf) if leaf.surface == surface => Detach::Empty,
+        Node::Leaf(leaf) => Detach::Missing(Node::Leaf(leaf)),
+        Node::Split { axis, left, right } => {
+            join(axis, detach(*left, surface), detach(*right, surface))
+        }
+    }
+}
+
+pub(crate) fn contains_leaf(node: &Node, id: LeafId) -> bool {
+    match node {
+        Node::Leaf(leaf) => leaf.id == id,
+        Node::Split { left, right, .. } => contains_leaf(left, id) || contains_leaf(right, id),
+    }
+}
+
+pub(crate) fn first_leaf(node: &Node) -> LeafId {
+    match node {
+        Node::Leaf(leaf) => leaf.id,
+        Node::Split { left, .. } => first_leaf(left),
+    }
+}
+
+fn join(axis: Axis, left: Detach, right: Detach) -> Detach {
+    match (left, right) {
+        (Detach::Missing(left), Detach::Missing(right)) => split_detach(axis, left, right, true),
+        (Detach::Empty, Detach::Empty) => Detach::Empty,
+        (Detach::Empty, Detach::Missing(node) | Detach::Rest(node))
+        | (Detach::Missing(node) | Detach::Rest(node), Detach::Empty) => Detach::Rest(node),
+        (Detach::Rest(left), Detach::Missing(right))
+        | (Detach::Missing(left), Detach::Rest(right))
+        | (Detach::Rest(left), Detach::Rest(right)) => split_detach(axis, left, right, false),
+    }
+}
+
+fn split_detach(axis: Axis, left: Node, right: Node, missing: bool) -> Detach {
+    let node = Node::Split {
+        axis,
+        left: Box::new(left),
+        right: Box::new(right),
+    };
+    if missing {
+        Detach::Missing(node)
+    } else {
+        Detach::Rest(node)
+    }
+}
+
 /// Resize `tree` so its leaves and dividers sum to `total_cols` by `total_rows`.
 /// A tree that is already that size is returned unchanged. A request smaller
 /// than the tree's minimum stops at one cell per leaf.
@@ -294,6 +355,51 @@ mod tests {
             Node::Leaf(_) => panic!("expected a split"),
         }
         assert_eq!(distribute(2, 24, shrunk.clone()), shrunk);
+    }
+
+    #[test]
+    fn closing_the_only_leaf_empties_the_tree() {
+        assert_eq!(detach(leaf(1, 80, 24), 1), Detach::Empty);
+        assert_eq!(detach(leaf(1, 80, 24), 9), Detach::Missing(leaf(1, 80, 24)));
+    }
+
+    #[test]
+    fn closing_one_side_drops_the_divider() {
+        let tree = leaf(1, 80, 24)
+            .split(Axis::Horizontal, pane(2, 1, 1))
+            .expect("split");
+        match detach(tree.clone(), 2) {
+            Detach::Rest(Node::Leaf(leaf)) => {
+                assert_eq!(leaf.id, LeafId(1));
+                assert_eq!(leaf.cols, 40);
+            }
+            other => panic!("expected the left leaf, got {other:?}"),
+        }
+        match detach(tree, 1) {
+            Detach::Rest(Node::Leaf(leaf)) => assert_eq!(leaf.id, LeafId(2)),
+            other => panic!("expected the right leaf, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn closing_a_nested_leaf_keeps_the_other_branch() {
+        let vertical = leaf(1, 80, 24)
+            .split(Axis::Vertical, pane(2, 1, 1))
+            .expect("rows");
+        let tree = vertical
+            .split(Axis::Horizontal, pane(3, 1, 1))
+            .expect("columns");
+        match detach(tree, 2) {
+            Detach::Rest(Node::Split {
+                axis: Axis::Horizontal,
+                left,
+                right,
+            }) => {
+                assert!(matches!(*left, Node::Leaf(Leaf { id: LeafId(1), .. })));
+                assert!(matches!(*right, Node::Leaf(Leaf { id: LeafId(3), .. })));
+            }
+            other => panic!("expected the horizontal split, got {other:?}"),
+        }
     }
 
     #[test]
