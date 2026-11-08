@@ -14,6 +14,7 @@ use crate::ime;
 use crate::model::{self, Model};
 use crate::pane_input;
 use crate::resize::{self, GridMetrics, ResizeEffect, ResizeRequest};
+use crate::scrollback::{self, Bars};
 
 pub fn run() {
     app().run();
@@ -103,6 +104,7 @@ pub fn fit_layout(model: &mut Model, slot: (f32, f32), scale: f32) -> Option<Res
 struct GridCompositor {
     slot: Option<SolidSlot>,
     grid: Option<GridRenderer>,
+    bars: Option<Bars>,
     key: Option<DeviceKey>,
     format: Option<wgpu::TextureFormat>,
 }
@@ -118,12 +120,14 @@ impl GridCompositor {
         let same = self.key == Some(key)
             && self.format == Some(format)
             && self.slot.is_some()
-            && self.grid.is_some();
+            && self.grid.is_some()
+            && self.bars.is_some();
         if same {
             return;
         }
         self.slot = Some(SolidSlot::new(device, format));
         self.grid = Some(GridRenderer::new(device, queue, format));
+        self.bars = Some(Bars::new(device, format));
         self.key = Some(key);
         self.format = Some(format);
     }
@@ -179,9 +183,15 @@ impl Compositor<Model> for GridCompositor {
         }
         let slot = self.slot.as_ref().expect("solid slot");
         slot.write_color(f.queue, color);
+        let bars = self.bars.as_ref().expect("scrollbar");
+        bars.prepare(f.queue, srgb_blend);
         let grid = self.grid.as_ref().expect("grid");
         let mark = chrome::PANE_MARK;
         f.ui.draw_with(f.encoder, f.target, clear, &mut |pass, site| {
+            if scrollback::is_scroll(site.mark) {
+                bars.draw(pass, site, &f.rt.state);
+                return;
+            }
             if site.mark != mark {
                 return;
             }

@@ -12,6 +12,7 @@ use crate::ime;
 use crate::model::Model;
 use crate::pane_input;
 use crate::resize::{self, GridMetrics, ResizeRequest};
+use crate::scrollback;
 use crate::split::Axis;
 
 pub fn area(model: &Model, cx: &mut Cx<Model>) -> El {
@@ -85,14 +86,20 @@ pub fn focus_leaf(model: &mut Model, id: LeafId) -> bool {
 fn single(scale: f32) -> El {
     let pane = effect(PANE_MARK)
         .key("pane")
-        .w_full()
         .grow(1.0)
-        .min_h(0.0)
+        .min_w(0.0)
+        .h_full()
         .focusable(true)
         .on_layout_tx(move |model: &mut Model, rect, tx: &mut Tx| {
             app::on_pane_layout(model, (rect[2], rect[3]), scale, tx);
         });
-    ime::mount_caret(wire(pane, scale))
+    row()
+        .w_full()
+        .grow(1.0)
+        .min_h(0.0)
+        .min_w(0.0)
+        .child(ime::mount_caret(wire(pane, scale)))
+        .child(scrollback::column(PANE_MARK))
 }
 
 fn split_area(model: &Model, scale: f32) -> El {
@@ -141,8 +148,9 @@ fn leaf_el(leaf: &Leaf, scale: f32, cell: (f32, f32)) -> El {
     let id = leaf.id;
     let pane = effect(leaf.mark)
         .key(format!("pane-{}", leaf.mark))
-        .w(span(leaf.cols, cell.0, scale))
-        .h(span(leaf.rows, cell.1, scale))
+        .grow(1.0)
+        .min_w(0.0)
+        .h_full()
         .focusable(true)
         .on_layout_tx(move |model: &mut Model, rect, tx: &mut Tx| {
             layout_leaf(model, surface, (rect[2], rect[3]), scale, tx);
@@ -152,7 +160,11 @@ fn leaf_el(leaf: &Leaf, scale: f32, cell: (f32, f32)) -> El {
                 tx.live_only();
             }
         });
-    ime::mount_caret(wire(pane, scale))
+    row()
+        .w(span(leaf.cols, cell.0, scale))
+        .h(span(leaf.rows, cell.1, scale))
+        .child(ime::mount_caret(wire(pane, scale)))
+        .child(scrollback::column(leaf.mark))
 }
 
 fn wire(pane: El, scale: f32) -> El {

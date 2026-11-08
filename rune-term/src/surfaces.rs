@@ -85,8 +85,21 @@ impl Surfaces {
         id.and_then(|id| self.inner.get_mut(&id))
     }
 
-    fn marked(&self, mark: u32) -> Option<&HostSurface> {
+    pub(crate) fn by_mark(&self, mark: u32) -> Option<&HostSurface> {
         self.inner.values().find(|host| host.mark == mark)
+    }
+
+    pub(crate) fn by_mark_mut(&mut self, mark: u32) -> Option<&mut HostSurface> {
+        let id = self
+            .inner
+            .iter()
+            .find(|(_, host)| host.mark == mark)
+            .map(|(id, _)| *id)?;
+        self.inner.get_mut(&id)
+    }
+
+    fn marked(&self, mark: u32) -> Option<&HostSurface> {
+        self.by_mark(mark)
     }
 }
 

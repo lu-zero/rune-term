@@ -37,8 +37,12 @@ The numbers are that plan's.
       OSC 52 still drops the payload and logs its type and length. The
       tint swaps the selected cells. Keys, the wheel, and the pointer
       still address the first pane.
-- [ ] **12. Scrollback viewport.** Page scrolling exists. There is no
-      scrollbar.
+- [x] **12. Scrollback viewport.** A bar beside each pane tracks
+      `history_size` and `display_offset`. Dragging the thumb calls
+      `Surface::scroll`. The thumb is painted in the compositor, so a
+      wheel does not commit the view. The cursor stays hidden while
+      the view is in history. Shift+PageUp and Shift+PageDown are
+      unchanged.
 - [ ] **13. Search.** `search` is an identity tint.
 - [ ] **14. IME.** The caret element is the pane unchanged, and `on_ime`
       returns false.

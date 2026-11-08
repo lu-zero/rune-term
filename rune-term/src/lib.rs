@@ -13,6 +13,7 @@ mod metrics;
 mod model;
 mod pane_input;
 mod resize;
+mod scrollback;
 mod search;
 mod selection;
 mod split;
