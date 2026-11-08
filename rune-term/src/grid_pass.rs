@@ -8,6 +8,7 @@ use term_grid::GridRenderer;
 use crate::grid_source::SurfaceGrid;
 use crate::hyperlink;
 use crate::images::Images;
+use crate::ime;
 use crate::model::Model;
 use crate::search;
 use crate::selection;
@@ -27,6 +28,8 @@ pub fn sync(
         .primary()
         .and_then(|host| host.hover_link.clone());
     let force_hover = hover != model.hover_drawn;
+    let preedit = model.preedit.clone();
+    let force_preedit = preedit != model.preedit_drawn;
     let switched = model.grid_shown != active;
     let mut drew = false;
     let shared = Arc::clone(&model.shared);
@@ -50,13 +53,21 @@ pub fn sync(
         };
         let source = selection::tint(source);
         let source = search::tint(source, &hits);
-        let mut source = hyperlink::tint(source, host.hover_link.as_ref());
+        let source = hyperlink::tint(source, host.hover_link.as_ref());
+        let mut source = ime::overlay(
+            source,
+            preedit.as_ref(),
+            (
+                u16::try_from(cursor_col).unwrap_or(0),
+                u16::try_from(cursor_row).unwrap_or(0),
+            ),
+        );
         grid.upload(
             device,
             queue,
             &mut source,
             host.cell_px,
-            resized || flagged || force_search || force_hover || switched,
+            resized || flagged || force_search || force_hover || force_preedit || switched,
         );
         images.sync(device, queue, &host.render, host.cell_px);
         model.cursor_cell = (
@@ -71,5 +82,6 @@ pub fn sync(
         model.search_drawn = shown;
         model.grid_shown = active;
         model.hover_drawn = hover;
+        model.preedit_drawn = preedit;
     }
 }

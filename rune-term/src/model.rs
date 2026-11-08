@@ -8,6 +8,7 @@ use crate::delegate::{self, Shared};
 use crate::metrics;
 use crate::surfaces::Surfaces;
 
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Preedit {
     pub text: String,
     pub cursor: Option<(usize, usize)>,
@@ -32,6 +33,7 @@ pub struct Model {
     /// The shell the last grid upload drew. A tab change forces the next one.
     pub(crate) grid_shown: Option<librio::SurfaceId>,
     pub(crate) hover_drawn: Option<crate::hyperlink::HoverLink>,
+    pub(crate) preedit_drawn: Option<Preedit>,
     pub(crate) shared: Arc<Shared>,
     pub(crate) pending_inject: Option<Vec<u8>>,
 }
@@ -65,6 +67,7 @@ pub fn init() -> Model {
         search_drawn: String::new(),
         grid_shown: None,
         hover_drawn: None,
+        preedit_drawn: None,
         shared,
         pending_inject,
     }

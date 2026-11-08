@@ -1,7 +1,10 @@
 //! IME preedit and commit plumbing.
 
+use std::time::Duration;
+
 use librio::{KeyAction, KeyEvent, Modifiers};
 use rune::{El, Ime, Tx};
+use term_grid::{CellSample, CursorSample, GridSource};
 
 use crate::model::{Model, Preedit};
 
@@ -39,7 +42,7 @@ pub fn on_ime(model: &mut Model, ime: &Ime, tx: &mut Tx) -> bool {
                     cursor: *cursor,
                 });
             }
-            tx.live_only();
+            tx.wake_after(Duration::ZERO);
             true
         }
         Ime::Commit(text) => {
@@ -57,15 +60,143 @@ pub fn on_ime(model: &mut Model, ime: &Ime, tx: &mut Tx) -> bool {
                     host.surface.key(&event);
                 }
             }
-            tx.live_only();
+            tx.wake_after(Duration::ZERO);
             true
         }
         Ime::Enabled | Ime::Disabled => {
             if matches!(ime, Ime::Disabled) {
                 model.preedit = None;
             }
-            tx.live_only();
+            tx.wake_after(Duration::ZERO);
             true
         }
+    }
+}
+
+pub fn overlay<S: GridSource>(
+    source: S,
+    preedit: Option<&Preedit>,
+    cursor: (u16, u16),
+) -> PreeditOverlay<S> {
+    PreeditOverlay {
+        source,
+        preedit: preedit.cloned(),
+        cursor_col: usize::from(cursor.0),
+        cursor_row: usize::from(cursor.1),
+    }
+}
+
+pub struct PreeditOverlay<S> {
+    source: S,
+    preedit: Option<Preedit>,
+    cursor_col: usize,
+    cursor_row: usize,
+}
+
+impl<S: GridSource> GridSource for PreeditOverlay<S> {
+    fn columns(&self) -> usize {
+        self.source.columns()
+    }
+
+    fn lines(&self) -> usize {
+        self.source.lines()
+    }
+
+    fn row_dirty(&self, line: usize) -> bool {
+        if self.preedit.is_some() && line == self.cursor_row {
+            return true;
+        }
+        self.source.row_dirty(line)
+    }
+
+    fn cell(&self, line: usize, col: usize) -> CellSample {
+        if let Some(preedit) = &self.preedit {
+            if line == self.cursor_row && col >= self.cursor_col {
+                let idx = col - self.cursor_col;
+                if let Some(ch) = preedit.text.chars().nth(idx) {
+                    let mut sample = self.source.cell(line, col);
+                    sample.ch = ch;
+                    sample.width = 1;
+                    sample.underline = true;
+                    return sample;
+                }
+            }
+        }
+        self.source.cell(line, col)
+    }
+
+    fn cursor(&self) -> CursorSample {
+        if self.preedit.is_some() {
+            let mut cursor = self.source.cursor();
+            cursor.visible = false;
+            cursor
+        } else {
+            self.source.cursor()
+        }
+    }
+
+    fn reset_dirty(&mut self) {
+        self.source.reset_dirty();
+    }
+}
+
+#[cfg(all(test, not(feature = "pty")))]
+mod tests {
+    use super::*;
+    use term_grid::{CellSample, CursorSample, GridSource};
+
+    struct OneRow {
+        cells: Vec<CellSample>,
+    }
+
+    impl GridSource for OneRow {
+        fn columns(&self) -> usize {
+            self.cells.len()
+        }
+        fn lines(&self) -> usize {
+            1
+        }
+        fn row_dirty(&self, _line: usize) -> bool {
+            false
+        }
+        fn cell(&self, _line: usize, col: usize) -> CellSample {
+            self.cells[col]
+        }
+        fn cursor(&self) -> CursorSample {
+            CursorSample {
+                col: 0,
+                row: 0,
+                visible: true,
+                color: [1.0; 4],
+                bg: [0.0; 4],
+            }
+        }
+        fn reset_dirty(&mut self) {}
+    }
+
+    #[test]
+    fn preedit_overlays_at_cursor_and_hides_cursor() {
+        let source = OneRow {
+            cells: vec![
+                CellSample {
+                    ch: 'a',
+                    width: 1,
+                    fg: [255, 255, 255, 255],
+                    bg: [0, 0, 0, 255],
+                    underline: false,
+                };
+                8
+            ],
+        };
+        let preedit = Preedit {
+            text: "漢字".to_string(),
+            cursor: None,
+        };
+        let over = overlay(source, Some(&preedit), (1, 0));
+        assert!(over.row_dirty(0));
+        assert_eq!(over.cell(0, 1).ch, '漢');
+        assert_eq!(over.cell(0, 2).ch, '字');
+        assert!(over.cell(0, 1).underline);
+        assert!(!over.cursor().visible);
     }
 }
