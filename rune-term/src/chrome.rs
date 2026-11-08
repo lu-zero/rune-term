@@ -11,6 +11,8 @@ pub const LEAF: LeafId = LeafId(1);
 
 pub use crate::split::{Leaf, LeafId, Node};
 const TAB_H: f32 = 28.0;
+/// One hit target. A short title and a long one use this same box.
+const TAB_W: f32 = 120.0;
 
 /// Tab strip. Dark chrome above the black pane.
 pub fn tab() -> rune::Color {
@@ -58,6 +60,7 @@ pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
 
 fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {
     let mut strip = row()
+        .key("tabs")
         .w_full()
         .h(TAB_H)
         .fill(tab())
@@ -65,27 +68,35 @@ fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {
         // Past the traffic lights. The inset is their trailing edge, and 0 when
         // they are not drawn over the content.
         .pl(cx.titlebar_inset() + 12.0)
-        .gap(16.0);
+        .pr(12.0)
+        .gap(4.0)
+        .scroll_x();
     if model.tabs.is_empty() {
         return strip.child(text("rune-term").color(text_color()));
     }
     for index in 0..model.tabs.len() {
-        let color = if index == model.active {
+        let active = index == model.active;
+        let color = if active {
             text_color()
         } else {
             theme::linear(theme::MUTED)
         };
-        strip = strip.child(
-            text(tab_caption(model, index))
-                .color(color)
-                .key(format!("tab-{index}"))
-                .preserve_focus_on_press(true)
-                .on_press_tx(move |model: &mut Model, tx| {
-                    if !crate::tabs::select(model, index) {
-                        tx.live_only();
-                    }
-                }),
-        );
+        let mut tab = row()
+            .key(format!("tab-{index}"))
+            .h(TAB_H)
+            .w(TAB_W)
+            .px(12.0)
+            .center_y()
+            .preserve_focus_on_press(true)
+            .on_press_tx(move |model: &mut Model, tx| {
+                if !crate::tabs::select(model, index) {
+                    tx.live_only();
+                }
+            });
+        if active {
+            tab = tab.fill(slot());
+        }
+        strip = strip.child(tab.child(text(tab_caption(model, index)).color(color).truncate()));
     }
     strip
 }
@@ -101,5 +112,61 @@ fn tab_caption(model: &Model, index: usize) -> String {
         format!("{} •", tab.title)
     } else {
         tab.title.clone()
+    }
+}
+
+#[cfg(all(test, not(feature = "pty")))]
+mod tests {
+    use super::*;
+    use rune::{Env, Runtime};
+
+    fn host() -> Model {
+        let mut model = crate::model::init();
+        crate::delegate::setup(&mut model, std::sync::Arc::new(|| {}));
+        model
+    }
+
+    fn rect(rt: &Runtime<Model>, key: &str) -> [f32; 4] {
+        rt.presented(key)
+            .unwrap_or_else(|| panic!("missing {key}"))
+            .0
+    }
+
+    #[test]
+    fn a_tab_stays_wide_enough_to_hit() {
+        let mut model = host();
+        model.tabs[0].title = "x".into();
+        crate::tabs::open(&mut model);
+        model.tabs[1].title = "a-very-long-shell-title-that-would-otherwise-eat-the-strip".into();
+        for _ in 0..8 {
+            crate::tabs::open(&mut model);
+        }
+        let mut rt = Runtime::new(model, view, (800.0, 500.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        for index in 0..10 {
+            let tab = rect(&rt, &format!("tab-{index}"));
+            assert!((tab[2] - TAB_W).abs() < 0.5, "tab {index} width {}", tab[2]);
+            assert!(
+                (tab[3] - TAB_H).abs() < 0.5,
+                "tab {index} height {}",
+                tab[3]
+            );
+        }
+    }
+
+    #[test]
+    fn the_edge_of_a_tab_selects_it() {
+        let mut model = host();
+        crate::tabs::open(&mut model);
+        let mut rt = Runtime::new(model, view, (800.0, 500.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        assert_eq!(rt.state.active, 1);
+        let tab = rect(&rt, "tab-0");
+        let x = tab[0] + 2.0;
+        let y = tab[1] + tab[3] - 2.0;
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        rt.frame(0.0);
+        assert_eq!(rt.state.active, 0);
     }
 }

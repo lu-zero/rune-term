@@ -331,19 +331,23 @@ fn deliver(
         }
         if code == term_input::PhysicalKeyCode::KeyT {
             crate::tabs::open(model);
+            crate::tabs::reveal(model, tx);
             return true;
         }
         if code == term_input::PhysicalKeyCode::KeyW {
             crate::tabs::close_active(model, tx);
+            crate::tabs::reveal(model, tx);
             return true;
         }
         if let Some(digit) = tab_digit(code) {
             crate::tabs::select_digit(model, digit);
+            crate::tabs::reveal(model, tx);
             return true;
         }
         if code == term_input::PhysicalKeyCode::Tab {
             let delta = if mods.shift { -1 } else { 1 };
             crate::tabs::cycle(model, delta);
+            crate::tabs::reveal(model, tx);
             return true;
         }
         return false;

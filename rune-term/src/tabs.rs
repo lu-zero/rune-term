@@ -86,6 +86,15 @@ pub fn close_active(model: &mut Model, tx: &mut Tx) {
     show_active(model);
 }
 
+/// Bring the selected tab back into the strip. Opening one past the
+/// window's edge would leave its box off to the side.
+pub fn reveal(model: &Model, tx: &mut Tx) {
+    if model.tabs.is_empty() {
+        return;
+    }
+    tx.scroll_into_view_in("tabs", format!("tab-{}", model.active));
+}
+
 /// Point the pane at the selected tab. A shell exit calls this too.
 pub fn show_active(model: &mut Model) {
     let Some(id) = model.tabs.get(model.active).and_then(surface_of) else {
