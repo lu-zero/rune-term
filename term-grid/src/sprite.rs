@@ -6,6 +6,7 @@ pub(crate) fn raster(atlas: &mut Atlas, ch: char, cells: u8) -> Option<GlyphRect
     let cp = u32::from(ch);
     match cp {
         0x2500..=0x257F => box_drawing(atlas, cp, cells),
+        0x2580..=0x259F => block(atlas, cp, cells),
         0x2800..=0x28FF => braille(atlas, cp, cells),
         0x1FB00..=0x1FB3B
         | 0x1CD00..=0x1CDE5
@@ -699,6 +700,83 @@ fn diagonal_ul_lr(c: &mut Canvas, thick: u32) {
     );
 }
 
+fn block(atlas: &mut Atlas, cp: u32, cells: u8) -> Option<GlyphRect> {
+    let (cw, ch) = atlas.cell();
+    let slot_w = cw * u32::from(cells.max(1));
+    let mut c = Canvas::new(slot_w, ch);
+    let w = slot_w as f64;
+    let h = ch as f64;
+    let eighth = |n: f64| n / 8.0;
+    let fill = |c: &mut Canvas, x0: f64, x1: f64, y0: f64, y1: f64, a: u8| {
+        c.rect(
+            frac_min(x0, c.w),
+            frac_min(y0, c.h),
+            frac_max(x1, c.w),
+            frac_max(y1, c.h),
+            a,
+        );
+    };
+    let _ = (w, h); // fractions are in 0..1 space
+    match cp {
+        0x2580 => fill(&mut c, 0.0, 1.0, 0.0, 0.5, 0xFF),
+        0x2581 => fill(&mut c, 0.0, 1.0, 1.0 - eighth(1.0), 1.0, 0xFF),
+        0x2582 => fill(&mut c, 0.0, 1.0, 1.0 - eighth(2.0), 1.0, 0xFF),
+        0x2583 => fill(&mut c, 0.0, 1.0, 1.0 - eighth(3.0), 1.0, 0xFF),
+        0x2584 => fill(&mut c, 0.0, 1.0, 0.5, 1.0, 0xFF),
+        0x2585 => fill(&mut c, 0.0, 1.0, 1.0 - eighth(5.0), 1.0, 0xFF),
+        0x2586 => fill(&mut c, 0.0, 1.0, 1.0 - eighth(6.0), 1.0, 0xFF),
+        0x2587 => fill(&mut c, 0.0, 1.0, 1.0 - eighth(7.0), 1.0, 0xFF),
+        0x2588 => fill(&mut c, 0.0, 1.0, 0.0, 1.0, 0xFF),
+        0x2589 => fill(&mut c, 0.0, eighth(7.0), 0.0, 1.0, 0xFF),
+        0x258A => fill(&mut c, 0.0, eighth(6.0), 0.0, 1.0, 0xFF),
+        0x258B => fill(&mut c, 0.0, eighth(5.0), 0.0, 1.0, 0xFF),
+        0x258C => fill(&mut c, 0.0, 0.5, 0.0, 1.0, 0xFF),
+        0x258D => fill(&mut c, 0.0, eighth(3.0), 0.0, 1.0, 0xFF),
+        0x258E => fill(&mut c, 0.0, eighth(2.0), 0.0, 1.0, 0xFF),
+        0x258F => fill(&mut c, 0.0, eighth(1.0), 0.0, 1.0, 0xFF),
+        0x2590 => fill(&mut c, 0.5, 1.0, 0.0, 1.0, 0xFF),
+        0x2591 => fill(&mut c, 0.0, 1.0, 0.0, 1.0, 0x40),
+        0x2592 => fill(&mut c, 0.0, 1.0, 0.0, 1.0, 0x80),
+        0x2593 => fill(&mut c, 0.0, 1.0, 0.0, 1.0, 0xC0),
+        0x2594 => fill(&mut c, 0.0, 1.0, 0.0, eighth(1.0), 0xFF),
+        0x2595 => fill(&mut c, 1.0 - eighth(1.0), 1.0, 0.0, 1.0, 0xFF),
+        0x2596 => c.fill_fraction(0.0, 0.5, 0.5, 1.0, 0xFF),
+        0x2597 => c.fill_fraction(0.5, 1.0, 0.5, 1.0, 0xFF),
+        0x2598 => c.fill_fraction(0.0, 0.5, 0.0, 0.5, 0xFF),
+        0x2599 => {
+            c.fill_fraction(0.0, 0.5, 0.0, 0.5, 0xFF);
+            c.fill_fraction(0.0, 0.5, 0.5, 1.0, 0xFF);
+            c.fill_fraction(0.5, 1.0, 0.5, 1.0, 0xFF);
+        }
+        0x259A => {
+            c.fill_fraction(0.0, 0.5, 0.0, 0.5, 0xFF);
+            c.fill_fraction(0.5, 1.0, 0.5, 1.0, 0xFF);
+        }
+        0x259B => {
+            c.fill_fraction(0.0, 0.5, 0.0, 0.5, 0xFF);
+            c.fill_fraction(0.5, 1.0, 0.0, 0.5, 0xFF);
+            c.fill_fraction(0.0, 0.5, 0.5, 1.0, 0xFF);
+        }
+        0x259C => {
+            c.fill_fraction(0.0, 0.5, 0.0, 0.5, 0xFF);
+            c.fill_fraction(0.5, 1.0, 0.0, 0.5, 0xFF);
+            c.fill_fraction(0.5, 1.0, 0.5, 1.0, 0xFF);
+        }
+        0x259D => c.fill_fraction(0.5, 1.0, 0.0, 0.5, 0xFF),
+        0x259E => {
+            c.fill_fraction(0.5, 1.0, 0.0, 0.5, 0xFF);
+            c.fill_fraction(0.0, 0.5, 0.5, 1.0, 0xFF);
+        }
+        0x259F => {
+            c.fill_fraction(0.5, 1.0, 0.0, 0.5, 0xFF);
+            c.fill_fraction(0.0, 0.5, 0.5, 1.0, 0xFF);
+            c.fill_fraction(0.5, 1.0, 0.5, 1.0, 0xFF);
+        }
+        _ => return None,
+    }
+    commit(atlas, cells.max(1), c)
+}
+
 fn legacy(atlas: &mut Atlas, cp: u32, cells: u8) -> Option<GlyphRect> {
     let (cw, ch) = atlas.cell();
     let slot_w = cw * u32::from(cells.max(1));
@@ -825,6 +903,16 @@ mod tests {
             let ch = char::from_u32(cp).unwrap();
             let rect = raster(&mut atlas, ch, 1).unwrap_or_else(|| panic!("U+{cp:05X}"));
             assert!(has_ink(&atlas, rect), "U+{cp:05X} empty");
+        }
+    }
+
+    #[test]
+    fn block_elements_rasterize() {
+        let mut atlas = Atlas::with_cell(10, 20);
+        for cp in 0x2580u32..=0x259F {
+            let ch = char::from_u32(cp).unwrap();
+            let rect = raster(&mut atlas, ch, 1).unwrap_or_else(|| panic!("U+{cp:04X}"));
+            assert!(has_ink(&atlas, rect), "U+{cp:04X} empty");
         }
     }
 }

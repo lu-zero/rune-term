@@ -52,11 +52,11 @@ The numbers are that plan's.
 - [ ] **15. Kitty images.** `images::draw` is empty.
 - [ ] **16. Settings.** The palette and the 14 point face are fixed in the
       tree.
-- [~] **17. Box-drawing and braille sprites.** Box drawing, braille, and
-      legacy computing sextants/octants are rasterized geometrically into the
-      gray atlas and cached like glyphs. Other sprite families (block elements
-      beyond legacy, powerline, geometric, branch, etc.) still come from the
-      face or cascade.
+- [~] **17. Box-drawing and braille sprites.** Box drawing, block elements
+      (`U+2580–U+259F`), braille, and legacy computing sextants/octants are
+      rasterized geometrically into the gray atlas and cached like glyphs. Other
+      sprite families (powerline, geometric shapes, branch, etc.) still come
+      from the face or cascade.
 - [ ] **18. Sixel and iTerm2.**
 - [~] **19. Hyperlinks and URL opening.** OSC 8 and detected URLs can be
       hovered and opened, without breaking mouse-reporting apps or selection.
