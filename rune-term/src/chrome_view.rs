@@ -75,14 +75,21 @@ pub fn split_focused(model: &mut Model, axis: Axis) -> bool {
 
 /// Returns whether focus moved.
 pub fn focus_leaf(model: &mut Model, id: LeafId) -> bool {
-    let Some(tab) = model.tabs.get_mut(model.active) else {
+    let Some(active) = model.tabs.get(model.active).map(|_| model.active) else {
         return false;
     };
-    if tab.focused == id || !contains(&tab.root, id) {
-        return false;
+    let (moved, surface) = {
+        let tab = &mut model.tabs[active];
+        if tab.focused == id || !contains(&tab.root, id) {
+            return false;
+        }
+        tab.focused = id;
+        (true, leaf_surface(&tab.root, id))
+    };
+    if let Some(surface) = surface.filter(|id| *id != 0) {
+        model.surfaces.show(surface);
     }
-    tab.focused = id;
-    true
+    moved
 }
 
 fn single(_model: &Model, scale: f32) -> El {
