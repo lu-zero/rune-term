@@ -10,6 +10,8 @@ use crate::theme;
 
 /// Points. Reserved on every pane so history appearing does not resize the grid.
 pub const WIDTH: f32 = 8.0;
+/// The single-pane bar. It follows the selected tab, not a leaf mark.
+pub const SHOWN_PANE: u32 = 0;
 const MIN_THUMB: f32 = 24.0;
 const SCROLL_BIT: u32 = 0x8000_0000;
 
@@ -79,6 +81,22 @@ fn pane_of(mark: u32) -> u32 {
     mark & !SCROLL_BIT
 }
 
+fn host_ref(model: &Model, pane: u32) -> Option<&crate::surfaces::HostSurface> {
+    if pane == SHOWN_PANE {
+        model.surfaces.primary()
+    } else {
+        model.surfaces.by_mark(pane)
+    }
+}
+
+fn host_mut(model: &mut Model, pane: u32) -> Option<&mut crate::surfaces::HostSurface> {
+    if pane == SHOWN_PANE {
+        model.surfaces.primary_mut()
+    } else {
+        model.surfaces.by_mark_mut(pane)
+    }
+}
+
 /// The track. Its thumb is not a child: the compositor paints that from
 /// `display_offset`, so the view stays put while the wheel scrolls.
 pub fn column(pane: u32) -> El {
@@ -101,7 +119,7 @@ pub(crate) fn pointer(
     grab: f32,
     tx: &mut Tx,
 ) -> f32 {
-    let Some(host) = model.surfaces.by_mark_mut(pane) else {
+    let Some(host) = host_mut(model, pane) else {
         tx.live_only();
         return grab;
     };
@@ -159,7 +177,7 @@ impl Bars {
         site: &rune::render::EffectSite<'_>,
         model: &Model,
     ) {
-        let Some(host) = model.surfaces.by_mark(pane_of(site.mark)) else {
+        let Some(host) = host_ref(model, pane_of(site.mark)) else {
             return;
         };
         let Some((x, y, w, h)) = scissor(site, site.instance.rect) else {

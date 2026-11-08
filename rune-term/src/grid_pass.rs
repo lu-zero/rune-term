@@ -19,6 +19,8 @@ pub fn sync(
 ) {
     let shown = search::shown(model);
     let force_search = shown != model.search_drawn;
+    let active = model.surfaces.shown_id();
+    let switched = model.grid_shown != active;
     let mut drew = false;
     let shared = Arc::clone(&model.shared);
     for host in model.surfaces.iter_mut() {
@@ -28,7 +30,9 @@ pub fn sync(
             host.render.update_rearm(&host.frame_flag);
             shared.note_rearm();
         }
-        if host.cell_px.0 == 0 || host.cell_px.1 == 0 {
+        // One grid. The selected tab is what it draws. A hidden shell still rearms.
+        let mine = Some(host.surface.id()) == active;
+        if !mine || host.cell_px.0 == 0 || host.cell_px.1 == 0 {
             images::draw();
             continue;
         }
@@ -43,12 +47,13 @@ pub fn sync(
             queue,
             &mut source,
             host.cell_px,
-            resized || flagged || force_search,
+            resized || flagged || force_search || switched,
         );
         drew = true;
         images::draw();
     }
     if drew {
         model.search_drawn = shown;
+        model.grid_shown = active;
     }
 }

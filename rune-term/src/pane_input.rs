@@ -1,5 +1,5 @@
 //! The focused pane maps physical keys, the wheel, and the pointer onto the shell.
-//! App chords return false, except copy, paste, and search, which this shell handles.
+//! App chords return false, except copy, paste, search, and tabs, which this shell handles.
 
 use librio::Modifiers;
 use rune::{
@@ -313,16 +313,37 @@ fn deliver(
     tx: &mut Tx,
 ) -> bool {
     if term_input::is_app_chord(code, mods) {
-        if pressed && code == term_input::PhysicalKeyCode::KeyC {
+        // A Ctrl+Tab release is not a tab character. Other chord releases are ignored.
+        if !pressed {
+            return code == term_input::PhysicalKeyCode::Tab;
+        }
+        if code == term_input::PhysicalKeyCode::KeyC {
             crate::selection::copy(model, tx);
             return true;
         }
-        if pressed && code == term_input::PhysicalKeyCode::KeyF {
+        if code == term_input::PhysicalKeyCode::KeyF {
             crate::search::open(model);
             return true;
         }
-        if pressed && code == term_input::PhysicalKeyCode::KeyV {
+        if code == term_input::PhysicalKeyCode::KeyV {
             tx.request_paste();
+            return true;
+        }
+        if code == term_input::PhysicalKeyCode::KeyT {
+            crate::tabs::open(model);
+            return true;
+        }
+        if code == term_input::PhysicalKeyCode::KeyW {
+            crate::tabs::close_active(model, tx);
+            return true;
+        }
+        if let Some(digit) = tab_digit(code) {
+            crate::tabs::select_digit(model, digit);
+            return true;
+        }
+        if code == term_input::PhysicalKeyCode::Tab {
+            let delta = if mods.shift { -1 } else { 1 };
+            crate::tabs::cycle(model, delta);
             return true;
         }
         return false;
@@ -393,6 +414,7 @@ fn logical_code(key: &Key) -> term_input::PhysicalKeyCode {
         Key::Insert => C::Insert,
         Key::Escape => C::Escape,
         Key::Tab => C::Tab,
+        Key::Command(c) => command_code(*c),
         Key::Function(1) => C::F1,
         Key::Function(2) => C::F2,
         Key::Function(3) => C::F3,
@@ -419,6 +441,47 @@ fn logical_code(key: &Key) -> term_input::PhysicalKeyCode {
         Key::Function(24) => C::F24,
         _ => C::Unknown,
     }
+}
+
+/// `Key::Command` is the logical form of a platform chord. The window also
+/// sets `Tx::physical_key`; this covers the path that only has the logical key.
+fn command_code(c: char) -> term_input::PhysicalKeyCode {
+    use term_input::PhysicalKeyCode as C;
+    match c.to_ascii_lowercase() {
+        'a' => C::KeyA,
+        'c' => C::KeyC,
+        'f' => C::KeyF,
+        'n' => C::KeyN,
+        't' => C::KeyT,
+        'v' => C::KeyV,
+        'w' => C::KeyW,
+        '1' => C::Digit1,
+        '2' => C::Digit2,
+        '3' => C::Digit3,
+        '4' => C::Digit4,
+        '5' => C::Digit5,
+        '6' => C::Digit6,
+        '7' => C::Digit7,
+        '8' => C::Digit8,
+        '9' => C::Digit9,
+        _ => C::Unknown,
+    }
+}
+
+fn tab_digit(code: term_input::PhysicalKeyCode) -> Option<u8> {
+    use term_input::PhysicalKeyCode::*;
+    Some(match code {
+        Digit1 => 1,
+        Digit2 => 2,
+        Digit3 => 3,
+        Digit4 => 4,
+        Digit5 => 5,
+        Digit6 => 6,
+        Digit7 => 7,
+        Digit8 => 8,
+        Digit9 => 9,
+        _ => return None,
+    })
 }
 
 fn mods_of(mods: Mods) -> term_input::Mods {
@@ -555,7 +618,7 @@ mod tests {
     use super::*;
     use crate::delegate;
     use crate::model;
-    use rune::{Env, PhysicalKeyCode as Code, Runtime};
+    use rune::{Env, PhysicalKeyCode as Code, Runtime, Shell};
 
     fn host() -> Model {
         let mut model = model::init();
@@ -630,8 +693,43 @@ mod tests {
         assert_eq!(model.shared.take_output(), [0x03]);
     }
 
+    fn leaf_surface(model: &Model, index: usize) -> librio::SurfaceId {
+        let crate::chrome::Node::Leaf(leaf) = &model.tabs[index].root else {
+            panic!("tab {index} is not one shell");
+        };
+        leaf.surface
+    }
+
     #[test]
-    fn command_t_is_left_for_the_app_on_macos() {
+    fn command_t_opens_a_tab() {
+        let mut model = host();
+        let first = model.surfaces.primary().unwrap().surface.id();
+        assert!(press(
+            &mut model,
+            Code::KeyT,
+            copy_mods(),
+            None,
+            Mods::default()
+        ));
+        assert!(model.shared.take_output().is_empty());
+        assert_eq!(model.tabs.len(), 2);
+        assert_eq!(model.surfaces.len(), 2);
+        assert_eq!(model.active, 1);
+        let second = model.surfaces.primary().unwrap().surface.id();
+        assert_ne!(first, second);
+        assert_eq!(leaf_surface(&model, 1), second);
+        assert!(press(
+            &mut model,
+            Code::KeyA,
+            Mods::default(),
+            Some("a"),
+            Mods::default()
+        ));
+        assert_eq!(model.shared.take_output(), b"a");
+    }
+
+    #[test]
+    fn logo_and_cmd_open_a_tab_only_on_macos() {
         let mut model = host();
         let cmd = Mods {
             logo: true,
@@ -639,10 +737,125 @@ mod tests {
             ..Mods::default()
         };
         let took = press(&mut model, Code::KeyT, cmd, None, Mods::default());
-        assert_eq!(took, !cfg!(target_os = "macos"));
+        assert!(model.shared.take_output().is_empty());
         if cfg!(target_os = "macos") {
-            assert!(model.shared.take_output().is_empty());
+            assert!(took);
+            assert_eq!(model.tabs.len(), 2);
+            assert_eq!(model.active, 1);
+        } else {
+            assert!(!took);
+            assert_eq!(model.tabs.len(), 1);
         }
+    }
+
+    #[test]
+    fn command_1_selects_the_first_tab_on_macos() {
+        let mut model = host();
+        let first = model.surfaces.primary().unwrap().surface.id();
+        assert!(press(
+            &mut model,
+            Code::KeyT,
+            copy_mods(),
+            None,
+            Mods::default()
+        ));
+        let cmd = Mods {
+            logo: true,
+            cmd: true,
+            ..Mods::default()
+        };
+        let took = press(&mut model, Code::Digit1, cmd, None, Mods::default());
+        assert!(model.shared.take_output().is_empty());
+        if cfg!(target_os = "macos") {
+            assert!(took);
+            assert_eq!(model.active, 0);
+            assert_eq!(model.surfaces.primary().unwrap().surface.id(), first);
+            assert!(press(&mut model, Code::Digit9, cmd, None, Mods::default()));
+            assert_eq!(model.active, 0);
+            assert!(model.shared.take_output().is_empty());
+        } else {
+            assert!(!took);
+            assert_eq!(model.active, 1);
+        }
+    }
+
+    #[test]
+    fn ctrl_tab_cycles_tabs() {
+        let mut model = host();
+        let first = model.surfaces.primary().unwrap().surface.id();
+        assert!(press(
+            &mut model,
+            Code::KeyT,
+            copy_mods(),
+            None,
+            Mods::default()
+        ));
+        let second = model.surfaces.primary().unwrap().surface.id();
+        let ctrl = Mods {
+            ctrl: true,
+            ..Mods::default()
+        };
+        assert!(press(&mut model, Code::Tab, ctrl, None, Mods::default()));
+        assert_eq!(model.active, 0);
+        assert_eq!(model.surfaces.primary().unwrap().surface.id(), first);
+        let back = Mods {
+            ctrl: true,
+            shift: true,
+            ..Mods::default()
+        };
+        assert!(press(&mut model, Code::Tab, back, None, Mods::default()));
+        assert_eq!(model.active, 1);
+        assert_eq!(model.surfaces.primary().unwrap().surface.id(), second);
+        assert!(model.shared.take_output().is_empty());
+    }
+
+    #[test]
+    fn command_w_closes_the_selected_tab() {
+        let mut model = host();
+        let first = model.surfaces.primary().unwrap().surface.id();
+        assert!(press(
+            &mut model,
+            Code::KeyT,
+            copy_mods(),
+            None,
+            Mods::default()
+        ));
+        assert!(press(
+            &mut model,
+            Code::KeyW,
+            copy_mods(),
+            None,
+            Mods::default()
+        ));
+        assert!(model.shared.take_output().is_empty());
+        assert_eq!(model.tabs.len(), 1);
+        assert_eq!(model.surfaces.len(), 1);
+        assert_eq!(model.active, 0);
+        assert_eq!(model.surfaces.primary().unwrap().surface.id(), first);
+    }
+
+    #[test]
+    fn the_last_tab_closes_the_window() {
+        let mut rt = Runtime::new(
+            host(),
+            crate::chrome::view,
+            (800.0, 500.0),
+            Env::new(true, 1.0),
+        );
+        rt.update(|model, tx| {
+            let event = PhysicalInput::Key {
+                key: Code::KeyW,
+                mods: copy_mods(),
+                pressed: true,
+                repeat: false,
+                text: None,
+                consumed_mods: Mods::default(),
+            };
+            assert!(on_physical(model, &event, tx));
+        });
+        assert!(rt.state.tabs.is_empty());
+        assert_eq!(rt.state.surfaces.len(), 0);
+        assert_eq!(rt.shell_request, Some(Shell::Close));
     }
 
     #[test]
@@ -708,7 +921,7 @@ mod tests {
     }
 
     #[test]
-    fn an_unfocused_command_chord_is_not_written_on_macos() {
+    fn an_unfocused_command_t_opens_a_tab_on_macos() {
         let mut model = host();
         let took = type_key(
             &mut model,
@@ -721,8 +934,15 @@ mod tests {
                 },
             },
         );
-        assert!(!took);
         assert!(model.shared.take_output().is_empty());
+        if cfg!(target_os = "macos") {
+            assert!(took);
+            assert_eq!(model.tabs.len(), 2);
+            assert_eq!(model.active, 1);
+        } else {
+            assert!(!took);
+            assert_eq!(model.tabs.len(), 1);
+        }
     }
 
     fn sized(model: &mut Model) {

@@ -34,22 +34,43 @@ pub struct HostSurface {
 
 pub struct Surfaces {
     inner: HashMap<SurfaceId, HostSurface>,
+    /// The shell the pane follows. A new tab replaces it.
+    shown: Option<SurfaceId>,
 }
 
 impl Surfaces {
     pub fn new() -> Self {
         Self {
             inner: HashMap::new(),
+            shown: None,
         }
     }
 
     pub fn insert(&mut self, host: HostSurface) {
         let id = host.surface.id();
         self.inner.insert(id, host);
+        if self.shown.is_none() {
+            self.shown = Some(id);
+        }
+    }
+
+    /// The pane, the keys, and the grid follow this shell.
+    pub fn show(&mut self, id: SurfaceId) {
+        if self.inner.contains_key(&id) {
+            self.shown = Some(id);
+        }
+    }
+
+    pub fn shown_id(&self) -> Option<SurfaceId> {
+        self.shown.filter(|id| self.inner.contains_key(id))
     }
 
     pub fn remove(&mut self, id: SurfaceId) -> Option<HostSurface> {
-        self.inner.remove(&id)
+        let host = self.inner.remove(&id)?;
+        if self.shown == Some(id) {
+            self.shown = None;
+        }
+        Some(host)
     }
 
     pub fn get(&self, id: SurfaceId) -> Option<&HostSurface> {
@@ -68,21 +89,25 @@ impl Surfaces {
         self.inner.values_mut()
     }
 
-    /// The original pane. A later leaf keeps its own entry, and input
-    /// still addresses this one until a chord targets the focused leaf.
+    /// The selected tab's shell. The first pane, when nothing has selected one.
     pub fn primary(&self) -> Option<&HostSurface> {
-        self.marked(crate::chrome::PANE_MARK)
-            .or_else(|| self.inner.values().next())
+        self.resolve().and_then(|id| self.inner.get(&id))
     }
 
     pub fn primary_mut(&mut self) -> Option<&mut HostSurface> {
-        let id = self
-            .inner
-            .iter()
-            .find(|(_, host)| host.mark == crate::chrome::PANE_MARK)
-            .map(|(id, _)| *id)
-            .or_else(|| self.inner.keys().next().copied());
-        id.and_then(|id| self.inner.get_mut(&id))
+        let id = self.resolve()?;
+        self.inner.get_mut(&id)
+    }
+
+    fn resolve(&self) -> Option<SurfaceId> {
+        self.shown_id()
+            .or_else(|| {
+                self.inner
+                    .iter()
+                    .find(|(_, host)| host.mark == crate::chrome::PANE_MARK)
+                    .map(|(id, _)| *id)
+            })
+            .or_else(|| self.inner.keys().next().copied())
     }
 
     pub(crate) fn by_mark(&self, mark: u32) -> Option<&HostSurface> {
@@ -96,10 +121,6 @@ impl Surfaces {
             .find(|(_, host)| host.mark == mark)
             .map(|(id, _)| *id)?;
         self.inner.get_mut(&id)
-    }
-
-    fn marked(&self, mark: u32) -> Option<&HostSurface> {
-        self.by_mark(mark)
     }
 }
 

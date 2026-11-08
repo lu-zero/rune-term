@@ -276,6 +276,8 @@ fn drop_closed(model: &mut Model, id: SurfaceId, tx: &mut Tx) -> bool {
     drop_leaf(model, id);
     if model.surfaces.len() == 0 {
         tx.close_window();
+    } else {
+        crate::tabs::show_active(model);
     }
     true
 }
@@ -316,9 +318,7 @@ fn apply_action(model: &mut Model, id: SurfaceId, action: Action) -> bool {
                 None => return false,
             };
             if changed {
-                if let Some(tab) = model.tabs.get_mut(model.active) {
-                    tab.title = title;
-                }
+                crate::tabs::set_title(model, id, title);
             }
             changed
         }

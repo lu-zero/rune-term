@@ -18,6 +18,7 @@ mod search;
 mod selection;
 mod split;
 mod surfaces;
+mod tabs;
 mod theme;
 
 pub use app::{app, run};

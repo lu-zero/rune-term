@@ -43,17 +43,8 @@ pub struct Tab {
 }
 
 pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
-    let label = tab_label(model);
     let tab_bg = tab();
-    let tab = row()
-        .w_full()
-        .h(TAB_H)
-        .fill(tab_bg)
-        .center_y()
-        // Past the traffic lights. The inset is their trailing edge, and 0 when
-        // they are not drawn over the content.
-        .pl(cx.titlebar_inset() + 12.0)
-        .child(text(label).color(text_color()));
+    let tab = tab_strip(model, cx);
     let pane = chrome_view::area(model, cx);
     // Rune delivers Cmd+V to the root handler, not to the focused pane.
     col()
@@ -65,16 +56,50 @@ pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
         .child(pane)
 }
 
-fn tab_label(model: &Model) -> String {
-    let title = model
-        .tabs
-        .get(model.active)
-        .map(|tab| tab.title.as_str())
-        .unwrap_or("rune-term");
-    let bell = model.surfaces.primary().is_some_and(|host| host.bell);
+fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {
+    let mut strip = row()
+        .w_full()
+        .h(TAB_H)
+        .fill(tab())
+        .center_y()
+        // Past the traffic lights. The inset is their trailing edge, and 0 when
+        // they are not drawn over the content.
+        .pl(cx.titlebar_inset() + 12.0)
+        .gap(16.0);
+    if model.tabs.is_empty() {
+        return strip.child(text("rune-term").color(text_color()));
+    }
+    for index in 0..model.tabs.len() {
+        let color = if index == model.active {
+            text_color()
+        } else {
+            theme::linear(theme::MUTED)
+        };
+        strip = strip.child(
+            text(tab_caption(model, index))
+                .color(color)
+                .key(format!("tab-{index}"))
+                .preserve_focus_on_press(true)
+                .on_press_tx(move |model: &mut Model, tx| {
+                    if !crate::tabs::select(model, index) {
+                        tx.live_only();
+                    }
+                }),
+        );
+    }
+    strip
+}
+
+fn tab_caption(model: &Model, index: usize) -> String {
+    let Some(tab) = model.tabs.get(index) else {
+        return "rune-term".to_string();
+    };
+    let bell = crate::tabs::surface_of(tab)
+        .and_then(|id| model.surfaces.get(id))
+        .is_some_and(|host| host.bell);
     if bell {
-        format!("{title} •")
+        format!("{} •", tab.title)
     } else {
-        title.to_string()
+        tab.title.clone()
     }
 }

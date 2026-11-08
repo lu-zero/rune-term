@@ -101,7 +101,7 @@ fn single(scale: f32) -> El {
         .min_h(0.0)
         .min_w(0.0)
         .child(ime::mount_caret(wire(pane, scale)))
-        .child(scrollback::column(PANE_MARK))
+        .child(scrollback::column(scrollback::SHOWN_PANE))
 }
 
 fn split_area(model: &Model, scale: f32) -> El {

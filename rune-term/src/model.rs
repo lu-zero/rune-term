@@ -28,6 +28,8 @@ pub struct Model {
     pub query: TextEdit,
     /// The pattern the last grid upload tinted. Empty when search was closed.
     pub(crate) search_drawn: String,
+    /// The shell the last grid upload drew. A tab change forces the next one.
+    pub(crate) grid_shown: Option<librio::SurfaceId>,
     pub(crate) shared: Arc<Shared>,
     pub(crate) pending_inject: Option<Vec<u8>>,
 }
@@ -59,6 +61,7 @@ pub fn init() -> Model {
         search_open: false,
         query: TextEdit::new(""),
         search_drawn: String::new(),
+        grid_shown: None,
         shared,
         pending_inject,
     }
