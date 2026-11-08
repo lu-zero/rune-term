@@ -43,7 +43,10 @@ The numbers are that plan's.
       wheel does not commit the view. The cursor stays hidden while
       the view is in history. Shift+PageUp and Shift+PageDown are
       unchanged.
-- [ ] **13. Search.** `search` is an identity tint.
+- [x] **13. Search.** Cmd+F (Ctrl+Shift+F off macOS) opens a field
+      over the pane. The field takes focus, so a key does not reach
+      the shell. `Surface::search` matches are tinted on the viewport
+      rows they occupy. A match above the viewport is not drawn.
 - [ ] **14. IME.** The caret element is the pane unchanged, and `on_ime`
       returns false.
 - [ ] **15. Kitty images.** `images::draw` is empty.

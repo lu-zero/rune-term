@@ -1,5 +1,5 @@
 //! The focused pane maps physical keys, the wheel, and the pointer onto the shell.
-//! App chords return false so Rune shortcuts still run.
+//! App chords return false, except copy and search, which this shell handles.
 
 use librio::Modifiers;
 use rune::{
@@ -274,6 +274,10 @@ fn modifiers(mods: Mods) -> Modifiers {
 /// `Tx::physical_key` and `Tx::key_base`. Once the pane is focused,
 /// `on_physical` is the only path, so this does not write the key twice.
 pub fn on_key(model: &mut Model, event: &KeyEvent, tx: &mut Tx) -> bool {
+    if crate::search::is_chord(&event.key, event.mods) {
+        crate::search::open(model);
+        return true;
+    }
     if tx.focused().is_some() {
         return false;
     }
@@ -311,6 +315,10 @@ fn deliver(
     if term_input::is_app_chord(code, mods) {
         if pressed && code == term_input::PhysicalKeyCode::KeyC {
             crate::selection::copy(model, tx);
+            return true;
+        }
+        if pressed && code == term_input::PhysicalKeyCode::KeyF {
+            crate::search::open(model);
             return true;
         }
         return false;

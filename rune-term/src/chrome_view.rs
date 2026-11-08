@@ -13,15 +13,17 @@ use crate::model::Model;
 use crate::pane_input;
 use crate::resize::{self, GridMetrics, ResizeRequest};
 use crate::scrollback;
+use crate::search;
 use crate::split::Axis;
 
 pub fn area(model: &Model, cx: &mut Cx<Model>) -> El {
     let scale = cx.env().scale;
     let root = model.tabs.get(model.active).map(|tab| &tab.root);
-    match root {
+    let pane = match root {
         Some(Node::Split { .. }) => split_area(model, scale),
         _ => single(scale),
-    }
+    };
+    search::mount(model, pane)
 }
 
 /// The surface created at startup belongs to the one leaf.

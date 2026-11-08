@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use librio::Engine;
+use rune::TextEdit;
 
 use crate::chrome::{Leaf, LeafId, Node, Tab, LEAF, PANE_MARK};
 use crate::delegate::{self, Shared};
@@ -22,6 +23,11 @@ pub struct Model {
     pub preedit: Option<Preedit>,
     /// Caret cell for IME placement. The view does not read this.
     pub cursor_cell: (u16, u16),
+    /// The search field is up. It takes focus while `query.focused` is set.
+    pub search_open: bool,
+    pub query: TextEdit,
+    /// The pattern the last grid upload tinted. Empty when search was closed.
+    pub(crate) search_drawn: String,
     pub(crate) shared: Arc<Shared>,
     pub(crate) pending_inject: Option<Vec<u8>>,
 }
@@ -50,6 +56,9 @@ pub fn init() -> Model {
         blink_phase_on: true,
         preedit: None,
         cursor_cell: (0, 0),
+        search_open: false,
+        query: TextEdit::new(""),
+        search_drawn: String::new(),
         shared,
         pending_inject,
     }

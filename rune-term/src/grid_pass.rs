@@ -17,6 +17,9 @@ pub fn sync(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
 ) {
+    let shown = search::shown(model);
+    let force_search = shown != model.search_drawn;
+    let mut drew = false;
     let shared = Arc::clone(&model.shared);
     for host in model.surfaces.iter_mut() {
         let resized = host.resized.swap(false, Ordering::AcqRel);
@@ -29,12 +32,23 @@ pub fn sync(
             images::draw();
             continue;
         }
+        let hits = search::collect(&host.surface, &host.render, &shown);
         let source = SurfaceGrid {
             render: &mut host.render,
         };
         let source = selection::tint(source);
-        let mut source = search::tint(source);
-        grid.upload(device, queue, &mut source, host.cell_px, resized || flagged);
+        let mut source = search::tint(source, &hits);
+        grid.upload(
+            device,
+            queue,
+            &mut source,
+            host.cell_px,
+            resized || flagged || force_search,
+        );
+        drew = true;
         images::draw();
+    }
+    if drew {
+        model.search_drawn = shown;
     }
 }
