@@ -21,7 +21,7 @@ The numbers are that plan's.
       `live_only`. The wrapped-line inject in the plan waits on reflow.
 - [x] **9. Input.** Keys, wheel, and mouse reach the focused pane.
       Shift+PageUp and Shift+PageDown scroll. A wheel keeps its
-      fractional line. Selection still starts nowhere.
+      fractional line.
 - [x] **6. Split model.** The tree is in cells. A divider costs one cell.
       `distribute` spends a resize left or top first and will not take a
       leaf's last cell. The view is still one pane.
@@ -31,8 +31,12 @@ The numbers are that plan's.
       leaf moves focus. Injecting into one leaf does not dirty the
       other. One leaf still fills the window. Keys, the wheel, and the
       compositor still address the first pane.
-- [ ] **11. Selection and clipboard.** `selection` is an identity tint.
-      Paste does nothing. OSC 52 does not write the clipboard.
+- [x] **11. Selection and clipboard.** A drag the program did not take
+      selects cells. Two clicks select a word and three select a line.
+      The copy chord copies that text, and paste calls `Surface::paste`.
+      OSC 52 still drops the payload and logs its type and length. The
+      tint swaps the selected cells. Keys, the wheel, and the pointer
+      still address the first pane.
 - [ ] **12. Scrollback viewport.** Page scrolling exists. There is no
       scrollbar.
 - [ ] **13. Search.** `search` is an identity tint.

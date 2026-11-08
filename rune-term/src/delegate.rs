@@ -231,6 +231,7 @@ pub(crate) fn open_host(model: &mut Model, mark: u32, cols: u16, rows: u16) -> S
         cell_px: (0, 0),
         wheel_remainder: 0.0,
         pointer_button: None,
+        selecting: false,
     });
     id
 }
@@ -259,8 +260,10 @@ fn apply(model: &mut Model, event: HostEvent) -> bool {
             model.shared.remove_flag(id);
             model.surfaces.remove(id).is_some()
         }
-        HostEvent::Clipboard { len, .. } => {
-            eprintln!("clipboard write dropped ({len} bytes)");
+        HostEvent::Clipboard { kind, len, .. } => {
+            eprintln!("clipboard write dropped ({kind:?}, {len} bytes)");
+            #[cfg(all(test, not(feature = "pty")))]
+            record_clipboard_drop(kind, len);
             false
         }
     }
@@ -312,5 +315,37 @@ fn apply_action(model: &mut Model, id: SurfaceId, action: Action) -> bool {
             host.progress = next;
             true
         }
+    }
+}
+
+#[cfg(all(test, not(feature = "pty")))]
+static CLIPBOARD_DROP: Mutex<Option<(ClipboardType, usize)>> = Mutex::new(None);
+
+#[cfg(all(test, not(feature = "pty")))]
+fn record_clipboard_drop(kind: ClipboardType, len: usize) {
+    *CLIPBOARD_DROP.lock().expect("clipboard drop") = Some((kind, len));
+}
+
+#[cfg(all(test, not(feature = "pty")))]
+mod tests {
+    use super::*;
+    use crate::model;
+
+    #[test]
+    fn osc52_drops_the_payload_and_keeps_the_length() {
+        *CLIPBOARD_DROP.lock().expect("clipboard drop") = None;
+        let mut model = model::init();
+        setup(&mut model, std::sync::Arc::new(|| {}));
+        {
+            let host = model.surfaces.primary_mut().unwrap();
+            // "hello" in base64. The child asks the host to store it.
+            host.surface.inject_output(b"\x1b]52;c;aGVsbG8=\x07");
+        }
+        poll(&mut model, 0.0, &mut Tx::default());
+        assert!(model.shared.take_output().is_empty());
+        assert_eq!(
+            *CLIPBOARD_DROP.lock().expect("clipboard drop"),
+            Some((ClipboardType::Clipboard, 5))
+        );
     }
 }

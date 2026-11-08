@@ -33,6 +33,7 @@ pub fn on_physical(model: &mut Model, event: &PhysicalInput, tx: &mut Tx) -> boo
             if let Some(host) = model.surfaces.primary_mut() {
                 host.wheel_remainder = 0.0;
                 host.pointer_button = None;
+                host.selecting = false;
             }
             false
         }
@@ -74,26 +75,88 @@ pub fn on_drag(model: &mut Model, drag: &mut Drag, scale: f32, tx: &mut Tx) {
     let Some(button) = button_code(tx.button()) else {
         return;
     };
+    gesture(
+        model,
+        drag.phase,
+        drag.x,
+        drag.y,
+        drag.clicks,
+        button,
+        modifiers(tx.mods()),
+        scale,
+        tx,
+    );
+}
+
+/// The program takes a click when `mouse_button` returns true. Otherwise the
+/// left button starts a local selection. Shift makes that return false.
+fn gesture(
+    model: &mut Model,
+    phase: Phase,
+    x: f32,
+    y: f32,
+    clicks: u32,
+    button: u8,
+    mods: Modifiers,
+    scale: f32,
+    tx: &mut Tx,
+) {
     let Some(host) = model.surfaces.primary_mut() else {
         return;
     };
-    let cell = cell_under(host, drag.x, drag.y, scale);
-    let mods = modifiers(tx.mods());
-    match drag.phase {
+    let cell = cell_under(host, x, y, scale);
+    match phase {
         Phase::Down => {
             host.pointer_button = Some(button);
-            if let Some((col, row)) = cell {
-                host.surface.mouse_button(col, row, button, true, mods);
+            let taken = match cell {
+                Some((col, row)) => host.surface.mouse_button(col, row, button, true, mods),
+                None => false,
+            };
+            if button == 0 && !taken {
+                if let Some((col, row)) = cell {
+                    host.surface.selection_begin(
+                        i32::from(row),
+                        usize::from(col),
+                        crate::selection::kind(clicks),
+                        side_at(x, col, drawn_pitch(host.cell_px.0, scale)),
+                    );
+                    host.selecting = true;
+                } else {
+                    host.selecting = false;
+                }
+            } else {
+                if taken {
+                    host.surface.selection_clear();
+                }
+                host.selecting = false;
             }
         }
         Phase::Move => {
-            if let (Some(held), Some((col, row))) = (host.pointer_button, cell) {
+            if host.selecting {
+                if let Some((col, row)) = cell {
+                    host.surface.selection_update(
+                        i32::from(row),
+                        usize::from(col),
+                        side_at(x, col, drawn_pitch(host.cell_px.0, scale)),
+                    );
+                }
+            } else if let (Some(held), Some((col, row))) = (host.pointer_button, cell) {
                 host.surface.mouse_motion(col, row, held, mods);
             }
         }
         Phase::Up => {
+            let selecting = host.selecting;
             host.pointer_button = None;
-            if let Some((col, row)) = cell {
+            host.selecting = false;
+            if selecting {
+                if let Some((col, row)) = cell {
+                    host.surface.selection_update(
+                        i32::from(row),
+                        usize::from(col),
+                        side_at(x, col, drawn_pitch(host.cell_px.0, scale)),
+                    );
+                }
+            } else if let Some((col, row)) = cell {
                 host.surface.mouse_button(col, row, button, false, mods);
             }
         }
@@ -157,6 +220,20 @@ fn edge_cell(local: f32, pitch: f32, count: u16) -> u16 {
         0
     } else {
         count - 1
+    }
+}
+
+/// The first half of the cell is [`librio::Side::Left`]. A backwards drag
+/// can include column 0 because the side follows the pointer.
+fn side_at(x: f32, col: u16, pitch: f32) -> librio::Side {
+    if !(pitch > 0.0) {
+        return librio::Side::Left;
+    }
+    let into = x - f32::from(col) * pitch;
+    if into >= pitch * 0.5 {
+        librio::Side::Right
+    } else {
+        librio::Side::Left
     }
 }
 
@@ -232,6 +309,10 @@ fn deliver(
     tx: &mut Tx,
 ) -> bool {
     if term_input::is_app_chord(code, mods) {
+        if pressed && code == term_input::PhysicalKeyCode::KeyC {
+            crate::selection::copy(model, tx);
+            return true;
+        }
         return false;
     }
     if let Some(sign) = term_input::scroll_chord(code, mods) {
@@ -748,5 +829,273 @@ mod tests {
         }
         assert_eq!(cell_under(host, 588.5, 0.0, scale), None);
         assert_eq!(cell_under(host, 0.0, 588.5, scale), None);
+    }
+
+    fn gesture_at(
+        model: &mut Model,
+        phase: Phase,
+        x: f32,
+        y: f32,
+        clicks: u32,
+        mods: librio::Modifiers,
+    ) {
+        gesture(model, phase, x, y, clicks, 0, mods, 1.0, &mut Tx::default());
+    }
+
+    fn select_hello(model: &mut Model) {
+        sized(model);
+        model
+            .surfaces
+            .primary_mut()
+            .unwrap()
+            .surface
+            .inject_output(b"HELLO WORLD");
+        // Pitch is 10. Column 0's left half, then column 4's right half.
+        gesture_at(model, Phase::Down, 1.0, 1.0, 1, librio::Modifiers::empty());
+        gesture_at(model, Phase::Move, 47.0, 1.0, 1, librio::Modifiers::empty());
+        gesture_at(model, Phase::Up, 47.0, 1.0, 1, librio::Modifiers::empty());
+    }
+
+    #[test]
+    fn a_drag_selects_the_cells_under_the_pointer() {
+        let mut model = host();
+        select_hello(&mut model);
+        let text = model
+            .surfaces
+            .primary()
+            .unwrap()
+            .surface
+            .selection_text()
+            .unwrap_or_default();
+        assert!(text.contains("HELLO"), "{text:?}");
+        assert!(!text.contains("WORLD"), "{text:?}");
+        assert!(!model.surfaces.primary().unwrap().selecting);
+    }
+
+    #[test]
+    fn two_clicks_select_the_word() {
+        let mut model = host();
+        sized(&mut model);
+        model
+            .surfaces
+            .primary_mut()
+            .unwrap()
+            .surface
+            .inject_output(b"HELLO WORLD");
+        gesture_at(
+            &mut model,
+            Phase::Down,
+            11.0,
+            1.0,
+            2,
+            librio::Modifiers::empty(),
+        );
+        gesture_at(
+            &mut model,
+            Phase::Up,
+            11.0,
+            1.0,
+            2,
+            librio::Modifiers::empty(),
+        );
+        let text = model
+            .surfaces
+            .primary()
+            .unwrap()
+            .surface
+            .selection_text()
+            .unwrap_or_default();
+        assert!(text.contains("HELLO"), "{text:?}");
+        assert!(!text.contains("WORLD"), "{text:?}");
+    }
+
+    #[test]
+    fn three_clicks_select_the_line() {
+        let mut model = host();
+        sized(&mut model);
+        model
+            .surfaces
+            .primary_mut()
+            .unwrap()
+            .surface
+            .inject_output(b"HELLO WORLD");
+        gesture_at(
+            &mut model,
+            Phase::Down,
+            11.0,
+            1.0,
+            3,
+            librio::Modifiers::empty(),
+        );
+        gesture_at(
+            &mut model,
+            Phase::Up,
+            11.0,
+            1.0,
+            3,
+            librio::Modifiers::empty(),
+        );
+        let text = model
+            .surfaces
+            .primary()
+            .unwrap()
+            .surface
+            .selection_text()
+            .unwrap_or_default();
+        assert!(text.contains("HELLO WORLD"), "{text:?}");
+    }
+
+    #[test]
+    fn a_backwards_drag_includes_the_first_column() {
+        let mut model = host();
+        sized(&mut model);
+        model
+            .surfaces
+            .primary_mut()
+            .unwrap()
+            .surface
+            .inject_output(b"ABCDEF");
+        gesture_at(
+            &mut model,
+            Phase::Down,
+            55.0,
+            1.0,
+            1,
+            librio::Modifiers::empty(),
+        );
+        gesture_at(
+            &mut model,
+            Phase::Up,
+            1.0,
+            1.0,
+            1,
+            librio::Modifiers::empty(),
+        );
+        let text = model
+            .surfaces
+            .primary()
+            .unwrap()
+            .surface
+            .selection_text()
+            .unwrap_or_default();
+        assert!(text.starts_with('A'), "{text:?}");
+    }
+
+    #[test]
+    fn a_mouse_report_does_not_start_a_selection() {
+        let mut model = host();
+        sized(&mut model);
+        model
+            .surfaces
+            .primary_mut()
+            .unwrap()
+            .surface
+            .inject_output(b"HELLO\x1b[?1000h\x1b[?1006h");
+        gesture_at(
+            &mut model,
+            Phase::Down,
+            1.0,
+            1.0,
+            1,
+            librio::Modifiers::empty(),
+        );
+        gesture_at(
+            &mut model,
+            Phase::Up,
+            21.0,
+            1.0,
+            1,
+            librio::Modifiers::empty(),
+        );
+        assert!(model
+            .surfaces
+            .primary()
+            .unwrap()
+            .surface
+            .selection_text()
+            .is_none());
+        assert!(model.shared.take_output().starts_with(b"\x1b[<"));
+    }
+
+    #[test]
+    fn shift_selects_while_the_program_wants_the_mouse() {
+        let mut model = host();
+        sized(&mut model);
+        model
+            .surfaces
+            .primary_mut()
+            .unwrap()
+            .surface
+            .inject_output(b"HELLO\x1b[?1000h\x1b[?1006h");
+        gesture_at(
+            &mut model,
+            Phase::Down,
+            1.0,
+            1.0,
+            1,
+            librio::Modifiers::SHIFT,
+        );
+        gesture_at(
+            &mut model,
+            Phase::Up,
+            47.0,
+            1.0,
+            1,
+            librio::Modifiers::SHIFT,
+        );
+        let text = model
+            .surfaces
+            .primary()
+            .unwrap()
+            .surface
+            .selection_text()
+            .unwrap_or_default();
+        assert!(text.contains("HELLO"), "{text:?}");
+        assert!(model.shared.take_output().is_empty());
+    }
+
+    fn copy_mods() -> Mods {
+        if cfg!(target_os = "macos") {
+            Mods {
+                logo: true,
+                cmd: true,
+                ..Mods::default()
+            }
+        } else {
+            Mods {
+                ctrl: true,
+                shift: true,
+                ..Mods::default()
+            }
+        }
+    }
+
+    #[test]
+    fn the_copy_chord_writes_nothing_to_the_shell() {
+        let mut model = host();
+        select_hello(&mut model);
+        assert!(press(
+            &mut model,
+            Code::KeyC,
+            copy_mods(),
+            None,
+            Mods::default()
+        ));
+        assert!(model.shared.take_output().is_empty());
+        let text = model
+            .surfaces
+            .primary()
+            .unwrap()
+            .surface
+            .selection_text()
+            .unwrap_or_default();
+        assert!(text.contains("HELLO"), "{text:?}");
+    }
+
+    #[test]
+    fn paste_reaches_the_shell() {
+        let mut model = host();
+        crate::selection::on_paste(&mut model, "pasted", &mut Tx::default());
+        assert_eq!(model.shared.take_output(), b"pasted");
     }
 }

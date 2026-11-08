@@ -26,8 +26,6 @@ pub fn sync(
             shared.note_rearm();
         }
         if host.cell_px.0 == 0 || host.cell_px.1 == 0 {
-            let marked = selection::tint(());
-            let _marked = search::tint(marked);
             images::draw();
             continue;
         }

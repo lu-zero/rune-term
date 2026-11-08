@@ -28,6 +28,8 @@ pub struct HostSurface {
     pub wheel_remainder: f32,
     /// Button held for a drag: 0 left, 1 middle, 2 right. `None` is bare motion.
     pub pointer_button: Option<u8>,
+    /// A local selection is tracking the pointer. The program did not take the press.
+    pub selecting: bool,
 }
 
 pub struct Surfaces {
