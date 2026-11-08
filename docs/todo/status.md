@@ -19,8 +19,9 @@ The numbers are that plan's.
 - [x] **8. Winsize.** The reported size is `cols * cell_px` by
       `rows * cell_px`. A 2 point margin sits outside it. Layout is
       `live_only`. The wrapped-line inject in the plan waits on reflow.
-- [~] **9. Input.** Keys reach the shell. Shift+PageUp and Shift+PageDown
-      scroll. Mouse and wheel are unwired.
+- [x] **9. Input.** Keys, wheel, and mouse reach the focused pane.
+      Shift+PageUp and Shift+PageDown scroll. A wheel keeps its
+      fractional line. Selection still starts nowhere.
 - [x] **6. Split model.** The tree is in cells. A divider costs one cell.
       `distribute` spends a resize left or top first and will not take a
       leaf's last cell. The view is still one pane.

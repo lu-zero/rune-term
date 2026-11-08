@@ -68,7 +68,16 @@ pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
             app::on_pane_layout(model, (rect[2], rect[3]), scale, tx);
         })
         .on_physical_input(pane_input::on_physical)
-        .on_paste(selection::on_paste);
+        .on_paste(selection::on_paste)
+        .on_wheel(move |model, event, tx| pane_input::on_wheel(model, event, scale, tx))
+        .pointer_buttons([rune::PointerButton::Middle])
+        .on_drag(move |model, drag, tx| pane_input::on_drag(model, drag, scale, tx))
+        .on_secondary_press_local(move |model, point, tx| {
+            pane_input::on_secondary(model, point, scale, tx)
+        })
+        .on_pointer_move_local(move |model, point, tx| {
+            pane_input::on_pointer_move(model, point, scale, tx)
+        });
     let pane = ime::mount_caret(pane);
     col().w_full().h_full().fill(tab_bg).child(tab).child(pane)
 }

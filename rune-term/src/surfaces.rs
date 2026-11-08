@@ -26,6 +26,8 @@ pub struct HostSurface {
     pub rows: u16,
     pub cell_px: (u16, u16),
     pub wheel_remainder: f32,
+    /// Button held for a drag: 0 left, 1 middle, 2 right. `None` is bare motion.
+    pub pointer_button: Option<u8>,
 }
 
 pub struct Surfaces {

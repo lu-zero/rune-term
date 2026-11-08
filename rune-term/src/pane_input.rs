@@ -1,32 +1,196 @@
-//! The focused pane maps physical keys onto the shell.
+//! The focused pane maps physical keys, the wheel, and the pointer onto the shell.
 //! App chords return false so Rune shortcuts still run.
 
-use rune::{Key, KeyEvent, Mods, PhysicalInput, PhysicalKeyCode, Tx};
+use librio::Modifiers;
+use rune::{
+    Drag, Key, KeyEvent, Mods, Phase, PhysicalInput, PhysicalKeyCode, PointerButton, PointerEvent,
+    Tx, WheelEvent,
+};
 
 use crate::model::Model;
+use crate::surfaces::HostSurface;
 
 pub fn on_physical(model: &mut Model, event: &PhysicalInput, tx: &mut Tx) -> bool {
-    let PhysicalInput::Key {
-        key,
-        mods,
-        pressed,
-        repeat,
-        text,
-        consumed_mods,
-    } = event
-    else {
+    match event {
+        PhysicalInput::Key {
+            key,
+            mods,
+            pressed,
+            repeat,
+            text,
+            consumed_mods,
+        } => deliver(
+            model,
+            code(*key),
+            mods_of(*mods),
+            *pressed,
+            *repeat,
+            text.as_deref(),
+            mods_of(*consumed_mods),
+            tx,
+        ),
+        PhysicalInput::FocusLost => {
+            if let Some(host) = model.surfaces.primary_mut() {
+                host.wheel_remainder = 0.0;
+                host.pointer_button = None;
+            }
+            false
+        }
+        PhysicalInput::Modifiers(_) => false,
+    }
+}
+
+/// Wheel points become fractional lines of the drawn row. A zero-line event
+/// still returns true, so an ancestor scroll does not also move.
+pub fn on_wheel(model: &mut Model, event: WheelEvent, scale: f32, tx: &mut Tx) -> bool {
+    let Some(host) = model.surfaces.primary_mut() else {
         return false;
     };
-    deliver(
-        model,
-        code(*key),
-        mods_of(*mods),
-        *pressed,
-        *repeat,
-        text.as_deref(),
-        mods_of(*consumed_mods),
-        tx,
+    let pitch_y = drawn_pitch(host.cell_px.1, scale);
+    if !(pitch_y.is_finite() && pitch_y > 0.0) {
+        tx.live_only();
+        return true;
+    }
+    let points = if event.dy != 0.0 {
+        event.dy
+    } else if !cfg!(target_os = "macos") && event.mods.shift && event.dx != 0.0 {
+        event.dx
+    } else {
+        0.0
+    };
+    host.wheel_remainder += points / pitch_y;
+    let lines = host.wheel_remainder.trunc() as i32;
+    host.wheel_remainder -= lines as f32;
+    if lines != 0 {
+        let (col, row) = cell_for_wheel(host, event.x, event.y, scale);
+        let mods = modifiers(event.mods);
+        host.surface.scroll_wheel(lines, col, row, mods);
+    }
+    tx.live_only();
+    true
+}
+
+pub fn on_drag(model: &mut Model, drag: &mut Drag, scale: f32, tx: &mut Tx) {
+    let Some(button) = button_code(tx.button()) else {
+        return;
+    };
+    let Some(host) = model.surfaces.primary_mut() else {
+        return;
+    };
+    let cell = cell_under(host, drag.x, drag.y, scale);
+    let mods = modifiers(tx.mods());
+    match drag.phase {
+        Phase::Down => {
+            host.pointer_button = Some(button);
+            if let Some((col, row)) = cell {
+                host.surface.mouse_button(col, row, button, true, mods);
+            }
+        }
+        Phase::Move => {
+            if let (Some(held), Some((col, row))) = (host.pointer_button, cell) {
+                host.surface.mouse_motion(col, row, held, mods);
+            }
+        }
+        Phase::Up => {
+            host.pointer_button = None;
+            if let Some((col, row)) = cell {
+                host.surface.mouse_button(col, row, button, false, mods);
+            }
+        }
+    }
+    tx.live_only();
+}
+
+/// Bare motion is button 3. A drag already reported the held button.
+pub fn on_pointer_move(model: &mut Model, point: PointerEvent, scale: f32, tx: &mut Tx) {
+    let Some(host) = model.surfaces.primary_mut() else {
+        return;
+    };
+    if host.pointer_button.is_none() {
+        if let Some((col, row)) = cell_under(host, point.x, point.y, scale) {
+            host.surface.mouse_motion(col, row, 3, modifiers(tx.mods()));
+        }
+    }
+    tx.live_only();
+}
+
+pub fn on_secondary(model: &mut Model, point: PointerEvent, scale: f32, tx: &mut Tx) {
+    let Some(host) = model.surfaces.primary_mut() else {
+        return;
+    };
+    let Some((col, row)) = cell_under(host, point.x, point.y, scale) else {
+        return;
+    };
+    let mods = modifiers(tx.mods());
+    // Rune delivers the secondary button only on release.
+    host.surface.mouse_button(col, row, 2, true, mods);
+    host.surface.mouse_button(col, row, 2, false, mods);
+    tx.live_only();
+}
+
+fn cell_under(host: &HostSurface, x: f32, y: f32, scale: f32) -> Option<(u16, u16)> {
+    term_input::cell_at(
+        x,
+        y,
+        drawn_pitch(host.cell_px.0, scale),
+        drawn_pitch(host.cell_px.1, scale),
+        host.cols,
+        host.rows,
+        term_input::Pad::default(),
     )
+}
+
+/// A miss still scrolls. The cell is the last one on that side, or 0 when
+/// the grid has no cells.
+fn cell_for_wheel(host: &HostSurface, x: f32, y: f32, scale: f32) -> (u16, u16) {
+    if let Some(cell) = cell_under(host, x, y, scale) {
+        return cell;
+    }
+    (
+        edge_cell(x, drawn_pitch(host.cell_px.0, scale), host.cols),
+        edge_cell(y, drawn_pitch(host.cell_px.1, scale), host.rows),
+    )
+}
+
+fn edge_cell(local: f32, pitch: f32, count: u16) -> u16 {
+    if count == 0 || !(pitch > 0.0) || local < 0.0 {
+        0
+    } else {
+        count - 1
+    }
+}
+
+fn drawn_pitch(cell_px: u16, scale: f32) -> f32 {
+    if !(scale.is_finite() && scale > 0.0) {
+        return 0.0;
+    }
+    f32::from(cell_px) / scale
+}
+
+fn button_code(button: PointerButton) -> Option<u8> {
+    match button {
+        PointerButton::Primary => Some(0),
+        PointerButton::Middle => Some(1),
+        PointerButton::Secondary => Some(2),
+        _ => None,
+    }
+}
+
+fn modifiers(mods: Mods) -> Modifiers {
+    let mut out = Modifiers::empty();
+    if mods.shift {
+        out |= Modifiers::SHIFT;
+    }
+    if mods.ctrl {
+        out |= Modifiers::CTRL;
+    }
+    if mods.alt {
+        out |= Modifiers::ALT;
+    }
+    if mods.logo {
+        out |= Modifiers::SUPER;
+    }
+    out
 }
 
 /// Keys that arrive before a click focuses the pane. The window still fills
@@ -466,5 +630,123 @@ mod tests {
         );
         assert!(!took);
         assert!(model.shared.take_output().is_empty());
+    }
+
+    fn sized(model: &mut Model) {
+        let host = model.surfaces.primary_mut().unwrap();
+        host.cell_px = (10, 20);
+        host.cols = 80;
+        host.rows = 24;
+    }
+
+    fn history(model: &mut Model) {
+        let host = model.surfaces.primary_mut().unwrap();
+        let mut bytes = Vec::new();
+        for _ in 0..40 {
+            bytes.extend_from_slice(b"line\r\n");
+        }
+        host.surface.inject_output(&bytes);
+    }
+
+    fn wheel(model: &mut Model, dx: f32, dy: f32, mods: Mods) -> bool {
+        on_wheel(
+            model,
+            WheelEvent::new(dx, dy).mods(mods),
+            1.0,
+            &mut Tx::default(),
+        )
+    }
+
+    fn offset(model: &mut Model) -> usize {
+        let host = model.surfaces.primary_mut().unwrap();
+        host.render.update();
+        host.render.display_offset()
+    }
+
+    #[test]
+    fn a_fraction_of_a_row_stays_in_the_remainder() {
+        let mut model = host();
+        sized(&mut model);
+        history(&mut model);
+        assert!(wheel(&mut model, 0.0, 2.0, Mods::default()));
+        let remainder = model.surfaces.primary().unwrap().wheel_remainder;
+        assert!((remainder - 0.1).abs() < 1e-5, "{remainder}");
+        assert_eq!(offset(&mut model), 0);
+        assert!(model.shared.take_output().is_empty());
+    }
+
+    #[test]
+    fn five_short_wheel_events_make_one_line() {
+        let mut model = host();
+        sized(&mut model);
+        history(&mut model);
+        for _ in 0..5 {
+            assert!(wheel(&mut model, 0.0, 6.0, Mods::default()));
+        }
+        let remainder = model.surfaces.primary().unwrap().wheel_remainder;
+        assert!((remainder - 0.5).abs() < 1e-4, "{remainder}");
+        assert_eq!(offset(&mut model), 1);
+    }
+
+    #[test]
+    fn a_positive_wheel_moves_toward_history() {
+        let mut model = host();
+        sized(&mut model);
+        history(&mut model);
+        assert!(wheel(&mut model, 0.0, 20.0, Mods::default()));
+        assert!(offset(&mut model) > 0);
+    }
+
+    #[test]
+    fn a_shifted_horizontal_notch_scrolls_off_macos() {
+        let mut model = host();
+        sized(&mut model);
+        history(&mut model);
+        let shift = Mods {
+            shift: true,
+            ..Mods::default()
+        };
+        assert!(wheel(&mut model, 40.0, 0.0, shift));
+        let moved = offset(&mut model);
+        if cfg!(target_os = "macos") {
+            assert_eq!(moved, 0);
+            assert_eq!(model.surfaces.primary().unwrap().wheel_remainder, 0.0);
+        } else {
+            assert_eq!(moved, 2);
+        }
+    }
+
+    #[test]
+    fn focus_loss_drops_the_wheel_fraction() {
+        let mut model = host();
+        sized(&mut model);
+        assert!(wheel(&mut model, 0.0, 2.0, Mods::default()));
+        assert!(!on_physical(
+            &mut model,
+            &PhysicalInput::FocusLost,
+            &mut Tx::default()
+        ));
+        assert_eq!(model.surfaces.primary().unwrap().wheel_remainder, 0.0);
+        assert!(model.surfaces.primary().unwrap().pointer_button.is_none());
+    }
+
+    #[test]
+    fn hit_testing_uses_the_drawn_pitch() {
+        let mut model = host();
+        {
+            let host = model.surfaces.primary_mut().unwrap();
+            host.cell_px = (15, 15);
+            host.cols = 78;
+            host.rows = 78;
+        }
+        let host = model.surfaces.primary().unwrap();
+        let scale = 2.0;
+        for i in 0..78 {
+            let center = (i as f32 + 0.5) * 7.5;
+            assert_eq!(cell_under(host, center, 0.0, scale), Some((i, 0)));
+            assert_eq!(cell_under(host, 0.0, center, scale), Some((0, i)));
+        }
+        assert_eq!(cell_under(host, 588.5, 0.0, scale), None);
+        assert_eq!(cell_under(host, 0.0, 588.5, scale), None);
     }
 }

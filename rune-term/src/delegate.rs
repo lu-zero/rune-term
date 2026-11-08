@@ -224,6 +224,7 @@ pub fn setup(model: &mut Model, waker: Waker) {
         rows: 0,
         cell_px: (0, 0),
         wheel_remainder: 0.0,
+        pointer_button: None,
     });
 }
 
