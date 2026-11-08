@@ -5,13 +5,25 @@ use rune::{El, Ime, Tx};
 
 use crate::model::{Model, Preedit};
 
-pub fn mount_caret(pane: El) -> El {
+pub fn mount_caret(pane: El, cursor_cell: (u16, u16), cell_px: (u16, u16), scale: f32) -> El {
+    let (col, row) = cursor_cell;
+    let (cw, ch) = if scale.is_finite() && scale > 0.0 {
+        (f32::from(cell_px.0) / scale, f32::from(cell_px.1) / scale)
+    } else {
+        (1.0, 1.0)
+    };
+    let margin = crate::resize::CONTENT_MARGIN_PT;
+    let (x, y) = if cw > 0.0 && ch > 0.0 {
+        (margin + f32::from(col) * cw, margin + f32::from(row) * ch)
+    } else {
+        (margin, margin)
+    };
     pane.child(
         rune::el()
             .key("ime-caret")
-            .absolute(0.0, 0.0)
-            .w(1.0)
-            .h(1.0)
+            .absolute(x.max(0.0), y.max(0.0))
+            .w(cw.max(1.0))
+            .h(ch.max(1.0))
             .ime_cursor(),
     )
 }

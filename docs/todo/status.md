@@ -48,10 +48,9 @@ The numbers are that plan's.
       the shell. `Surface::search` matches are tinted on the viewport
       rows they occupy. A match above the viewport is not drawn.
 - [~] **14. IME.** `on_ime` handles preedit/commit/enable/disable, commits
-      text to the focused surface, and mounts an `ime_cursor` on the pane.
-      Preedit is not yet drawn in the grid and the caret rect is not yet
-      positioned from the terminal cursor; manual macOS marked-text verification
-      is still needed.
+      text to the focused surface, and mounts an `ime_cursor` positioned from
+      cursor/cell metrics in the view. Preedit is not yet drawn in the grid;
+      manual macOS marked-text verification is still needed.
 - [x] **15. Kitty images.** Kitty placements are read from `RenderState`,
       uploaded/cached by image stamp, and drawn in z-buckets (under-text and
       over-text) around the grid pass. Headless `graphics` test injects a small

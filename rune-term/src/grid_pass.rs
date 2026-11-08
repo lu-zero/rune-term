@@ -44,6 +44,7 @@ pub fn sync(
             continue;
         }
         let hits = search::collect(&host.surface, &host.render, &shown);
+        let (cursor_row, cursor_col) = host.render.cursor();
         let source = SurfaceGrid {
             render: &mut host.render,
         };
@@ -58,6 +59,10 @@ pub fn sync(
             resized || flagged || force_search || force_hover || switched,
         );
         images.sync(device, queue, &host.render, host.cell_px);
+        model.cursor_cell = (
+            u16::try_from(cursor_col).unwrap_or(0),
+            u16::try_from(cursor_row).unwrap_or(0),
+        );
         drew = true;
     }
     if !drew {

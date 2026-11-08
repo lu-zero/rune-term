@@ -92,7 +92,7 @@ pub fn focus_leaf(model: &mut Model, id: LeafId) -> bool {
     moved
 }
 
-fn single(_model: &Model, scale: f32) -> El {
+fn single(model: &Model, scale: f32) -> El {
     let pane = effect(PANE_MARK)
         .key("pane")
         .grow(1.0)
@@ -102,12 +102,26 @@ fn single(_model: &Model, scale: f32) -> El {
         .on_layout_tx(move |model: &mut Model, rect, tx: &mut Tx| {
             app::on_pane_layout(model, (rect[2], rect[3]), scale, tx);
         });
+    let (cursor, cell_px) = model
+        .surfaces
+        .primary()
+        .map(|host| (host.render.cursor(), host.cell_px))
+        .unwrap_or(((0, 0), (0, 0)));
+    let cursor_cell = (
+        u16::try_from(cursor.1).unwrap_or(0),
+        u16::try_from(cursor.0).unwrap_or(0),
+    );
     col()
         .w_full()
         .grow(1.0)
         .min_h(0.0)
         .min_w(0.0)
-        .child(ime::mount_caret(wire(pane, PANE_MARK, scale)))
+        .child(ime::mount_caret(
+            wire(pane, PANE_MARK, scale),
+            cursor_cell,
+            cell_px,
+            scale,
+        ))
         .child(scrollback::column(scrollback::SHOWN_PANE).pin(
             None,
             Some(0.0),
@@ -157,7 +171,7 @@ fn nodes(node: &Node, model: &Model, scale: f32, cell: (f32, f32)) -> El {
     }
 }
 
-fn leaf_el(leaf: &Leaf, _model: &Model, scale: f32, cell: (f32, f32)) -> El {
+fn leaf_el(leaf: &Leaf, model: &Model, scale: f32, cell: (f32, f32)) -> El {
     let surface = leaf.surface;
     let id = leaf.id;
     let mark = leaf.mark;
@@ -175,12 +189,31 @@ fn leaf_el(leaf: &Leaf, _model: &Model, scale: f32, cell: (f32, f32)) -> El {
                 tx.live_only();
             }
         });
+    let (cursor_cell, cell_px) = model
+        .surfaces
+        .get(surface)
+        .map(|host| {
+            let (row, col) = host.render.cursor();
+            (
+                (
+                    u16::try_from(col).unwrap_or(0),
+                    u16::try_from(row).unwrap_or(0),
+                ),
+                host.cell_px,
+            )
+        })
+        .unwrap_or(((0, 0), (0, 0)));
     let pane = col()
         .w_full()
         .grow(1.0)
         .min_h(0.0)
         .min_w(0.0)
-        .child(ime::mount_caret(wire(pane, mark, scale)))
+        .child(ime::mount_caret(
+            wire(pane, mark, scale),
+            cursor_cell,
+            cell_px,
+            scale,
+        ))
         .child(scrollback::column(mark).pin(None, Some(0.0), Some(0.0), Some(0.0)));
     row()
         .w(span(leaf.cols, cell.0, scale))
