@@ -25,6 +25,8 @@ pub enum SettingsTab {
 pub struct ThemeEditor {
     pub original_name: String,
     pub name: TextEdit,
+    pub author: TextEdit,
+    pub url: TextEdit,
     pub bg: TextEdit,
     pub fg: TextEdit,
     pub fg_bright: TextEdit,
@@ -33,8 +35,6 @@ pub struct ThemeEditor {
     pub active_border: TextEdit,
     pub accent: TextEdit,
     pub ansi16: Vec<[u8; 3]>,
-    pub author: String,
-    pub url: String,
 }
 
 pub struct Model {
@@ -123,6 +123,8 @@ impl ThemeEditor {
         Self {
             original_name: name.to_owned(),
             name: TextEdit::new(name),
+            author: TextEdit::new(&theme.author),
+            url: TextEdit::new(&theme.url),
             bg: TextEdit::new(hex6(theme.bg)),
             fg: TextEdit::new(hex6(theme.fg)),
             fg_bright: TextEdit::new(hex6(theme.fg_bright)),
@@ -136,8 +138,6 @@ impl ThemeEditor {
                 a.truncate(16);
                 a
             },
-            author: theme.author.clone(),
-            url: theme.url.clone(),
         }
     }
 
@@ -149,8 +149,8 @@ impl ThemeEditor {
         Some((
             name,
             crate::settings::CustomTheme {
-                author: self.author.clone(),
-                url: self.url.clone(),
+                author: self.author.text.trim().to_owned(),
+                url: self.url.text.trim().to_owned(),
                 bg: parse_hex(&self.bg.text)?,
                 fg: parse_hex(&self.fg.text)?,
                 fg_bright: parse_hex(&self.fg_bright.text)?,

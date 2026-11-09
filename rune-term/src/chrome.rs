@@ -225,19 +225,29 @@ fn theme_settings(model: &Model, p: &Palette) -> El {
         let tp = custom.to_arc_palette(name);
         themes = themes.child(theme_choice(&tp, p));
     }
+    let entry_h = 32.0_f32;
+    let gap = 4.0_f32;
+    let pad = 8.0_f32;
+    let count = theme::builtins().len() + model.config.custom_themes.len();
+    let content_h = if count == 0 {
+        pad * 2.0
+    } else {
+        pad * 2.0 + count as f32 * entry_h + (count.saturating_sub(1)) as f32 * gap
+    };
+    let list_h = content_h.min(220.0).max(entry_h + pad * 2.0);
     let theme_list = col()
         .w_full()
-        .h(180.0)
+        .h(list_h)
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
         .radius(8.0)
         .fill(crate::theme::linear(p.bg))
         .border(1.0, crate::theme::linear(p.active_border))
-        .pt(4.0)
-        .pb(4.0)
-        .pl(4.0)
-        .pr(4.0)
+        .pt(pad)
+        .pb(pad)
+        .pl(pad)
+        .pr(pad)
         .child(themes);
     let is_custom = model.config.is_custom_theme(&model.palette.name);
     let mut theme_header = row()
@@ -282,9 +292,15 @@ fn theme_editor_view(model: &Model) -> El {
         &str,
         &rune::TextEdit,
         fn(&mut Model) -> &mut rune::TextEdit,
-    ); 8] = [
+    ); 10] = [
         ("Name", "te-name", &editor.name, |m| {
             &mut m.theme_editor.as_mut().unwrap().name
+        }),
+        ("Author", "te-author", &editor.author, |m| {
+            &mut m.theme_editor.as_mut().unwrap().author
+        }),
+        ("URL", "te-url", &editor.url, |m| {
+            &mut m.theme_editor.as_mut().unwrap().url
         }),
         ("Background", "te-bg", &editor.bg, |m| {
             &mut m.theme_editor.as_mut().unwrap().bg
