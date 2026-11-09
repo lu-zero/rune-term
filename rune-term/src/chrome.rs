@@ -1,5 +1,6 @@
 //! One tab strip. The panes are [`crate::chrome_view`]. The cell tree is [`crate::split`].
 
+use rune::tok::{radius, space, type_};
 use rune::{col, el, row, text, text_input, Color, Cx, El, ScrollSpec, TextStyle};
 
 use crate::chrome_view;
@@ -82,7 +83,7 @@ fn settings_panel(model: &Model) -> El {
         }));
     let tabs = row()
         .w_full()
-        .gap(6.0)
+        .gap(space::S2)
         .child(settings_tab_chip(
             "Font",
             crate::model::SettingsTab::Font,
@@ -109,16 +110,16 @@ fn settings_panel(model: &Model) -> El {
         .child(body);
     let card = col()
         .key("settings")
-        .w(520.0)
+        .w(560.0)
         .h_full()
         .fill(theme::linear(p.tab_bg))
         .border(1.0, theme::linear(p.active_border))
-        .radius(12.0)
-        .gap(12.0)
-        .pl(18.0)
-        .pr(18.0)
-        .pt(16.0)
-        .pb(16.0)
+        .radius(radius::LG)
+        .gap(space::S3)
+        .pl(space::S6)
+        .pr(space::S6)
+        .pt(space::S3)
+        .pb(space::S3)
         .modal(true, |model: &mut Model| {
             model.settings_open = false;
             model.theme_editor = None;
@@ -148,11 +149,11 @@ fn settings_tab_chip(
 ) -> El {
     let selected = tab == active;
     el().key(format!("settings-tab-{label}"))
-        .pl(12.0)
-        .pr(12.0)
-        .pt(6.0)
-        .pb(6.0)
-        .radius(7.0)
+        .pl(space::S3)
+        .pr(space::S3)
+        .pt(space::S1)
+        .pb(space::S1)
+        .radius(radius::MD)
         .border(
             if selected { 1.5 } else { 1.0 },
             theme::linear(if selected { p.accent } else { p.active_border }),
@@ -169,45 +170,79 @@ fn settings_tab_chip(
         }))
 }
 
+fn settings_section(p: &Palette, title: &str, content: El) -> El {
+    col()
+        .w_full()
+        .grow(1.0)
+        .gap(space::S2)
+        .child(
+            text(title)
+                .font(type_::SECTION)
+                .color(theme::linear(p.muted))
+                .ml(space::S2),
+        )
+        .child(content)
+}
+
+fn settings_card(p: &Palette, content: El) -> El {
+    col()
+        .w_full()
+        .padding(space::S3)
+        .gap(space::S2)
+        .fill(theme::linear(p.bg))
+        .radius(radius::LG)
+        .border(1.0, theme::linear(p.active_border))
+        .child(content)
+}
+
 fn font_settings(model: &Model, p: &Palette) -> El {
     let (cw, ch) = model.cell_points;
     let size = model.font_size;
     let _ = (cw, ch);
+    let card = settings_card(
+        p,
+        col()
+            .w_full()
+            .gap(space::S3)
+            .child(
+                row()
+                    .w_full()
+                    .h(44.0)
+                    .gap(space::S2)
+                    .items_center()
+                    .child(settings_step("−", "font-dec", p, -1.0))
+                    .child(
+                        el().grow(1.0)
+                            .h(36.0)
+                            .center()
+                            .radius(radius::MD)
+                            .fill(theme::linear(p.bg))
+                            .border(1.0, theme::linear(p.active_border))
+                            .child(
+                                text(format!("{size:.0} pt · Cascadia Code NF"))
+                                    .color(text_color(p)),
+                            ),
+                    )
+                    .child(settings_step("+", "font-inc", p, 1.0)),
+            )
+            .child(
+                row()
+                    .w_full()
+                    .gap(space::S2)
+                    .child(font_preset(11.0, p))
+                    .child(font_preset(12.0, p))
+                    .child(font_preset(14.0, p))
+                    .child(font_preset(16.0, p))
+                    .child(font_preset(18.0, p))
+                    .child(font_preset(20.0, p)),
+            ),
+    );
     col()
         .w_full()
         .grow(1.0)
-        .gap(10.0)
-        .pb(8.0)
-        .child(
-            row()
-                .w_full()
-                .gap(8.0)
-                .items_center()
-                .child(settings_step("−", "font-dec", p, -1.0))
-                .child(
-                    el().grow(1.0)
-                        .h(34.0)
-                        .center()
-                        .radius(8.0)
-                        .fill(theme::linear(p.bg))
-                        .border(1.0, theme::linear(p.active_border))
-                        .child(
-                            text(format!("{size:.0} pt · Cascadia Code NF")).color(text_color(p)),
-                        ),
-                )
-                .child(settings_step("+", "font-inc", p, 1.0)),
-        )
-        .child(
-            row()
-                .w_full()
-                .gap(6.0)
-                .child(font_preset(11.0, p))
-                .child(font_preset(12.0, p))
-                .child(font_preset(14.0, p))
-                .child(font_preset(16.0, p))
-                .child(font_preset(18.0, p))
-                .child(font_preset(20.0, p)),
-        )
+        .gap(space::S3)
+        .pb(space::S2)
+        .child(settings_section(p, "Font", card))
 }
 
 fn theme_settings(model: &Model, p: &Palette) -> El {
@@ -226,17 +261,17 @@ fn theme_settings(model: &Model, p: &Palette) -> El {
     let theme_list = col()
         .w_full()
         .grow(1.0)
-        .min_h(0.0)
+        .min_h(220.0)
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
-        .radius(8.0)
+        .radius(radius::MD)
         .fill(crate::theme::linear(p.bg))
         .border(1.0, crate::theme::linear(p.active_border))
-        .pt(8.0)
-        .pb(4.0)
-        .pl(8.0)
-        .pr(8.0)
+        .pt(space::S2)
+        .pb(space::S1)
+        .pl(space::S2)
+        .pr(space::S2)
         .child(themes);
     let is_custom = model.config.is_custom_theme(&model.palette.name);
     let mut theme_actions = row().w_full().gap(6.0).items_center().justify_end();
@@ -255,9 +290,19 @@ fn theme_settings(model: &Model, p: &Palette) -> El {
     col()
         .w_full()
         .grow(1.0)
-        .gap(8.0)
-        .child(theme_actions)
-        .child(theme_list)
+        .gap(space::S3)
+        .pb(space::S2)
+        .child(settings_section(
+            p,
+            "Theme",
+            col()
+                .w_full()
+                .grow(1.0)
+                .min_h(0.0)
+                .gap(space::S2)
+                .child(theme_actions)
+                .child(theme_list),
+        ))
 }
 
 fn theme_editor_view(model: &Model) -> El {
@@ -415,7 +460,21 @@ fn theme_choice(choice: &Palette, current: &Palette) -> El {
         right = right.child(text(choice.author.as_str()).color(meta_color));
     }
     if !choice.url.is_empty() {
-        right = right.child(text("↗").color(meta_color));
+        let url = choice.url.clone();
+        let url_key = name.clone();
+        right = right.child(
+            el().key(format!("theme-url-{url_key}"))
+                .pl(4.0)
+                .pr(4.0)
+                .pt(2.0)
+                .pb(2.0)
+                .radius(4.0)
+                .hover(hover_overlay(current))
+                .on_press_tx(move |_model: &mut Model, _tx| {
+                    crate::hyperlink::open_uri(&url);
+                })
+                .child(text("↗").color(meta_color)),
+        );
     }
     row()
         .key(format!("theme-{name}"))
