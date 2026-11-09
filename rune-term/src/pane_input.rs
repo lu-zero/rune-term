@@ -270,11 +270,7 @@ pub fn on_pointer_move_mark(
         }
         if changed {
             tx.wake_after(Duration::ZERO);
-        } else {
-            tx.live_only();
         }
-    } else {
-        tx.live_only();
     }
 }
 
