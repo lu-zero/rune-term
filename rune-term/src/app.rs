@@ -156,8 +156,12 @@ pub fn apply_theme(model: &mut Model, _tx: &mut Tx, name: &str) {
     }
 }
 
-pub fn copy_theme(model: &mut Model, _tx: &mut Tx) {
-    let name = model.config.copy_theme(&model.palette.name);
+pub fn copy_theme(model: &mut Model, tx: &mut Tx) {
+    copy_theme_named(model, tx, &model.palette.name.clone());
+}
+
+pub fn copy_theme_named(model: &mut Model, _tx: &mut Tx, source_name: &str) {
+    let name = model.config.copy_theme(source_name);
     model.palette = model.config.resolve_palette();
     model.settings_tab = crate::model::SettingsTab::Theme;
     if let Some(custom) = model.config.custom_themes.get(&name) {
@@ -168,11 +172,18 @@ pub fn copy_theme(model: &mut Model, _tx: &mut Tx) {
     }
 }
 
-pub fn edit_theme(model: &mut Model, _tx: &mut Tx) {
-    let name = model.palette.name.clone();
+pub fn edit_theme(model: &mut Model, tx: &mut Tx) {
+    edit_theme_named(model, tx, &model.palette.name.clone());
+}
+
+pub fn edit_theme_named(model: &mut Model, _tx: &mut Tx, name: &str) {
     model.settings_tab = crate::model::SettingsTab::Theme;
-    if let Some(custom) = model.config.custom_themes.get(&name) {
-        model.theme_editor = Some(crate::model::ThemeEditor::from_custom(&name, custom));
+    if let Some(custom) = model.config.custom_themes.get(name) {
+        model.config.set_theme(name.to_owned());
+        model.palette = model.config.resolve_palette();
+        model.theme_editor = Some(crate::model::ThemeEditor::from_custom(name, custom));
+    } else if crate::theme::resolve_builtin(name).is_some() {
+        copy_theme_named(model, _tx, name);
     }
 }
 
@@ -226,15 +237,23 @@ pub fn save_theme_edit(model: &mut Model, _tx: &mut Tx) {
     }
 }
 
-pub fn delete_theme(model: &mut Model, _tx: &mut Tx) {
-    let name = model.palette.name.clone();
-    if !model.config.is_custom_theme(&name) {
+pub fn delete_theme(model: &mut Model, tx: &mut Tx) {
+    delete_theme_named(model, tx, &model.palette.name.clone());
+}
+
+pub fn delete_theme_named(model: &mut Model, _tx: &mut Tx, name: &str) {
+    if !model.config.is_custom_theme(name) {
         return;
     }
-    model.config.custom_themes.remove(&name);
-    model.theme_editor = None;
-    model.config.set_theme("Flexoki Black".to_owned());
-    model.palette = model.config.resolve_palette();
+    model.config.custom_themes.remove(name);
+    if model.theme_editor.as_ref().is_some_and(|e| e.original_name == name) {
+        model.theme_editor = None;
+    }
+    if model.palette.name == name {
+        model.config.set_theme("Flexoki Black".to_owned());
+        model.palette = model.config.resolve_palette();
+        model.theme_drawn = String::new();
+    }
     if let Err(err) = model.config.save() {
         eprintln!("rune-term: failed to save settings: {err}");
     }

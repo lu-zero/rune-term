@@ -273,37 +273,12 @@ fn theme_settings(model: &Model, p: &Palette) -> El {
         .pl(space::S2)
         .pr(space::S2)
         .child(themes);
-    let is_custom = model.config.is_custom_theme(&model.palette.name);
-    let mut theme_actions = row().w_full().gap(6.0).items_center().justify_end();
-    if is_custom {
-        theme_actions = theme_actions.child(settings_chip("✎", "theme-edit", p, |model, tx| {
-            crate::app::edit_theme(model, tx);
-        }));
-        theme_actions =
-            theme_actions.child(settings_chip("Delete", "theme-delete", p, |model, tx| {
-                crate::app::delete_theme(model, tx);
-            }));
-    } else {
-        theme_actions = theme_actions.child(settings_chip("✎", "theme-copy", p, |model, tx| {
-            crate::app::copy_theme(model, tx);
-        }));
-    }
     col()
         .w_full()
         .grow(1.0)
         .gap(space::S3)
         .pb(space::S2)
-        .child(settings_section(
-            p,
-            "Theme",
-            col()
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .gap(space::S2)
-                .child(theme_actions)
-                .child(theme_list),
-        ))
+        .child(settings_section(p, "Theme", theme_list))
 }
 
 fn theme_editor_view(model: &Model) -> El {
@@ -456,7 +431,8 @@ fn theme_choice(choice: &Palette, current: &Palette) -> El {
         crate::theme::linear(current.fg)
     };
     let meta_color = crate::theme::linear(current.muted);
-    let mut right = row().gap(8.0).items_center();
+    let is_builtin = crate::theme::resolve_builtin(&choice.name).is_some();
+    let mut right = row().gap(6.0).items_center();
     if !choice.author.is_empty() {
         right = right.child(text(choice.author.as_str()).color(meta_color));
     }
@@ -465,10 +441,9 @@ fn theme_choice(choice: &Palette, current: &Palette) -> El {
         let url_key = name.clone();
         right = right.child(
             el().key(format!("theme-url-{url_key}"))
-                .pl(4.0)
-                .pr(4.0)
-                .pt(2.0)
-                .pb(2.0)
+                .w(22.0)
+                .h(22.0)
+                .center()
                 .radius(4.0)
                 .hover(hover_overlay(current))
                 .on_press_tx(move |_model: &mut Model, _tx| {
@@ -477,12 +452,21 @@ fn theme_choice(choice: &Palette, current: &Palette) -> El {
                 .child(text("↗").color(meta_color)),
         );
     }
+    let edit_name = name.clone();
+    right = right.child(row_action("✎", &format!("theme-edit-{name}"), current, true, move |model, tx| {
+        crate::app::edit_theme_named(model, tx, &edit_name);
+    }));
+    let del_name = name.clone();
+    let del_enabled = !is_builtin;
+    right = right.child(row_action("✕", &format!("theme-del-{name}"), current, del_enabled, move |model, tx| {
+        crate::app::delete_theme_named(model, tx, &del_name);
+    }));
     row()
         .key(format!("theme-{name}"))
         .w_full()
-        .h(32.0)
+        .h(34.0)
         .pl(10.0)
-        .pr(10.0)
+        .pr(6.0)
         .gap(10.0)
         .items_center()
         .justify_between()
@@ -501,6 +485,29 @@ fn theme_choice(choice: &Palette, current: &Palette) -> El {
                 .color(name_color),
         )
         .child(right)
+}
+
+fn row_action(
+    label: &str,
+    key: &str,
+    p: &Palette,
+    enabled: bool,
+    on_press: impl Fn(&mut Model, &mut rune::Tx) + 'static,
+) -> El {
+    let color = if enabled {
+        crate::theme::linear(p.fg)
+    } else {
+        crate::theme::linear(p.muted)
+    };
+    let mut e = el().key(key)
+        .w(22.0)
+        .h(22.0)
+        .center()
+        .radius(4.0);
+    if enabled {
+        e = e.hover(hover_overlay(p)).on_press_tx(on_press);
+    }
+    e.child(text(label).color(color))
 }
 
 fn settings_chip(
