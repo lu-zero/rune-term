@@ -178,6 +178,22 @@ pub fn edit_theme(model: &mut Model, _tx: &mut Tx) {
 
 pub fn cancel_theme_edit(model: &mut Model, _tx: &mut Tx) {
     model.theme_editor = None;
+    model.palette = model.config.resolve_palette();
+    model.theme_drawn = String::new();
+}
+
+pub fn preview_theme_edit(model: &mut Model, _tx: &mut Tx) {
+    let Some(editor) = &model.theme_editor else {
+        return;
+    };
+    let fallback = model
+        .config
+        .custom_themes
+        .get(&editor.original_name)
+        .cloned()
+        .unwrap_or_else(|| crate::settings::CustomTheme::from_palette(&model.palette));
+    model.palette = editor.preview_palette(&fallback);
+    model.theme_drawn = String::new();
 }
 
 pub fn save_theme_edit(model: &mut Model, _tx: &mut Tx) {
@@ -198,11 +214,13 @@ pub fn save_theme_edit(model: &mut Model, _tx: &mut Tx) {
             || model.config.custom_themes.contains_key(&name))
     {
         model.theme_editor = Some(crate::model::ThemeEditor::from_custom(&original, &custom));
+        model.theme_drawn = String::new();
         return;
     }
     model.config.custom_themes.insert(name.clone(), custom);
     model.config.set_theme(name);
     model.palette = model.config.resolve_palette();
+    model.theme_drawn = String::new();
     if let Err(err) = model.config.save() {
         eprintln!("rune-term: failed to save settings: {err}");
     }

@@ -162,6 +162,33 @@ impl ThemeEditor {
             },
         ))
     }
+
+    pub fn preview_palette(
+        &self,
+        fallback: &crate::settings::CustomTheme,
+    ) -> Arc<crate::theme::Palette> {
+        let custom = crate::settings::CustomTheme {
+            author: self.author.text.trim().to_owned(),
+            url: self.url.text.trim().to_owned(),
+            bg: parse_hex(&self.bg.text).unwrap_or(fallback.bg),
+            fg: parse_hex(&self.fg.text).unwrap_or(fallback.fg),
+            fg_bright: parse_hex(&self.fg_bright.text).unwrap_or(fallback.fg_bright),
+            muted: parse_hex(&self.muted.text).unwrap_or(fallback.muted),
+            tab_bg: parse_hex(&self.tab_bg.text).unwrap_or(fallback.tab_bg),
+            active_border: parse_hex(&self.active_border.text).unwrap_or(fallback.active_border),
+            accent: parse_hex(&self.accent.text).unwrap_or(fallback.accent),
+            ansi16: self.ansi16.clone(),
+        };
+        let name = {
+            let n = self.name.text.trim();
+            if n.is_empty() {
+                &self.original_name
+            } else {
+                n
+            }
+        };
+        custom.to_arc_palette(name)
+    }
 }
 
 fn hex6(v: u32) -> String {
