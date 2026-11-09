@@ -1,5 +1,12 @@
 //! Terminal and UI palettes. Flexoki Black (pure black bg) is the default.
-//! <https://stephango.com/flexoki>
+//!
+//! Palette credits:
+//! - Flexoki: Steph Ango, <https://stephango.com/flexoki>
+//! - Dracula: Dracula Theme, <https://draculatheme.com>
+//! - Nord: Sven Greb / Arctic Ice Studio, <https://www.nordtheme.com>
+//! - Solarized: Ethan Schoonover, <https://ethanschoonover.com/solarized/>
+//! - Gruvbox: Pavel Pertsev (morhetz), <https://github.com/morhetz/gruvbox>
+//! - Catppuccin Mocha: Catppuccin, <https://catppuccin.com>
 
 use rune::color::srgb_decode;
 use rune::Color;
@@ -177,6 +184,7 @@ pub const FLEXOKI_LIGHT: Palette = Palette {
     ],
 };
 
+/// <https://draculatheme.com>
 pub const DRACULA: Palette = Palette {
     name: "Dracula",
     bg: 0x282A_36,
@@ -206,6 +214,7 @@ pub const DRACULA: Palette = Palette {
     ],
 };
 
+/// <https://www.nordtheme.com>
 pub const NORD: Palette = Palette {
     name: "Nord",
     bg: 0x2E34_40,
@@ -235,6 +244,7 @@ pub const NORD: Palette = Palette {
     ],
 };
 
+/// <https://ethanschoonover.com/solarized/>
 pub const SOLARIZED_DARK: Palette = Palette {
     name: "Solarized Dark",
     bg: 0x002B_36,
@@ -264,6 +274,7 @@ pub const SOLARIZED_DARK: Palette = Palette {
     ],
 };
 
+/// <https://ethanschoonover.com/solarized/>
 pub const SOLARIZED_LIGHT: Palette = Palette {
     name: "Solarized Light",
     bg: 0xFDF6_E3,
@@ -293,6 +304,7 @@ pub const SOLARIZED_LIGHT: Palette = Palette {
     ],
 };
 
+/// <https://github.com/morhetz/gruvbox>
 pub const GRUVBOX_DARK: Palette = Palette {
     name: "Gruvbox Dark",
     bg: 0x2828_28,
@@ -322,6 +334,7 @@ pub const GRUVBOX_DARK: Palette = Palette {
     ],
 };
 
+/// <https://catppuccin.com>
 pub const CATPPUCCIN_MOCHA: Palette = Palette {
     name: "Catppuccin Mocha",
     bg: 0x1E1E_2E,
