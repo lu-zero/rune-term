@@ -1,4 +1,4 @@
-//! Terminal and UI palettes. Flexoki is the default.
+//! Terminal and UI palettes. Flexoki Black (pure black bg) is the default.
 //! <https://stephango.com/flexoki>
 
 use rune::color::srgb_decode;
@@ -32,6 +32,7 @@ impl Palette {
 }
 
 pub const BUILTINS: &[Palette] = &[
+    FLEXOKI_BLACK,
     FLEXOKI_DARK,
     FLEXOKI_LIGHT,
     DRACULA,
@@ -47,7 +48,7 @@ pub fn resolve(name: &str) -> &'static Palette {
     BUILTINS
         .iter()
         .find(|p| p.name.eq_ignore_ascii_case(name))
-        .unwrap_or(&FLEXOKI_DARK)
+        .unwrap_or(&FLEXOKI_BLACK)
 }
 
 pub const fn hex(value: u32) -> [u8; 3] {
@@ -87,8 +88,9 @@ pub fn linear(value: u32) -> Color {
     }
 }
 
-pub const FLEXOKI_DARK: Palette = Palette {
-    name: "Flexoki Dark",
+/// Flexoki dark with a pure black background.
+pub const FLEXOKI_BLACK: Palette = Palette {
+    name: "Flexoki Black",
     bg: 0x0000_00,
     fg: 0xCECD_C3,
     fg_bright: 0xE6E4_D9,
@@ -113,6 +115,36 @@ pub const FLEXOKI_DARK: Palette = Palette {
         hex(0xCE5D_97),
         hex(0x3AA9_9F),
         hex(0xE6E4_D9),
+    ],
+};
+
+/// Flexoki dark using the palette's base background.
+pub const FLEXOKI_DARK: Palette = Palette {
+    name: "Flexoki Dark",
+    bg: 0x100F_0F,
+    fg: 0xCECD_C3,
+    fg_bright: 0xFFFC_F0,
+    muted: 0x8785_80,
+    tab_bg: 0x1C1B_1A,
+    active_border: 0x2827_26,
+    accent: 0x205E_A6,
+    ansi16: [
+        hex(0x100F_0F),
+        hex(0xAF30_29),
+        hex(0x6680_0B),
+        hex(0xAD83_01),
+        hex(0x205E_A6),
+        hex(0xA02F_6F),
+        hex(0x2483_7B),
+        hex(0xCECD_C3),
+        hex(0x5756_53),
+        hex(0xD14D_41),
+        hex(0x879A_39),
+        hex(0xD0A2_15),
+        hex(0x4385_BE),
+        hex(0xCE5D_97),
+        hex(0x3AA9_9F),
+        hex(0xFFFC_F0),
     ],
 };
 

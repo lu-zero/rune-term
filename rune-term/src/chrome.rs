@@ -1,6 +1,6 @@
 //! One tab strip. The panes are [`crate::chrome_view`]. The cell tree is [`crate::split`].
 
-use rune::{col, el, row, text, Color, Cx, El};
+use rune::{col, el, row, text, Color, Cx, El, ScrollSpec};
 
 use crate::chrome_view;
 use crate::model::Model;
@@ -73,10 +73,24 @@ fn settings_panel(model: &Model) -> El {
     let p = model.palette;
     let (cw, ch) = model.cell_points;
     let size = model.font_size;
-    let mut themes = row().w_full().gap(6.0);
+    let mut themes = col().w_full().gap(4.0);
     for t in theme::BUILTINS {
         themes = themes.child(theme_choice(t, p));
     }
+    let theme_list = col()
+        .w_full()
+        .h(110.0)
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        })
+        .radius(8.0)
+        .fill(crate::theme::linear(p.bg))
+        .border(1.0, crate::theme::linear(p.active_border))
+        .pt(4.0)
+        .pb(4.0)
+        .pl(4.0)
+        .pr(4.0)
+        .child(themes);
     let card = col()
         .key("settings")
         .w(440.0)
@@ -147,7 +161,7 @@ fn settings_panel(model: &Model) -> El {
                 .w_full()
                 .gap(8.0)
                 .child(text("Theme").color(text_color(p)))
-                .child(themes)
+                .child(theme_list)
                 .child(text(p.name).color(theme::linear(p.muted))),
         );
     rune::el()
@@ -166,20 +180,21 @@ fn theme_choice(choice: &'static Palette, current: &'static Palette) -> El {
     } else {
         current.active_border
     };
-    let fill = if active { choice.tab_bg } else { choice.bg };
+    let fill = if active { current.tab_bg } else { current.bg };
     el().key(format!("theme-{}", choice.name))
-        .pl(8.0)
-        .pr(8.0)
-        .pt(5.0)
-        .pb(5.0)
-        .radius(7.0)
+        .w_full()
+        .h(32.0)
+        .pl(10.0)
+        .pr(10.0)
+        .items_center()
+        .radius(6.0)
         .border(if active { 1.5 } else { 1.0 }, crate::theme::linear(border))
         .fill(crate::theme::linear(fill))
         .focusable(true)
         .on_press_tx(move |model: &mut Model, tx: &mut rune::Tx| {
             crate::app::apply_theme(model, tx, choice.name);
         })
-        .child(text(choice.name).color(crate::theme::linear(choice.fg)))
+        .child(text(choice.name).color(text_color(current)))
 }
 
 fn settings_chip(

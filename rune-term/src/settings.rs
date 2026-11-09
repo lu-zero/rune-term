@@ -40,7 +40,7 @@ impl Default for Settings {
         Self {
             default_profile: "Default".to_owned(),
             font_size: DEFAULT_FONT_SIZE,
-            theme: "Flexoki Dark".to_owned(),
+            theme: "Flexoki Black".to_owned(),
         }
     }
 }

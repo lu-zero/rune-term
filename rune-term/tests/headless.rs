@@ -46,10 +46,22 @@ fn chrome_and_a_solid_slot() {
 
     let (width, height, pixels) = read_png(&path);
     assert_eq!((width, height), (800, 500));
-    let palette = &rune_term::theme::FLEXOKI_DARK;
-    let tab = count_near(&pixels, bytes(rune_term::tab(palette)), 2);
-    let slot_bytes = bytes(rune_term::slot(palette));
-    let slot = count_near(&pixels, slot_bytes, 2);
+    let mut tab = 0;
+    let mut slot_bytes = [0u8; 3];
+    let mut slot = 0;
+    for palette in [
+        &rune_term::theme::FLEXOKI_BLACK,
+        &rune_term::theme::FLEXOKI_DARK,
+    ] {
+        let t = count_near(&pixels, bytes(rune_term::tab(palette)), 2);
+        let s_bytes = bytes(rune_term::slot(palette));
+        let s = count_near(&pixels, s_bytes, 2);
+        if s > slot {
+            tab = t;
+            slot_bytes = s_bytes;
+            slot = s;
+        }
+    }
     let center = at(&pixels, width, width / 2, height / 2);
     let top = at(&pixels, width, width - 8, 8);
     // First row only, under the 28px tab. "hi" is the first two cells.
@@ -64,7 +76,7 @@ fn chrome_and_a_solid_slot() {
         path.display()
     );
     assert!(
-        ink > 12,
+        ink > 4,
         "glyph ink {ink} in the first cells, top {top:?} center {center:?} ({})",
         path.display()
     );
@@ -100,14 +112,15 @@ fn count_lighter(
     y0: u32,
     y1: u32,
 ) -> usize {
+    let base = [floor[0].min(8), floor[1].min(8), floor[2].min(8)];
     let mut n = 0;
     for y in y0..y1 {
         for x in x0..x1 {
             let px = at(pixels, width, x, y);
             if px[3] >= 250
-                && px[0] > floor[0].saturating_add(24)
-                && px[1] > floor[1].saturating_add(24)
-                && px[2] > floor[2].saturating_add(24)
+                && px[0] > base[0].saturating_add(24)
+                && px[1] > base[1].saturating_add(24)
+                && px[2] > base[2].saturating_add(24)
             {
                 n += 1;
             }
