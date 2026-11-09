@@ -71,43 +71,78 @@ pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
 
 fn settings_panel(model: &Model) -> El {
     let (cw, ch) = model.cell_points;
+    let size = model.font_size;
     let card = col()
         .key("settings")
-        .w(360.0)
+        .w(420.0)
         .fill(theme::linear(theme::TAB_BG))
         .border(1.0, theme::linear(theme::ACTIVE_BORDER))
-        .radius(8.0)
-        .gap(10.0)
-        .pl(16.0)
-        .pr(16.0)
-        .pt(14.0)
-        .pb(14.0)
+        .radius(12.0)
+        .gap(14.0)
+        .pl(18.0)
+        .pr(18.0)
+        .pt(16.0)
+        .pb(16.0)
         .modal(true, |model: &mut Model| {
             model.settings_open = false;
         })
-        .child(text("Settings").color(text_color()))
         .child(
-            text(format!(
-                "Font: Cascadia Code NF, 14pt (cell {cw:.1}×{ch:.1}pt)"
-            ))
-            .color(theme::linear(theme::MUTED)),
+            row()
+                .w_full()
+                .items_center()
+                .justify_between()
+                .child(text("Settings").color(text_color()))
+                .child(settings_chip("Close", "close-settings", |model, _tx| {
+                    model.settings_open = false;
+                })),
         )
-        .child(text("Theme: Flexoki dark (fixed)").color(theme::linear(theme::MUTED)))
         .child(
-            row().w_full().justify_center().child(
-                el().key("close-settings")
-                    .pl(12.0)
-                    .pr(12.0)
-                    .pt(6.0)
-                    .pb(6.0)
-                    .radius(6.0)
-                    .border(1.0, theme::linear(theme::ACTIVE_BORDER))
-                    .focusable(true)
-                    .on_press_tx(|model: &mut Model, _tx| {
-                        model.settings_open = false;
-                    })
-                    .child(text("Close").color(text_color())),
-            ),
+            col()
+                .w_full()
+                .gap(8.0)
+                .child(text("Font size").color(text_color()))
+                .child(
+                    row()
+                        .w_full()
+                        .gap(8.0)
+                        .items_center()
+                        .child(settings_step("−", "font-dec", -1.0))
+                        .child(
+                            el().grow(1.0)
+                                .h(34.0)
+                                .center()
+                                .radius(8.0)
+                                .fill(theme::linear(theme::BG))
+                                .border(1.0, theme::linear(theme::ACTIVE_BORDER))
+                                .child(
+                                    text(format!("{size:.0} pt · Cascadia Code NF"))
+                                        .color(text_color()),
+                                ),
+                        )
+                        .child(settings_step("+", "font-inc", 1.0)),
+                )
+                .child(
+                    row()
+                        .w_full()
+                        .gap(6.0)
+                        .child(font_preset(11.0))
+                        .child(font_preset(12.0))
+                        .child(font_preset(14.0))
+                        .child(font_preset(16.0))
+                        .child(font_preset(18.0))
+                        .child(font_preset(20.0)),
+                )
+                .child(
+                    text(format!("Cell {cw:.1}×{ch:.1} pt · saved to config"))
+                        .color(theme::linear(theme::MUTED)),
+                ),
+        )
+        .child(
+            col()
+                .w_full()
+                .gap(4.0)
+                .child(text("Theme").color(text_color()))
+                .child(text("Flexoki dark (fixed)").color(theme::linear(theme::MUTED))),
         );
     rune::el()
         .key("settings-overlay")
@@ -116,6 +151,52 @@ fn settings_panel(model: &Model) -> El {
         .h_full()
         .center()
         .child(card)
+}
+
+fn settings_chip(label: &str, key: &str, on_press: fn(&mut Model, &mut rune::Tx)) -> El {
+    el().key(key)
+        .pl(10.0)
+        .pr(10.0)
+        .pt(5.0)
+        .pb(5.0)
+        .radius(7.0)
+        .border(1.0, theme::linear(theme::ACTIVE_BORDER))
+        .fill(theme::linear(theme::TAB_BG))
+        .focusable(true)
+        .on_press_tx(on_press)
+        .child(text(label).color(text_color()))
+}
+
+fn settings_step(label: &str, key: &str, delta: f32) -> El {
+    el().key(key)
+        .w(34.0)
+        .h(34.0)
+        .center()
+        .radius(8.0)
+        .border(1.0, theme::linear(theme::ACTIVE_BORDER))
+        .fill(theme::linear(theme::TAB_BG))
+        .focusable(true)
+        .on_press_tx(move |model: &mut Model, tx: &mut rune::Tx| {
+            crate::app::apply_font_size(model, tx, model.font_size + delta);
+        })
+        .child(text(label).color(text_color()))
+}
+
+fn font_preset(size: f32) -> El {
+    let key = format!("font-{size:.0}");
+    let label = format!("{size:.0}");
+    el().key(key)
+        .grow(1.0)
+        .h(28.0)
+        .center()
+        .radius(7.0)
+        .border(1.0, theme::linear(theme::ACTIVE_BORDER))
+        .fill(theme::linear(theme::TAB_BG))
+        .focusable(true)
+        .on_press_tx(move |model: &mut Model, tx: &mut rune::Tx| {
+            crate::app::apply_font_size(model, tx, size);
+        })
+        .child(text(label).color(theme::linear(theme::MUTED)))
 }
 
 fn confirm_open_link(uri: &str) -> El {

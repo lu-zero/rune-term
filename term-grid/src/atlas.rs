@@ -16,33 +16,44 @@ pub const ATLAS_SIZE: u32 = 2048;
 const FONT: &[u8] = include_bytes!("../CascadiaCodeNF.ttf");
 
 /// Rio's default font size, in points.
-const FACE_PX: f32 = 14.0;
+const DEFAULT_FACE_PX: f32 = 14.0;
 
-/// Cell pitch of the regular face at [`FACE_PX`], in points. Width is the
+/// Cell pitch of the regular face at 14 points.
+pub fn face_cell() -> (f32, f32) {
+    face_cell_for(DEFAULT_FACE_PX)
+}
+
+/// Cell pitch of the regular face at `font_size` points, in points. Width is the
 /// ASCII advance. Height is Rio's line box: ascent, descent, and twice the
 /// line gap. Icon glyphs in the Nerd Font file are wider than that advance
 /// and do not set the cell.
-pub fn face_cell() -> (f32, f32) {
-    static CELL: std::sync::OnceLock<(f32, f32)> = std::sync::OnceLock::new();
-    *CELL.get_or_init(|| {
-        let Some(font) = FontRef::from_index(FONT, 0) else {
-            return (8.0, 16.0);
-        };
-        let coords = regular_coords(&font);
-        let metrics = font.metrics(&coords).scale(FACE_PX);
-        let advance = font
-            .glyph_metrics(&coords)
-            .scale(FACE_PX)
-            .advance_width(font.charmap().map('0'));
-        let width = if advance > 0.0 {
-            advance
-        } else {
-            metrics.max_width
-        };
-        let body = metrics.ascent.abs() + metrics.descent.abs();
-        let height = (body + metrics.leading * 2.0).max(body);
-        (width.ceil().max(1.0), height.ceil().max(1.0))
-    })
+pub fn face_cell_for(font_size: f32) -> (f32, f32) {
+    let font_size = if font_size.is_finite() && font_size > 0.0 {
+        font_size
+    } else {
+        DEFAULT_FACE_PX
+    };
+    let Some(font) = FontRef::from_index(FONT, 0) else {
+        let scale = font_size / DEFAULT_FACE_PX;
+        return (
+            (8.0 * scale).ceil().max(1.0),
+            (16.0 * scale).ceil().max(1.0),
+        );
+    };
+    let coords = regular_coords(&font);
+    let metrics = font.metrics(&coords).scale(font_size);
+    let advance = font
+        .glyph_metrics(&coords)
+        .scale(font_size)
+        .advance_width(font.charmap().map('0'));
+    let width = if advance > 0.0 {
+        advance
+    } else {
+        metrics.max_width
+    };
+    let body = metrics.ascent.abs() + metrics.descent.abs();
+    let height = (body + metrics.leading * 2.0).max(body);
+    (width.ceil().max(1.0), height.ceil().max(1.0))
 }
 
 fn regular_coords(font: &FontRef<'_>) -> Vec<NormalizedCoord> {

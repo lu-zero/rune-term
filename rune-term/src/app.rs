@@ -59,6 +59,9 @@ pub fn perform_resize(tx: &mut Tx, host: &crate::surfaces::HostSurface, effect: 
 }
 
 pub fn on_pane_layout(model: &mut Model, slot: (f32, f32), scale: f32, tx: &mut Tx) {
+    if scale.is_finite() && scale > 0.0 {
+        model.scale = scale;
+    }
     let Some(effect) = fit_layout(model, slot, scale) else {
         return;
     };
@@ -76,6 +79,9 @@ pub fn on_pane_layout(model: &mut Model, slot: (f32, f32), scale: f32, tx: &mut 
 /// The layout callback reports the rect on the following frame, so the
 /// paint path calls this with the rect it is about to draw.
 pub fn fit_layout(model: &mut Model, slot: (f32, f32), scale: f32) -> Option<ResizeEffect> {
+    if scale.is_finite() && scale > 0.0 {
+        model.scale = scale;
+    }
     let cell_points = model.cell_points;
     let host = model.surfaces.primary_mut()?;
     let effect = resize::apply(ResizeRequest::Layout {
@@ -101,6 +107,36 @@ pub fn fit_layout(model: &mut Model, slot: (f32, f32), scale: f32) -> Option<Res
         host.resized.store(true, Ordering::Release);
     }
     Some(effect)
+}
+
+pub fn apply_font_size(model: &mut Model, tx: &mut Tx, size: f32) {
+    let size = crate::settings::clamp_font_size(size);
+    if (size - model.font_size).abs() < f32::EPSILON {
+        return;
+    }
+    model.font_size = size;
+    model.config.set_font_size(size);
+    model.cell_points = crate::metrics::cell_points_for(size);
+    let scale = if model.scale.is_finite() && model.scale > 0.0 {
+        model.scale
+    } else {
+        1.0
+    };
+    let Some(host) = model.surfaces.primary() else {
+        let _ = model.config.save();
+        return;
+    };
+    let effect = resize::apply(ResizeRequest::Font {
+        chrome_points: (0.0, crate::chrome::TITLEBAR_H),
+        cols: host.cols.max(1),
+        rows: host.rows.max(1),
+        cell_points: model.cell_points,
+        scale,
+    });
+    perform_resize(tx, host, effect);
+    if let Err(err) = model.config.save() {
+        eprintln!("rune-term: failed to save settings: {err}");
+    }
 }
 
 #[derive(Default)]

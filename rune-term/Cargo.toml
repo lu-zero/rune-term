@@ -20,6 +20,8 @@ librio.workspace = true
 term-grid = { path = "../term-grid" }
 term-input = { path = "../term-input" }
 wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
 
 [features]
 default = ["pty"]

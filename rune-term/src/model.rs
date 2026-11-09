@@ -6,6 +6,7 @@ use rune::TextEdit;
 use crate::chrome::{Leaf, LeafId, Node, Tab, LEAF, PANE_MARK};
 use crate::delegate::{self, Shared};
 use crate::metrics;
+use crate::settings::ConfigFile;
 use crate::surfaces::Surfaces;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -20,6 +21,9 @@ pub struct Model {
     pub active: usize,
     pub surfaces: Surfaces,
     pub cell_points: (f32, f32),
+    pub scale: f32,
+    pub config: ConfigFile,
+    pub font_size: f32,
     pub blink_phase_on: bool,
     /// Filled by the IME change. The view does not read this.
     pub preedit: Option<Preedit>,
@@ -45,6 +49,9 @@ pub fn init() -> Model {
     let shared = Shared::new();
     delegate::publish(&shared);
     let engine = Engine::new(shared.delegate());
+    let config = ConfigFile::load();
+    let resolved = config.resolve();
+    let font_size = resolved.font_size;
     Model {
         engine,
         tabs: vec![Tab {
@@ -60,7 +67,10 @@ pub fn init() -> Model {
         }],
         active: 0,
         surfaces: Surfaces::new(),
-        cell_points: metrics::cell_points(),
+        cell_points: metrics::cell_points_for(font_size),
+        scale: 1.0,
+        config,
+        font_size,
         blink_phase_on: true,
         preedit: None,
         cursor_cell: (0, 0),

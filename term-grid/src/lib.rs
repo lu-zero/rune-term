@@ -11,7 +11,7 @@ mod sixel;
 mod solid;
 mod sprite;
 
-pub use atlas::{face_cell, Atlas, GlyphRect};
+pub use atlas::{face_cell, face_cell_for, Atlas, GlyphRect};
 pub use cell::{CellSample, CursorSample, GridSource};
 pub use renderer::{DrawSlot, GridRenderer};
 pub use solid::SolidSlot;
