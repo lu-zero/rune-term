@@ -168,7 +168,7 @@ fn hex6(v: u32) -> String {
     format!("#{:06X}", v & 0x00FF_FFFF)
 }
 
-fn parse_hex(s: &str) -> Option<u32> {
+pub(crate) fn parse_hex(s: &str) -> Option<u32> {
     let s = s.trim();
     let s = s
         .strip_prefix('#')

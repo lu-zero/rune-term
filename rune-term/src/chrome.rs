@@ -370,6 +370,34 @@ fn editor_row(
     p: &Palette,
     on_edit: fn(&mut Model) -> &mut rune::TextEdit,
 ) -> El {
+    let swatch = crate::model::parse_hex(&edit.text);
+    let mut input_row = row().grow(1.0).min_w(0.0).h(32.0).gap(8.0).items_center();
+    if let Some(color) = swatch {
+        input_row = input_row.child(
+            el().w(20.0)
+                .h(20.0)
+                .radius(4.0)
+                .fill(crate::theme::linear(color))
+                .border(1.0, crate::theme::linear(p.active_border)),
+        );
+    }
+    input_row = input_row.child(
+        text_input(edit, TextStyle::new(13.0, 400.0))
+            .key(key)
+            .single_line()
+            .grow(1.0)
+            .h(30.0)
+            .pl(10.0)
+            .pr(10.0)
+            .pt(7.0)
+            .pb(7.0)
+            .radius(6.0)
+            .items_center()
+            .fill(crate::theme::linear(p.tab_bg))
+            .border(1.0, crate::theme::linear(p.active_border))
+            .color(text_color(p))
+            .on_edit(on_edit),
+    );
     row()
         .w_full()
         .h(32.0)
@@ -381,25 +409,7 @@ fn editor_row(
                 .items_center()
                 .child(text(label).color(theme::linear(p.muted))),
         )
-        .child(
-            el().grow(1.0).h(32.0).items_center().child(
-                text_input(edit, TextStyle::new(13.0, 400.0))
-                    .key(key)
-                    .single_line()
-                    .w_full()
-                    .h(30.0)
-                    .pl(10.0)
-                    .pr(10.0)
-                    .pt(7.0)
-                    .pb(7.0)
-                    .radius(6.0)
-                    .items_center()
-                    .fill(crate::theme::linear(p.tab_bg))
-                    .border(1.0, crate::theme::linear(p.active_border))
-                    .color(text_color(p))
-                    .on_edit(on_edit),
-            ),
-        )
+        .child(input_row)
 }
 
 fn theme_choice(choice: &Palette, current: &Palette) -> El {
