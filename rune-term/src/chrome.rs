@@ -176,6 +176,7 @@ fn font_settings(model: &Model, p: &Palette) -> El {
         .w_full()
         .grow(1.0)
         .gap(10.0)
+        .pb(8.0)
         .child(text("Font size").color(text_color(p)))
         .child(
             row()
