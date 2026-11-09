@@ -164,9 +164,7 @@ fn settings_panel(model: &Model) -> El {
                 .child(theme_list)
                 .child(text(p.name).color(theme::linear(p.muted)))
                 .child(text(format!("Palette by {}", p.author)).color(theme::linear(p.muted)))
-                .child(
-                    text("Palette colors © their respective authors").color(theme::linear(p.muted)),
-                ),
+                .child(text(p.url).color(theme::linear(p.muted))),
         );
     rune::el()
         .key("settings-overlay")
