@@ -424,8 +424,16 @@ fn theme_choice(choice: &Palette, current: &Palette) -> El {
     };
     let fill = if active { current.tab_bg } else { current.bg };
     let name = choice.name.clone();
-    let label = name.clone();
-    el().key(format!("theme-{label}"))
+    let mut label = name.clone();
+    if !choice.author.is_empty() {
+        label.push_str(" · ");
+        label.push_str(&choice.author);
+    }
+    if !choice.url.is_empty() {
+        label.push(' ');
+        label.push_str(&choice.url);
+    }
+    el().key(format!("theme-{name}"))
         .w_full()
         .h(32.0)
         .pl(10.0)
@@ -438,7 +446,17 @@ fn theme_choice(choice: &Palette, current: &Palette) -> El {
         .on_press_tx(move |model: &mut Model, tx: &mut rune::Tx| {
             crate::app::apply_theme(model, tx, &name);
         })
-        .child(text(label).color(text_color(current)))
+        .child(
+            text(label)
+                .grow(1.0)
+                .min_w(0.0)
+                .truncate()
+                .color(if active {
+                    text_color(current)
+                } else {
+                    crate::theme::linear(current.muted)
+                }),
+        )
 }
 
 fn settings_chip(
