@@ -57,8 +57,9 @@ The numbers are that plan's.
       uploaded/cached by image stamp, and drawn in z-buckets (under-text and
       over-text) around the grid pass. Headless `graphics` test injects a small
       kitty image and verifies pixels. Sixel/iTerm2 remain item 18.
-- [ ] **16. Settings.** The palette and the 14 point face are fixed in the
-      tree.
+- [~] **16. Settings.** Cmd+, opens a minimal settings modal showing the
+      fixed font (Cascadia Code NF 14pt, cell metrics) and Flexoki dark theme.
+      Live font-size/palette changes and persistence are not wired yet.
 - [x] **17. Box-drawing and braille sprites.** Box drawing, block elements
       (`U+2580–U+259F`), braille, legacy computing sextants/octants, powerline/
       extra separators (`U+E0B0–U+E0BF`, `U+E0D2`, `U+E0D4`), geometric corner

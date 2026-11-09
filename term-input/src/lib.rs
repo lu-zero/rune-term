@@ -376,6 +376,7 @@ fn cmd_chord_key(key: PhysicalKeyCode) -> bool {
             | PhysicalKeyCode::KeyC
             | PhysicalKeyCode::KeyV
             | PhysicalKeyCode::KeyA
+            | PhysicalKeyCode::Comma
             | PhysicalKeyCode::Digit1
             | PhysicalKeyCode::Digit2
             | PhysicalKeyCode::Digit3

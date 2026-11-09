@@ -63,7 +63,59 @@ pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
     if let Some(uri) = &model.pending_link_open {
         root = root.child(confirm_open_link(uri));
     }
+    if model.settings_open {
+        root = root.child(settings_panel(model));
+    }
     root
+}
+
+fn settings_panel(model: &Model) -> El {
+    let (cw, ch) = model.cell_points;
+    let card = col()
+        .key("settings")
+        .w(360.0)
+        .fill(theme::linear(theme::TAB_BG))
+        .border(1.0, theme::linear(theme::ACTIVE_BORDER))
+        .radius(8.0)
+        .gap(10.0)
+        .pl(16.0)
+        .pr(16.0)
+        .pt(14.0)
+        .pb(14.0)
+        .modal(true, |model: &mut Model| {
+            model.settings_open = false;
+        })
+        .child(text("Settings").color(text_color()))
+        .child(
+            text(format!(
+                "Font: Cascadia Code NF, 14pt (cell {cw:.1}×{ch:.1}pt)"
+            ))
+            .color(theme::linear(theme::MUTED)),
+        )
+        .child(text("Theme: Flexoki dark (fixed)").color(theme::linear(theme::MUTED)))
+        .child(
+            row().w_full().justify_center().child(
+                el().key("close-settings")
+                    .pl(12.0)
+                    .pr(12.0)
+                    .pt(6.0)
+                    .pb(6.0)
+                    .radius(6.0)
+                    .border(1.0, theme::linear(theme::ACTIVE_BORDER))
+                    .focusable(true)
+                    .on_press_tx(|model: &mut Model, _tx| {
+                        model.settings_open = false;
+                    })
+                    .child(text("Close").color(text_color())),
+            ),
+        );
+    rune::el()
+        .key("settings-overlay")
+        .absolute(0.0, 0.0)
+        .w_full()
+        .h_full()
+        .center()
+        .child(card)
 }
 
 fn confirm_open_link(uri: &str) -> El {

@@ -446,6 +446,10 @@ fn deliver(
             crate::search::open(model);
             return true;
         }
+        if code == term_input::PhysicalKeyCode::Comma {
+            model.settings_open = true;
+            return true;
+        }
         if code == term_input::PhysicalKeyCode::KeyV {
             tx.request_paste();
             return true;
