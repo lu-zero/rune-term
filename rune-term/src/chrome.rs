@@ -99,10 +99,18 @@ fn settings_panel(model: &Model) -> El {
         crate::model::SettingsTab::Font => font_settings(model, p),
         crate::model::SettingsTab::Theme => theme_settings(model, p),
     };
+    let body = col()
+        .w_full()
+        .grow(1.0)
+        .min_h(0.0)
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        })
+        .child(body);
     let card = col()
         .key("settings")
         .w(520.0)
-        .max_h(560.0)
+        .h_full()
         .fill(theme::linear(p.tab_bg))
         .border(1.0, theme::linear(p.active_border))
         .radius(12.0)
@@ -123,7 +131,12 @@ fn settings_panel(model: &Model) -> El {
         .absolute(0.0, 0.0)
         .w_full()
         .h_full()
-        .center()
+        .items_center()
+        .justify_center()
+        .pl(20.0)
+        .pr(20.0)
+        .pt(20.0)
+        .pb(20.0)
         .child(card)
 }
 
