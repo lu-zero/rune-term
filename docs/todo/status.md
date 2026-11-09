@@ -79,8 +79,9 @@ The numbers are that plan's.
             Ctrl elsewhere) opens, clears the local selection, and consumes the
             gesture before selection/mouse-report handling. Pointer/wheel/physical
             key handlers can target a pane by mark and physical input is wired per
-            pane. Modifier-press hover refresh/cursor affordance and Rune-level
-            focus/tab navigation sync in multi-pane still need work.
+            pane. Click/focus updates rune-term's focused leaf and shown surface.
+            Modifier-press hover refresh/cursor affordance and observing Rune focus
+            traversal for multi-pane focus sync need Rune API/events.
       - [~] **19d. Open action by host OS.** Spawns `open` (macOS), `xdg-open`
             (Linux/FreeDesktop), or `cmd /C start` (Windows) on a background
             thread and logs spawn failures. Non-web schemes are classified and
