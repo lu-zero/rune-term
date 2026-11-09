@@ -1,5 +1,7 @@
 //! `RenderState` as a [`GridSource`](term_grid::GridSource). Straight sRGB.
 
+use std::sync::Arc;
+
 use librio::{AnsiColor, NamedColor, Square, Style, StyleFlags, TermColors};
 use term_grid::{CellSample, CursorSample, GridSource};
 
@@ -7,7 +9,7 @@ use crate::theme::Palette;
 
 pub struct SurfaceGrid<'a> {
     pub render: &'a mut librio::RenderState,
-    pub palette: &'static Palette,
+    pub palette: Arc<Palette>,
 }
 
 impl GridSource for SurfaceGrid<'_> {
@@ -29,7 +31,7 @@ impl GridSource for SurfaceGrid<'_> {
         };
         let style = self.render.style_at(line, col, &sq);
         let colors = self.render.term_colors();
-        let palette = self.palette;
+        let palette = self.palette.as_ref();
         let mut sample = match (sq.raw() >> 30) & 0b11 {
             1 => CellSample {
                 ch: ' ',
@@ -62,7 +64,7 @@ impl GridSource for SurfaceGrid<'_> {
     fn cursor(&self) -> CursorSample {
         let (row, col) = self.render.cursor();
         let colors = self.render.term_colors();
-        let palette = self.palette;
+        let palette = self.palette.as_ref();
         let glyph = if row < self.render.lines() && col < self.render.columns() {
             let under = self.cell(row, col);
             if under.bg[3] == 0 {

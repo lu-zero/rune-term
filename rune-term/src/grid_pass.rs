@@ -49,12 +49,13 @@ pub fn sync(
         }
         let hits = search::collect(&host.surface, &host.render, &shown);
         let (cursor_row, cursor_col) = host.render.cursor();
+        let palette = model.palette.clone();
         let source = SurfaceGrid {
             render: &mut host.render,
-            palette: model.palette,
+            palette: palette.clone(),
         };
         let source = selection::tint(source);
-        let source = search::tint(source, &hits, model.palette);
+        let source = search::tint(source, &hits, palette);
         let source = hyperlink::tint(source, host.hover_link.as_ref());
         let mut source = ime::overlay(
             source,
@@ -91,6 +92,6 @@ pub fn sync(
         model.grid_shown = active;
         model.hover_drawn = hover;
         model.preedit_drawn = preedit;
-        model.theme_drawn = model.palette.name;
+        model.theme_drawn = model.palette.name.clone();
     }
 }

@@ -1,6 +1,8 @@
 //! Local selection. The tint swaps a selected cell's colors. Paste writes
 //! the clipboard into the shell. OSC 52 stays in the delegate.
 
+use std::sync::Arc;
+
 use librio::{SelectionKind, ViewportSelection};
 use rune::Tx;
 use term_grid::{CellSample, CursorSample, GridSource};
@@ -11,7 +13,7 @@ use crate::theme::Palette;
 
 pub fn tint(source: SurfaceGrid<'_>) -> Tint<'_> {
     let selection = source.render.selection();
-    let palette = source.palette;
+    let palette = source.palette.clone();
     Tint {
         source,
         selection,
@@ -22,7 +24,7 @@ pub fn tint(source: SurfaceGrid<'_>) -> Tint<'_> {
 pub struct Tint<'a> {
     source: SurfaceGrid<'a>,
     selection: Option<ViewportSelection>,
-    palette: &'static Palette,
+    palette: Arc<Palette>,
 }
 
 impl GridSource for Tint<'_> {
@@ -41,7 +43,7 @@ impl GridSource for Tint<'_> {
     fn cell(&self, line: usize, col: usize) -> CellSample {
         let mut sample = self.source.cell(line, col);
         if covers(self.selection, line, col) {
-            highlight(&mut sample, self.palette);
+            highlight(&mut sample, &self.palette);
         }
         sample
     }
@@ -168,7 +170,7 @@ mod tests {
             host.surface.selection_update(0, 4, Side::Right);
             host.render.update();
         }
-        let palette = model.palette;
+        let palette = model.palette.clone();
         let host = model.surfaces.primary_mut().unwrap();
         let tinted = tint(SurfaceGrid {
             render: &mut host.render,

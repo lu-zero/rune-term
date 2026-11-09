@@ -1,6 +1,8 @@
 //! A field over the pane. It takes focus, so the pane stops seeing keys.
 //! `Surface::search` reports ring lines. The tint keeps the ones on screen.
 
+use std::sync::Arc;
+
 use librio::{RenderState, Surface};
 use rune::{col, text_input, El, Key, Mods, TextEdit, TextStyle};
 use term_grid::{CellSample, CursorSample, GridSource};
@@ -51,12 +53,12 @@ pub fn is_chord(key: &Key, mods: Mods) -> bool {
 pub fn mount(model: &Model, pane: El) -> El {
     let mut stack = col().w_full().grow(1.0).min_h(0.0).min_w(0.0).child(pane);
     if model.search_open && model.query.focused {
-        stack = stack.child(field(&model.query, model.palette));
+        stack = stack.child(field(&model.query, model.palette.clone()));
     }
     stack
 }
 
-fn field(query: &TextEdit, palette: &'static Palette) -> El {
+fn field(query: &TextEdit, palette: Arc<Palette>) -> El {
     text_input(query, TextStyle::new(13.0, 400.0))
         .key("search")
         .single_line()
@@ -133,7 +135,7 @@ pub fn viewport_hits(
     hits
 }
 
-pub fn tint<'a, S>(source: S, hits: &'a [Hit], palette: &'static Palette) -> Tint<'a, S> {
+pub fn tint<'a, S>(source: S, hits: &'a [Hit], palette: Arc<Palette>) -> Tint<'a, S> {
     Tint {
         source,
         hits,
@@ -144,7 +146,7 @@ pub fn tint<'a, S>(source: S, hits: &'a [Hit], palette: &'static Palette) -> Tin
 pub struct Tint<'a, S> {
     source: S,
     hits: &'a [Hit],
-    palette: &'static Palette,
+    palette: Arc<Palette>,
 }
 
 impl<S: GridSource> GridSource for Tint<'_, S> {
@@ -167,7 +169,7 @@ impl<S: GridSource> GridSource for Tint<'_, S> {
             .iter()
             .any(|hit| hit.row == line && col >= hit.start && col <= hit.end)
         {
-            mark(&mut sample, self.palette);
+            mark(&mut sample, &self.palette);
         }
         sample
     }
@@ -297,7 +299,7 @@ mod tests {
                 );
             }
         }
-        let palette = model.palette;
+        let palette = model.palette.clone();
         let host = model.surfaces.primary_mut().unwrap();
         let hits = collect(&host.surface, &host.render, "NEEDLE");
         assert_eq!(hits.len(), 1, "{hits:?}");
@@ -309,9 +311,9 @@ mod tests {
         );
         let source = SurfaceGrid {
             render: &mut host.render,
-            palette,
+            palette: palette.clone(),
         };
-        let tinted = tint(source, &hits, palette);
+        let tinted = tint(source, &hits, palette.clone());
         let marked = tinted.cell(row, hits[0].start);
         assert_eq!(marked.bg, solid(palette.muted));
         assert_eq!(marked.ch, 'N');

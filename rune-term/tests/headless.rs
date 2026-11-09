@@ -50,8 +50,8 @@ fn chrome_and_a_solid_slot() {
     let mut slot_bytes = [0u8; 3];
     let mut slot = 0;
     for palette in [
-        &rune_term::theme::FLEXOKI_BLACK,
-        &rune_term::theme::FLEXOKI_DARK,
+        &rune_term::theme::resolve("Flexoki Black"),
+        &rune_term::theme::resolve("Flexoki Dark"),
     ] {
         let t = count_near(&pixels, bytes(rune_term::tab(palette)), 2);
         let s_bytes = bytes(rune_term::slot(palette));

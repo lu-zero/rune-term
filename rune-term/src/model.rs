@@ -16,6 +16,21 @@ pub struct Preedit {
     pub cursor: Option<(usize, usize)>,
 }
 
+pub struct ThemeEditor {
+    pub original_name: String,
+    pub name: TextEdit,
+    pub bg: TextEdit,
+    pub fg: TextEdit,
+    pub fg_bright: TextEdit,
+    pub muted: TextEdit,
+    pub tab_bg: TextEdit,
+    pub active_border: TextEdit,
+    pub accent: TextEdit,
+    pub ansi16: Vec<[u8; 3]>,
+    pub author: String,
+    pub url: String,
+}
+
 pub struct Model {
     pub engine: Engine,
     pub tabs: Vec<Tab>,
@@ -25,7 +40,7 @@ pub struct Model {
     pub scale: f32,
     pub config: ConfigFile,
     pub font_size: f32,
-    pub palette: &'static Palette,
+    pub palette: Arc<Palette>,
     pub blink_phase_on: bool,
     /// Filled by the IME change. The view does not read this.
     pub preedit: Option<Preedit>,
@@ -40,11 +55,12 @@ pub struct Model {
     pub(crate) grid_shown: Option<librio::SurfaceId>,
     pub(crate) hover_drawn: Option<crate::hyperlink::HoverLink>,
     pub(crate) preedit_drawn: Option<Preedit>,
-    pub(crate) theme_drawn: &'static str,
+    pub(crate) theme_drawn: String,
     pub(crate) shared: Arc<Shared>,
     pub(crate) pending_inject: Option<Vec<u8>>,
     pub(crate) pending_link_open: Option<String>,
     pub(crate) settings_open: bool,
+    pub(crate) theme_editor: Option<ThemeEditor>,
 }
 
 pub fn init() -> Model {
@@ -55,7 +71,7 @@ pub fn init() -> Model {
     let config = ConfigFile::load();
     let resolved = config.resolve();
     let font_size = resolved.font_size;
-    let palette = crate::theme::resolve(&resolved.theme);
+    let palette = config.resolve_palette();
     Model {
         engine,
         tabs: vec![Tab {
@@ -75,7 +91,6 @@ pub fn init() -> Model {
         scale: 1.0,
         config,
         font_size,
-        palette,
         blink_phase_on: true,
         preedit: None,
         cursor_cell: (0, 0),
@@ -85,10 +100,75 @@ pub fn init() -> Model {
         grid_shown: None,
         hover_drawn: None,
         preedit_drawn: None,
-        theme_drawn: palette.name,
+        theme_drawn: palette.name.clone(),
+        palette,
         shared,
         pending_inject,
         pending_link_open: None,
         settings_open: false,
+        theme_editor: None,
     }
+}
+
+impl ThemeEditor {
+    pub fn from_custom(name: &str, theme: &crate::settings::CustomTheme) -> Self {
+        Self {
+            original_name: name.to_owned(),
+            name: TextEdit::new(name),
+            bg: TextEdit::new(hex6(theme.bg)),
+            fg: TextEdit::new(hex6(theme.fg)),
+            fg_bright: TextEdit::new(hex6(theme.fg_bright)),
+            muted: TextEdit::new(hex6(theme.muted)),
+            tab_bg: TextEdit::new(hex6(theme.tab_bg)),
+            active_border: TextEdit::new(hex6(theme.active_border)),
+            accent: TextEdit::new(hex6(theme.accent)),
+            ansi16: {
+                let mut a = theme.ansi16.clone();
+                a.resize(16, [0, 0, 0]);
+                a.truncate(16);
+                a
+            },
+            author: theme.author.clone(),
+            url: theme.url.clone(),
+        }
+    }
+
+    pub fn to_custom(&self) -> Option<(String, crate::settings::CustomTheme)> {
+        let name = self.name.text.trim().to_owned();
+        if name.is_empty() {
+            return None;
+        }
+        Some((
+            name,
+            crate::settings::CustomTheme {
+                author: self.author.clone(),
+                url: self.url.clone(),
+                bg: parse_hex(&self.bg.text)?,
+                fg: parse_hex(&self.fg.text)?,
+                fg_bright: parse_hex(&self.fg_bright.text)?,
+                muted: parse_hex(&self.muted.text)?,
+                tab_bg: parse_hex(&self.tab_bg.text)?,
+                active_border: parse_hex(&self.active_border.text)?,
+                accent: parse_hex(&self.accent.text)?,
+                ansi16: self.ansi16.clone(),
+            },
+        ))
+    }
+}
+
+fn hex6(v: u32) -> String {
+    format!("#{:06X}", v & 0x00FF_FFFF)
+}
+
+fn parse_hex(s: &str) -> Option<u32> {
+    let s = s.trim();
+    let s = s
+        .strip_prefix('#')
+        .or_else(|| s.strip_prefix("0x"))
+        .or_else(|| s.strip_prefix("0X"))
+        .unwrap_or(s);
+    if s.len() != 6 {
+        return None;
+    }
+    u32::from_str_radix(s, 16).ok()
 }

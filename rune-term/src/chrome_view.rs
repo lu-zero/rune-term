@@ -152,7 +152,7 @@ fn nodes(node: &Node, model: &Model, scale: f32, cell: (f32, f32)) -> El {
             .w(span(node_cells(node).0, cell.0, scale))
             .h_full()
             .child(nodes(left, model, scale, cell))
-            .child(divider(true, scale, cell, model.palette))
+            .child(divider(true, scale, cell, model.palette.as_ref()))
             .child(nodes(right, model, scale, cell)),
         Node::Split {
             axis: Axis::Vertical,
@@ -162,7 +162,7 @@ fn nodes(node: &Node, model: &Model, scale: f32, cell: (f32, f32)) -> El {
             .h(span(node_cells(node).1, cell.1, scale))
             .w_full()
             .child(nodes(left, model, scale, cell))
-            .child(divider(false, scale, cell, model.palette))
+            .child(divider(false, scale, cell, model.palette.as_ref()))
             .child(nodes(right, model, scale, cell)),
     }
 }
@@ -228,12 +228,7 @@ fn wire(pane: El, mark: u32, scale: f32) -> El {
     })
 }
 
-fn divider(
-    horizontal: bool,
-    scale: f32,
-    cell: (f32, f32),
-    palette: &'static crate::theme::Palette,
-) -> El {
+fn divider(horizontal: bool, scale: f32, cell: (f32, f32), palette: &crate::theme::Palette) -> El {
     let thickness = resize::content_points(1, if horizontal { cell.0 } else { cell.1 }, scale);
     let gap = rune::el().fill(chrome::tab(palette));
     if horizontal {
