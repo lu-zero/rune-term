@@ -84,8 +84,8 @@ The numbers are that plan's.
             pane. Click/focus updates rune-term's focused leaf and shown surface.
             Observing Rune focus traversal for multi-pane focus sync tracks
             upstream `anomalyco/rune#106` (`El::on_focus_change`). Modifier-press
-            hover refresh/cursor affordance needs a Rune input event/hook; draft in
-            `docs/todo/upstream-rune-modifier-hover-draft.md` (not filed yet).
+            hover refresh/cursor affordance tracks upstream
+            `anomalyco/rune#393`.
       - [~] **19d. Open action by host OS.** Spawns `open` (macOS), `xdg-open`
             (Linux/FreeDesktop), or `cmd /C start` (Windows) on a background
             thread and logs spawn failures. Non-web schemes are classified and
