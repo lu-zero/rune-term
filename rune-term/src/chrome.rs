@@ -225,6 +225,7 @@ fn theme_settings(model: &Model, p: &Palette) -> El {
         let tp = custom.to_arc_palette(name);
         themes = themes.child(theme_choice(&tp, p));
     }
+    let themes = themes.pb(4.0);
     let theme_list = col()
         .w_full()
         .grow(1.0)
@@ -236,7 +237,7 @@ fn theme_settings(model: &Model, p: &Palette) -> El {
         .fill(crate::theme::linear(p.bg))
         .border(1.0, crate::theme::linear(p.active_border))
         .pt(8.0)
-        .pb(8.0)
+        .pb(4.0)
         .pl(8.0)
         .pr(8.0)
         .child(themes);
