@@ -176,14 +176,15 @@ pub fn edit_theme(model: &mut Model, tx: &mut Tx) {
     edit_theme_named(model, tx, &model.palette.name.clone());
 }
 
-pub fn edit_theme_named(model: &mut Model, _tx: &mut Tx, name: &str) {
+pub fn edit_theme_named(model: &mut Model, tx: &mut Tx, name: &str) {
     model.settings_tab = crate::model::SettingsTab::Theme;
-    if let Some(custom) = model.config.custom_themes.get(name) {
+    if let Some(custom) = model.config.custom_themes.get(name).cloned() {
         model.config.set_theme(name.to_owned());
         model.palette = model.config.resolve_palette();
-        model.theme_editor = Some(crate::model::ThemeEditor::from_custom(name, custom));
+        model.theme_editor = Some(crate::model::ThemeEditor::from_custom(name, &custom));
+        model.theme_drawn = String::new();
     } else if crate::theme::resolve_builtin(name).is_some() {
-        copy_theme_named(model, _tx, name);
+        copy_theme_named(model, tx, name);
     }
 }
 
@@ -246,7 +247,11 @@ pub fn delete_theme_named(model: &mut Model, _tx: &mut Tx, name: &str) {
         return;
     }
     model.config.custom_themes.remove(name);
-    if model.theme_editor.as_ref().is_some_and(|e| e.original_name == name) {
+    if model
+        .theme_editor
+        .as_ref()
+        .is_some_and(|e| e.original_name == name)
+    {
         model.theme_editor = None;
     }
     if model.palette.name == name {
