@@ -463,7 +463,7 @@ fn deliver(
     };
     let wrote = host.surface.key(&mapped);
     if wrote {
-        tx.live_only();
+        tx.wake_after(Duration::ZERO);
     }
     wrote
 }
