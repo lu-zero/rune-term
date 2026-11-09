@@ -275,17 +275,18 @@ fn theme_settings(model: &Model, p: &Palette) -> El {
         .child(themes);
     let is_custom = model.config.is_custom_theme(&model.palette.name);
     let mut theme_actions = row().w_full().gap(6.0).items_center().justify_end();
-    theme_actions = theme_actions.child(settings_chip("Copy", "theme-copy", p, |model, tx| {
-        crate::app::copy_theme(model, tx);
-    }));
     if is_custom {
-        theme_actions = theme_actions.child(settings_chip("Edit", "theme-edit", p, |model, tx| {
+        theme_actions = theme_actions.child(settings_chip("✎", "theme-edit", p, |model, tx| {
             crate::app::edit_theme(model, tx);
         }));
         theme_actions =
             theme_actions.child(settings_chip("Delete", "theme-delete", p, |model, tx| {
                 crate::app::delete_theme(model, tx);
             }));
+    } else {
+        theme_actions = theme_actions.child(settings_chip("✎", "theme-copy", p, |model, tx| {
+            crate::app::copy_theme(model, tx);
+        }));
     }
     col()
         .w_full()
