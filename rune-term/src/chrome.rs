@@ -225,38 +225,23 @@ fn theme_settings(model: &Model, p: &Palette) -> El {
         let tp = custom.to_arc_palette(name);
         themes = themes.child(theme_choice(&tp, p));
     }
-    let entry_h = 32.0_f32;
-    let gap = 4.0_f32;
-    let pad = 8.0_f32;
-    let count = theme::builtins().len() + model.config.custom_themes.len();
-    let content_h = if count == 0 {
-        pad * 2.0
-    } else {
-        pad * 2.0 + count as f32 * entry_h + (count.saturating_sub(1)) as f32 * gap
-    };
-    let list_h = content_h.min(220.0).max(entry_h + pad * 2.0);
     let theme_list = col()
         .w_full()
-        .h(list_h)
+        .grow(1.0)
+        .min_h(0.0)
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
         .radius(8.0)
         .fill(crate::theme::linear(p.bg))
         .border(1.0, crate::theme::linear(p.active_border))
-        .pt(pad)
-        .pb(pad)
-        .pl(pad)
-        .pr(pad)
+        .pt(8.0)
+        .pb(8.0)
+        .pl(8.0)
+        .pr(8.0)
         .child(themes);
     let is_custom = model.config.is_custom_theme(&model.palette.name);
-    let mut theme_header = row()
-        .w_full()
-        .items_center()
-        .justify_between()
-        .gap(8.0)
-        .child(text("Palette").color(text_color(p)));
-    let mut theme_actions = row().gap(6.0).items_center();
+    let mut theme_actions = row().w_full().gap(6.0).items_center().justify_end();
     theme_actions = theme_actions.child(settings_chip("Copy", "theme-copy", p, |model, tx| {
         crate::app::copy_theme(model, tx);
     }));
@@ -269,16 +254,12 @@ fn theme_settings(model: &Model, p: &Palette) -> El {
                 crate::app::delete_theme(model, tx);
             }));
     }
-    theme_header = theme_header.child(theme_actions);
     col()
         .w_full()
         .grow(1.0)
         .gap(8.0)
-        .child(theme_header)
+        .child(theme_actions)
         .child(theme_list)
-        .child(text(p.name.as_str()).color(theme::linear(p.muted)))
-        .child(text(format!("Palette by {}", p.author)).color(theme::linear(p.muted)))
-        .child(text(p.url.as_str()).color(theme::linear(p.muted)))
 }
 
 fn theme_editor_view(model: &Model) -> El {
