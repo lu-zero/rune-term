@@ -112,12 +112,23 @@ impl<S: GridSource> GridSource for PreeditOverlay<S> {
     fn cell(&self, line: usize, col: usize) -> CellSample {
         if let Some(preedit) = &self.preedit {
             if line == self.cursor_row && col >= self.cursor_col {
-                let idx = col - self.cursor_col;
-                if let Some(ch) = preedit.text.chars().nth(idx) {
+                if let Some((ch, width, selected, spacer)) =
+                    preedit_at(preedit, col - self.cursor_col)
+                {
+                    if spacer {
+                        let mut sample = self.source.cell(line, col);
+                        sample.ch = ' ';
+                        sample.width = 0;
+                        return sample;
+                    }
                     let mut sample = self.source.cell(line, col);
                     sample.ch = ch;
-                    sample.width = 1;
+                    sample.width = width;
                     sample.underline = true;
+                    if selected {
+                        sample.fg = [0, 0, 0, 255];
+                        sample.bg = [206, 205, 195, 255];
+                    }
                     return sample;
                 }
             }
@@ -140,6 +151,43 @@ impl<S: GridSource> GridSource for PreeditOverlay<S> {
     }
 }
 
+/// Returns (char, display_width, selected, is_spacer_after_wide) for a grid column
+/// offset from preedit start.
+fn preedit_at(preedit: &Preedit, col_off: usize) -> Option<(char, u8, bool, bool)> {
+    let range = preedit.cursor.unwrap_or((usize::MAX, usize::MAX));
+    let mut grid_col = 0usize;
+    for (byte_idx, ch) in preedit.text.char_indices() {
+        let w = char_width(ch).max(1);
+        let next = grid_col + w;
+        let in_range = byte_idx >= range.0 && byte_idx < range.1;
+        if col_off == grid_col {
+            return Some((ch, w.min(2) as u8, in_range, false));
+        }
+        if w == 2 && col_off == grid_col + 1 {
+            return Some((ch, 0, in_range, true));
+        }
+        grid_col = next;
+        if grid_col > col_off + 1 {
+            // passed
+        }
+    }
+    None
+}
+
+fn char_width(ch: char) -> usize {
+    let cp = u32::from(ch);
+    // Minimal wide-char check for common IME/CJK cases (no unicode-width dep).
+    if matches!(cp,
+        0x1100..=0x115F | 0x2E80..=0xA4CF | 0xAC00..=0xD7A3 | 0xF900..=0xFAFF
+        | 0xFE10..=0xFE19 | 0xFE30..=0xFE6F | 0xFF01..=0xFF60 | 0xFFE0..=0xFFE6
+        | 0x1F300..=0x1F64F | 0x1F900..=0x1F9FF | 0x20000..=0x3FFFD
+    ) {
+        2
+    } else {
+        1
+    }
+}
+
 #[cfg(all(test, not(feature = "pty")))]
 mod tests {
     use super::*;
@@ -147,11 +195,12 @@ mod tests {
 
     struct OneRow {
         cells: Vec<CellSample>,
+        cols: usize,
     }
 
     impl GridSource for OneRow {
         fn columns(&self) -> usize {
-            self.cells.len()
+            self.cols
         }
         fn lines(&self) -> usize {
             1
@@ -160,7 +209,13 @@ mod tests {
             false
         }
         fn cell(&self, _line: usize, col: usize) -> CellSample {
-            self.cells[col]
+            self.cells.get(col).cloned().unwrap_or(CellSample {
+                ch: ' ',
+                width: 1,
+                fg: [255, 255, 255, 255],
+                bg: [0, 0, 0, 255],
+                underline: false,
+            })
         }
         fn cursor(&self) -> CursorSample {
             CursorSample {
@@ -187,6 +242,7 @@ mod tests {
                 };
                 8
             ],
+            cols: 8,
         };
         let preedit = Preedit {
             text: "漢字".to_string(),
@@ -195,8 +251,27 @@ mod tests {
         let over = overlay(source, Some(&preedit), (1, 0));
         assert!(over.row_dirty(0));
         assert_eq!(over.cell(0, 1).ch, '漢');
-        assert_eq!(over.cell(0, 2).ch, '字');
+        assert_eq!(over.cell(0, 1).width, 2);
+        assert_eq!(over.cell(0, 2).width, 0); // spacer
+        assert_eq!(over.cell(0, 3).ch, '字');
+        assert_eq!(over.cell(0, 3).width, 2);
         assert!(over.cell(0, 1).underline);
         assert!(!over.cursor().visible);
+    }
+
+    #[test]
+    fn preedit_highlights_selected_range() {
+        let source = OneRow {
+            cells: vec![],
+            cols: 8,
+        };
+        // "ab" - select "a" (bytes 0..1)
+        let preedit = Preedit {
+            text: "ab".to_string(),
+            cursor: Some((0, 1)),
+        };
+        let over = overlay(source, Some(&preedit), (0, 0));
+        assert_eq!(over.cell(0, 0).bg, [206, 205, 195, 255]);
+        assert_ne!(over.cell(0, 1).bg, [206, 205, 195, 255]);
     }
 }

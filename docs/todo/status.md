@@ -50,8 +50,9 @@ The numbers are that plan's.
 - [~] **14. IME.** `on_ime` handles preedit/commit/enable/disable, commits
       text to the focused surface, mounts an `ime_cursor` positioned from
       cursor/cell metrics, and overlays preedit text in the grid source at the
-      cursor. Preedit styling/range rendering is basic; manual macOS marked-text
-      verification is still needed.
+      cursor. Preedit overlay handles wide-char display widths/spacers and
+      highlights the IME selection byte range. Manual macOS marked-text
+      verification and richer clause/caret styling are still needed.
 - [x] **15. Kitty images.** Kitty placements are read from `RenderState`,
       uploaded/cached by image stamp, and drawn in z-buckets (under-text and
       over-text) around the grid pass. Headless `graphics` test injects a small
