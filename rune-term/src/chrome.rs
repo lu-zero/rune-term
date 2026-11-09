@@ -1,6 +1,6 @@
 //! One tab strip. The panes are [`crate::chrome_view`]. The cell tree is [`crate::split`].
 
-use rune::{col, row, text, Color, Cx, El};
+use rune::{col, el, row, text, Color, Cx, El};
 
 use crate::chrome_view;
 use crate::model::Model;
@@ -53,13 +53,84 @@ pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
     let tab = tab_strip(model, cx);
     let pane = chrome_view::area(model, cx);
     // Rune delivers Cmd+V to the root handler, not to the focused pane.
-    col()
+    let mut root = col()
         .w_full()
         .h_full()
         .fill(tab_bg)
         .on_paste(crate::selection::on_paste)
         .child(tab)
-        .child(pane)
+        .child(pane);
+    if let Some(uri) = &model.pending_link_open {
+        root = root.child(confirm_open_link(uri));
+    }
+    root
+}
+
+fn confirm_open_link(uri: &str) -> El {
+    let shown = if uri.len() > 80 {
+        format!("{}…", &uri[..uri.floor_char_boundary(79)])
+    } else {
+        uri.to_string()
+    };
+    let to_open = uri.to_string();
+    let card = col()
+        .key("confirm-open-link")
+        .w(420.0)
+        .fill(theme::linear(theme::TAB_BG))
+        .border(1.0, theme::linear(theme::ACTIVE_BORDER))
+        .radius(8.0)
+        .gap(12.0)
+        .pl(16.0)
+        .pr(16.0)
+        .pt(14.0)
+        .pb(14.0)
+        .modal(true, |model: &mut Model| {
+            model.pending_link_open = None;
+        })
+        .child(text("Open external link?").color(text_color()))
+        .child(text(shown).color(theme::linear(theme::MUTED)))
+        .child(
+            row()
+                .w_full()
+                .gap(8.0)
+                .justify_center()
+                .child(
+                    el().key("cancel-open-link")
+                        .pl(12.0)
+                        .pr(12.0)
+                        .pt(6.0)
+                        .pb(6.0)
+                        .radius(6.0)
+                        .border(1.0, theme::linear(theme::ACTIVE_BORDER))
+                        .focusable(true)
+                        .on_press_tx(|model: &mut Model, _tx| {
+                            model.pending_link_open = None;
+                        })
+                        .child(text("Cancel").color(theme::linear(theme::MUTED))),
+                )
+                .child(
+                    el().key("open-link")
+                        .pl(12.0)
+                        .pr(12.0)
+                        .pt(6.0)
+                        .pb(6.0)
+                        .radius(6.0)
+                        .fill(theme::linear(0x205E_A6))
+                        .focusable(true)
+                        .on_press_tx(move |model: &mut Model, _tx| {
+                            let _ = crate::hyperlink::open_uri_with(&to_open, |_| true);
+                            model.pending_link_open = None;
+                        })
+                        .child(text("Open").color(text_color())),
+                ),
+        );
+    rune::el()
+        .key("confirm-open-link-overlay")
+        .absolute(0.0, 0.0)
+        .w_full()
+        .h_full()
+        .center()
+        .child(card)
 }
 
 fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {

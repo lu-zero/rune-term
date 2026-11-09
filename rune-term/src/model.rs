@@ -36,6 +36,7 @@ pub struct Model {
     pub(crate) preedit_drawn: Option<Preedit>,
     pub(crate) shared: Arc<Shared>,
     pub(crate) pending_inject: Option<Vec<u8>>,
+    pub(crate) pending_link_open: Option<String>,
 }
 
 pub fn init() -> Model {
@@ -70,5 +71,6 @@ pub fn init() -> Model {
         preedit_drawn: None,
         shared,
         pending_inject,
+        pending_link_open: None,
     }
 }

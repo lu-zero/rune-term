@@ -83,8 +83,9 @@ The numbers are that plan's.
       - [~] **19d. Open action by host OS.** Spawns `open` (macOS), `xdg-open`
             (Linux/FreeDesktop), or `cmd /C start` (Windows) on a background
             thread and logs spawn failures. Non-web schemes are classified and
-            logged; `open_uri_with` provides a confirmation/policy hook (default
-            allows). UI confirmation for risky schemes is still pending.
+            logged; `open_uri_with` provides a confirmation/policy hook. Mod+click
+            prompts for risky/non-web schemes with a modal confirmation; safe web
+            and mailto schemes open directly.
 
 ## Outside this repository
 

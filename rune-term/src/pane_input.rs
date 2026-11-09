@@ -120,28 +120,57 @@ fn gesture(
     scale: f32,
     tx: &mut Tx,
 ) {
+    if phase == Phase::Down && button == 0 && crate::hyperlink::open_mods(mods) {
+        enum LinkAction {
+            None,
+            Opened,
+            Confirm(String),
+        }
+        let action = {
+            let Some(host) = model.surfaces.by_mark_mut(mark) else {
+                return;
+            };
+            let cell = cell_under(host, x, y, scale);
+            match cell.and_then(|(col, row)| {
+                crate::hyperlink::resolve(host, usize::from(row), usize::from(col))
+            }) {
+                Some(link) => {
+                    host.surface.selection_clear();
+                    host.pointer_button = None;
+                    host.selecting = false;
+                    host.hover_link = None;
+                    host.hover_probe = None;
+                    if crate::hyperlink::open_decision(&link.uri)
+                        == crate::hyperlink::OpenDecision::WarnAndOpen
+                    {
+                        LinkAction::Confirm(link.uri)
+                    } else {
+                        let _ = crate::hyperlink::open_uri(&link.uri);
+                        LinkAction::Opened
+                    }
+                }
+                None => LinkAction::None,
+            }
+        };
+        match action {
+            LinkAction::Opened => {
+                tx.wake_after(Duration::ZERO);
+                return;
+            }
+            LinkAction::Confirm(uri) => {
+                model.pending_link_open = Some(uri);
+                tx.wake_after(Duration::ZERO);
+                return;
+            }
+            LinkAction::None => {}
+        }
+    }
     let Some(host) = model.surfaces.by_mark_mut(mark) else {
         return;
     };
     let cell = cell_under(host, x, y, scale);
     match phase {
         Phase::Down => {
-            if button == 0 && crate::hyperlink::open_mods(mods) {
-                if let Some((col, row)) = cell {
-                    if let Some(link) =
-                        crate::hyperlink::resolve(host, usize::from(row), usize::from(col))
-                    {
-                        host.surface.selection_clear();
-                        host.pointer_button = None;
-                        host.selecting = false;
-                        host.hover_link = None;
-                        host.hover_probe = None;
-                        let _ = crate::hyperlink::open_uri(&link.uri);
-                        tx.wake_after(Duration::ZERO);
-                        return;
-                    }
-                }
-            }
             host.pointer_button = Some(button);
             let taken = match cell {
                 Some((col, row)) => host.surface.mouse_button(col, row, button, true, mods),
