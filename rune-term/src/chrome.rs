@@ -1,6 +1,6 @@
 //! One tab strip. The panes are [`crate::chrome_view`]. The cell tree is [`crate::split`].
 
-use rune::tok::{radius, space, type_};
+use rune::tok::{radius, space};
 use rune::{col, el, row, text, text_input, Color, Cx, El, ScrollSpec, TextStyle};
 
 use crate::chrome_view;
@@ -170,20 +170,6 @@ fn settings_tab_chip(
         }))
 }
 
-fn settings_section(p: &Palette, title: &str, content: El) -> El {
-    col()
-        .w_full()
-        .grow(1.0)
-        .gap(space::S2)
-        .child(
-            text(title)
-                .font(type_::SECTION)
-                .color(theme::linear(p.muted))
-                .ml(space::S2),
-        )
-        .child(content)
-}
-
 fn settings_card(p: &Palette, content: El) -> El {
     col()
         .w_full()
@@ -242,7 +228,7 @@ fn font_settings(model: &Model, p: &Palette) -> El {
         .grow(1.0)
         .gap(space::S3)
         .pb(space::S2)
-        .child(settings_section(p, "Font", card))
+        .child(card)
 }
 
 fn theme_settings(model: &Model, p: &Palette) -> El {
@@ -250,12 +236,14 @@ fn theme_settings(model: &Model, p: &Palette) -> El {
         return theme_editor_view(model);
     }
     let mut themes = col().w_full().gap(4.0);
-    for t in theme::builtins() {
-        themes = themes.child(theme_choice(t, p));
-    }
-    for (name, custom) in &model.config.custom_themes {
+    let mut customs: Vec<_> = model.config.custom_themes.iter().collect();
+    customs.sort_by_key(|x| std::cmp::Reverse(x.1.created_at));
+    for (name, custom) in customs {
         let tp = custom.to_arc_palette(name);
         themes = themes.child(theme_choice(&tp, p));
+    }
+    for t in theme::builtins() {
+        themes = themes.child(theme_choice(t, p));
     }
     let themes = themes.pb(4.0);
     let theme_list = col()
@@ -278,7 +266,7 @@ fn theme_settings(model: &Model, p: &Palette) -> El {
         .grow(1.0)
         .gap(space::S3)
         .pb(space::S2)
-        .child(settings_section(p, "Theme", theme_list))
+        .child(theme_list)
 }
 
 fn theme_editor_view(model: &Model) -> El {

@@ -35,6 +35,7 @@ pub struct ThemeEditor {
     pub active_border: TextEdit,
     pub accent: TextEdit,
     pub ansi16: Vec<[u8; 3]>,
+    pub created_at: u64,
 }
 
 pub struct Model {
@@ -138,6 +139,7 @@ impl ThemeEditor {
                 a.truncate(16);
                 a
             },
+            created_at: theme.created_at,
         }
     }
 
@@ -159,6 +161,7 @@ impl ThemeEditor {
                 active_border: parse_hex(&self.active_border.text)?,
                 accent: parse_hex(&self.accent.text)?,
                 ansi16: self.ansi16.clone(),
+                created_at: self.created_at,
             },
         ))
     }
@@ -178,6 +181,7 @@ impl ThemeEditor {
             active_border: parse_hex(&self.active_border.text).unwrap_or(fallback.active_border),
             accent: parse_hex(&self.accent.text).unwrap_or(fallback.accent),
             ansi16: self.ansi16.clone(),
+            created_at: self.created_at,
         };
         let name = {
             let n = self.name.text.trim();

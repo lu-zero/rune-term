@@ -77,7 +77,7 @@ pub struct Profiles {
     pub default: Profile,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CustomTheme {
     pub author: String,
@@ -90,12 +90,14 @@ pub struct CustomTheme {
     pub active_border: u32,
     pub accent: u32,
     pub ansi16: Vec<[u8; 3]>,
+    pub created_at: u64,
 }
 
-impl Default for CustomTheme {
-    fn default() -> Self {
-        Self::from_palette(&theme::default_palette())
-    }
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
 }
 
 impl CustomTheme {
@@ -111,6 +113,7 @@ impl CustomTheme {
             active_border: p.active_border,
             accent: p.accent,
             ansi16: p.ansi16.to_vec(),
+            created_at: now_secs(),
         }
     }
 
