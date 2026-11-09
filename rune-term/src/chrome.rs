@@ -381,9 +381,6 @@ fn editor_row(
                 .border(1.0, crate::theme::linear(p.active_border)),
         );
     }
-    let input_color = swatch
-        .map(crate::theme::linear)
-        .unwrap_or_else(|| text_color(p));
     input_row = input_row.child(
         text_input(edit, TextStyle::new(13.0, 400.0))
             .key(key)
@@ -398,7 +395,7 @@ fn editor_row(
             .items_center()
             .fill(crate::theme::linear(p.tab_bg))
             .border(1.0, crate::theme::linear(p.active_border))
-            .color(input_color)
+            .color(text_color(p))
             .on_edit(on_edit)
             .on_input_change(|model: &mut Model, tx: &mut rune::Tx| {
                 crate::app::preview_theme_edit(model, tx);
