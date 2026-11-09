@@ -331,11 +331,7 @@ fn theme_editor_view(model: &Model) -> El {
                     stick_bottom: false,
                 })
                 .gap(6.0)
-                .child(grid)
-                .child(
-                    text("Colors: #RRGGBB hex. ANSI 16 copied from source.")
-                        .color(theme::linear(p.muted)),
-                ),
+                .child(grid),
         )
         .child(
             row()
@@ -366,23 +362,27 @@ fn editor_row(
         .child(
             el().w(88.0)
                 .h(32.0)
-                .center_y()
+                .items_center()
                 .child(text(label).color(theme::linear(p.muted))),
         )
         .child(
-            text_input(edit, TextStyle::new(13.0, 400.0))
-                .key(key)
-                .single_line()
-                .grow(1.0)
-                .h(32.0)
-                .pl(10.0)
-                .pr(10.0)
-                .radius(6.0)
-                .center_y()
-                .fill(crate::theme::linear(p.tab_bg))
-                .border(1.0, crate::theme::linear(p.active_border))
-                .color(text_color(p))
-                .on_edit(on_edit),
+            el().grow(1.0).h(32.0).items_center().child(
+                text_input(edit, TextStyle::new(13.0, 400.0))
+                    .key(key)
+                    .single_line()
+                    .w_full()
+                    .h(30.0)
+                    .pl(10.0)
+                    .pr(10.0)
+                    .pt(7.0)
+                    .pb(7.0)
+                    .radius(6.0)
+                    .items_center()
+                    .fill(crate::theme::linear(p.tab_bg))
+                    .border(1.0, crate::theme::linear(p.active_border))
+                    .color(text_color(p))
+                    .on_edit(on_edit),
+            ),
         )
 }
 
