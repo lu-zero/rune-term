@@ -7,7 +7,7 @@ use term_grid::{CellSample, CursorSample, GridSource};
 
 use crate::model::Model;
 use crate::scrollback;
-use crate::theme;
+use crate::theme::{self, Palette};
 
 const MAX_MATCHES: usize = 4096;
 
@@ -51,20 +51,20 @@ pub fn is_chord(key: &Key, mods: Mods) -> bool {
 pub fn mount(model: &Model, pane: El) -> El {
     let mut stack = col().w_full().grow(1.0).min_h(0.0).min_w(0.0).child(pane);
     if model.search_open && model.query.focused {
-        stack = stack.child(field(&model.query));
+        stack = stack.child(field(&model.query, model.palette));
     }
     stack
 }
 
-fn field(query: &TextEdit) -> El {
+fn field(query: &TextEdit, palette: &'static Palette) -> El {
     text_input(query, TextStyle::new(13.0, 400.0))
         .key("search")
         .single_line()
         .h(28.0)
         .w(220.0)
         .pin(None, Some(8.0), Some(8.0 + scrollback::WIDTH), None)
-        .fill(theme::linear(theme::TAB_BG))
-        .color(theme::linear(theme::FG))
+        .fill(theme::linear(palette.tab_bg))
+        .color(theme::linear(palette.fg))
         .on_edit(|model: &mut Model| &mut model.query)
 }
 
@@ -133,13 +133,18 @@ pub fn viewport_hits(
     hits
 }
 
-pub fn tint<'a, S>(source: S, hits: &'a [Hit]) -> Tint<'a, S> {
-    Tint { source, hits }
+pub fn tint<'a, S>(source: S, hits: &'a [Hit], palette: &'static Palette) -> Tint<'a, S> {
+    Tint {
+        source,
+        hits,
+        palette,
+    }
 }
 
 pub struct Tint<'a, S> {
     source: S,
     hits: &'a [Hit],
+    palette: &'static Palette,
 }
 
 impl<S: GridSource> GridSource for Tint<'_, S> {
@@ -162,7 +167,7 @@ impl<S: GridSource> GridSource for Tint<'_, S> {
             .iter()
             .any(|hit| hit.row == line && col >= hit.start && col <= hit.end)
         {
-            mark(&mut sample);
+            mark(&mut sample, self.palette);
         }
         sample
     }
@@ -176,9 +181,9 @@ impl<S: GridSource> GridSource for Tint<'_, S> {
     }
 }
 
-fn mark(sample: &mut CellSample) {
-    sample.fg = solid(theme::BG);
-    sample.bg = solid(theme::MUTED);
+fn mark(sample: &mut CellSample, palette: &Palette) {
+    sample.fg = solid(palette.bg);
+    sample.bg = solid(palette.muted);
 }
 
 fn solid(value: u32) -> [u8; 4] {
@@ -292,6 +297,7 @@ mod tests {
                 );
             }
         }
+        let palette = model.palette;
         let host = model.surfaces.primary_mut().unwrap();
         let hits = collect(&host.surface, &host.render, "NEEDLE");
         assert_eq!(hits.len(), 1, "{hits:?}");
@@ -303,10 +309,11 @@ mod tests {
         );
         let source = SurfaceGrid {
             render: &mut host.render,
+            palette,
         };
-        let tinted = tint(source, &hits);
+        let tinted = tint(source, &hits, palette);
         let marked = tinted.cell(row, hits[0].start);
-        assert_eq!(marked.bg, solid(theme::MUTED));
+        assert_eq!(marked.bg, solid(palette.muted));
         assert_eq!(marked.ch, 'N');
         let other = if row == 0 { 1 } else { 0 };
         assert_ne!(tinted.cell(other, hits[0].start).bg, marked.bg);

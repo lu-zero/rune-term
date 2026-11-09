@@ -21,7 +21,7 @@ mod settings;
 mod split;
 mod surfaces;
 mod tabs;
-mod theme;
+pub mod theme;
 
 pub use app::{app, run};
 pub use chrome::{slot, tab};

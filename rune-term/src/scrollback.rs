@@ -269,7 +269,7 @@ impl Bars {
             return;
         };
         self.track
-            .write_color(queue, fade(theme::TAB_BG, srgb_blend, opacity));
+            .write_color(queue, fade(model.palette.tab_bg, srgb_blend, opacity));
         pass.set_scissor_rect(x, y, w, h);
         self.track.draw(pass);
         let history = host.surface.history_size();
@@ -290,7 +290,7 @@ impl Bars {
             return;
         };
         self.thumb
-            .write_color(queue, fade(theme::MUTED, srgb_blend, opacity));
+            .write_color(queue, fade(model.palette.muted, srgb_blend, opacity));
         pass.set_scissor_rect(x, y, w, h);
         self.thumb.draw(pass);
     }

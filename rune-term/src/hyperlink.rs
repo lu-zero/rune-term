@@ -252,6 +252,7 @@ mod tests {
             host.surface.inject_output(b"plain text");
             host.render.update();
         }
+        let palette = model.palette;
         let host = model.surfaces.primary_mut().unwrap();
         let hover = HoverLink {
             line: 0,
@@ -261,6 +262,7 @@ mod tests {
         };
         let source = SurfaceGrid {
             render: &mut host.render,
+            palette,
         };
         let tinted = tint(source, Some(&hover));
         assert!(tinted.cell(0, 0).underline);

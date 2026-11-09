@@ -30,6 +30,7 @@ pub fn sync(
     let force_hover = hover != model.hover_drawn;
     let preedit = model.preedit.clone();
     let force_preedit = preedit != model.preedit_drawn;
+    let force_theme = model.palette.name != model.theme_drawn;
     let switched = model.grid_shown != active;
     let mut drew = false;
     let shared = Arc::clone(&model.shared);
@@ -50,9 +51,10 @@ pub fn sync(
         let (cursor_row, cursor_col) = host.render.cursor();
         let source = SurfaceGrid {
             render: &mut host.render,
+            palette: model.palette,
         };
         let source = selection::tint(source);
-        let source = search::tint(source, &hits);
+        let source = search::tint(source, &hits, model.palette);
         let source = hyperlink::tint(source, host.hover_link.as_ref());
         let mut source = ime::overlay(
             source,
@@ -67,7 +69,13 @@ pub fn sync(
             queue,
             &mut source,
             host.cell_px,
-            resized || flagged || force_search || force_hover || force_preedit || switched,
+            resized
+                || flagged
+                || force_search
+                || force_hover
+                || force_preedit
+                || force_theme
+                || switched,
         );
         images.sync(device, queue, &host.render, host.cell_px);
         model.cursor_cell = (
@@ -83,5 +91,6 @@ pub fn sync(
         model.grid_shown = active;
         model.hover_drawn = hover;
         model.preedit_drawn = preedit;
+        model.theme_drawn = model.palette.name;
     }
 }

@@ -32,6 +32,7 @@ impl Default for ConfigFile {
 pub struct Settings {
     pub default_profile: String,
     pub font_size: f32,
+    pub theme: String,
 }
 
 impl Default for Settings {
@@ -39,6 +40,7 @@ impl Default for Settings {
         Self {
             default_profile: "Default".to_owned(),
             font_size: DEFAULT_FONT_SIZE,
+            theme: "Flexoki Dark".to_owned(),
         }
     }
 }
@@ -48,6 +50,7 @@ impl Default for Settings {
 pub struct Profile {
     pub font_family: String,
     pub font_size: Option<f32>,
+    pub theme: Option<String>,
 }
 
 impl Default for Profile {
@@ -55,6 +58,7 @@ impl Default for Profile {
         Self {
             font_family: "Cascadia Code NF".to_owned(),
             font_size: None,
+            theme: None,
         }
     }
 }
@@ -77,6 +81,7 @@ impl Default for Profiles {
 #[derive(Clone, Debug)]
 pub struct Resolved {
     pub font_size: f32,
+    pub theme: String,
 }
 
 impl ConfigFile {
@@ -93,17 +98,15 @@ impl ConfigFile {
     }
 
     pub fn resolve(&self) -> Resolved {
-        let profile = if self.settings.default_profile == "Default" {
-            &self.profiles.default
-        } else {
-            &self.profiles.default
-        };
-        let font_size = profile
-            .font_size
-            .or(Some(self.settings.font_size))
-            .unwrap_or(DEFAULT_FONT_SIZE);
+        let profile = &self.profiles.default;
+        let font_size = profile.font_size.unwrap_or(self.settings.font_size);
+        let theme = profile
+            .theme
+            .clone()
+            .unwrap_or_else(|| self.settings.theme.clone());
         Resolved {
             font_size: clamp_font_size(font_size),
+            theme,
         }
     }
 
@@ -111,6 +114,11 @@ impl ConfigFile {
         let size = clamp_font_size(size);
         self.settings.font_size = size;
         self.profiles.default.font_size = Some(size);
+    }
+
+    pub fn set_theme(&mut self, theme: String) {
+        self.settings.theme = theme.clone();
+        self.profiles.default.theme = Some(theme);
     }
 
     pub fn save(&self) -> io::Result<()> {

@@ -46,8 +46,9 @@ fn chrome_and_a_solid_slot() {
 
     let (width, height, pixels) = read_png(&path);
     assert_eq!((width, height), (800, 500));
-    let tab = count_near(&pixels, bytes(rune_term::tab()), 2);
-    let slot_bytes = bytes(rune_term::slot());
+    let palette = &rune_term::theme::FLEXOKI_DARK;
+    let tab = count_near(&pixels, bytes(rune_term::tab(palette)), 2);
+    let slot_bytes = bytes(rune_term::slot(palette));
     let slot = count_near(&pixels, slot_bytes, 2);
     let center = at(&pixels, width, width / 2, height / 2);
     let top = at(&pixels, width, width - 8, 8);

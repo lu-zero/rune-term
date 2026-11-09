@@ -8,6 +8,7 @@ use crate::delegate::{self, Shared};
 use crate::metrics;
 use crate::settings::ConfigFile;
 use crate::surfaces::Surfaces;
+use crate::theme::Palette;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Preedit {
@@ -24,6 +25,7 @@ pub struct Model {
     pub scale: f32,
     pub config: ConfigFile,
     pub font_size: f32,
+    pub palette: &'static Palette,
     pub blink_phase_on: bool,
     /// Filled by the IME change. The view does not read this.
     pub preedit: Option<Preedit>,
@@ -38,6 +40,7 @@ pub struct Model {
     pub(crate) grid_shown: Option<librio::SurfaceId>,
     pub(crate) hover_drawn: Option<crate::hyperlink::HoverLink>,
     pub(crate) preedit_drawn: Option<Preedit>,
+    pub(crate) theme_drawn: &'static str,
     pub(crate) shared: Arc<Shared>,
     pub(crate) pending_inject: Option<Vec<u8>>,
     pub(crate) pending_link_open: Option<String>,
@@ -52,6 +55,7 @@ pub fn init() -> Model {
     let config = ConfigFile::load();
     let resolved = config.resolve();
     let font_size = resolved.font_size;
+    let palette = crate::theme::resolve(&resolved.theme);
     Model {
         engine,
         tabs: vec![Tab {
@@ -71,6 +75,7 @@ pub fn init() -> Model {
         scale: 1.0,
         config,
         font_size,
+        palette,
         blink_phase_on: true,
         preedit: None,
         cursor_cell: (0, 0),
@@ -80,6 +85,7 @@ pub fn init() -> Model {
         grid_shown: None,
         hover_drawn: None,
         preedit_drawn: None,
+        theme_drawn: palette.name,
         shared,
         pending_inject,
         pending_link_open: None,

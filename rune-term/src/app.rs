@@ -147,6 +147,14 @@ pub fn apply_font_size(model: &mut Model, tx: &mut Tx, size: f32) {
     }
 }
 
+pub fn apply_theme(model: &mut Model, _tx: &mut Tx, name: &str) {
+    model.config.set_theme(name.to_owned());
+    model.palette = crate::theme::resolve(name);
+    if let Err(err) = model.config.save() {
+        eprintln!("rune-term: failed to save settings: {err}");
+    }
+}
+
 #[derive(Default)]
 struct GridCompositor {
     slot: Option<SolidSlot>,
@@ -187,7 +195,7 @@ impl Compositor<Model> for GridCompositor {
     fn render(&mut self, f: &mut Frame<Model>) {
         self.ensure(f.device, f.queue, f.format, f.device_key());
         let srgb_blend = f.srgb_blend();
-        let color = chrome::slot_premul(srgb_blend);
+        let color = chrome::slot_premul(f.rt.state.palette.bg, srgb_blend);
         let blinking = f.rt.state.surfaces.primary().is_some_and(|host| host.blink);
         let cursor_on = f.rt.state.blink_phase_on || !blinking;
         let pane = pane_instance(&f.rt.instances);

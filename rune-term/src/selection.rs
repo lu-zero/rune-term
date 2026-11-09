@@ -7,19 +7,25 @@ use term_grid::{CellSample, CursorSample, GridSource};
 
 use crate::grid_source::SurfaceGrid;
 use crate::model::Model;
-use crate::theme;
+use crate::theme::Palette;
 
-pub fn tint(source: SurfaceGrid<'_>) -> Tint<SurfaceGrid<'_>> {
+pub fn tint(source: SurfaceGrid<'_>) -> Tint<'_> {
     let selection = source.render.selection();
-    Tint { source, selection }
+    let palette = source.palette;
+    Tint {
+        source,
+        selection,
+        palette,
+    }
 }
 
-pub struct Tint<S> {
-    source: S,
+pub struct Tint<'a> {
+    source: SurfaceGrid<'a>,
     selection: Option<ViewportSelection>,
+    palette: &'static Palette,
 }
 
-impl<S: GridSource> GridSource for Tint<S> {
+impl GridSource for Tint<'_> {
     fn columns(&self) -> usize {
         self.source.columns()
     }
@@ -35,7 +41,7 @@ impl<S: GridSource> GridSource for Tint<S> {
     fn cell(&self, line: usize, col: usize) -> CellSample {
         let mut sample = self.source.cell(line, col);
         if covers(self.selection, line, col) {
-            highlight(&mut sample);
+            highlight(&mut sample, self.palette);
         }
         sample
     }
@@ -117,10 +123,10 @@ fn ordered(selection: ViewportSelection) -> (u16, u16, u16, u16) {
 }
 
 /// A transparent cell takes the foreground as its highlight. An opaque cell swaps.
-fn highlight(sample: &mut CellSample) {
+fn highlight(sample: &mut CellSample, palette: &Palette) {
     if sample.bg[3] == 0 {
-        sample.fg = solid(theme::BG);
-        sample.bg = solid(theme::FG);
+        sample.fg = solid(palette.bg);
+        sample.bg = solid(palette.fg);
         return;
     }
     std::mem::swap(&mut sample.fg, &mut sample.bg);
@@ -162,9 +168,11 @@ mod tests {
             host.surface.selection_update(0, 4, Side::Right);
             host.render.update();
         }
+        let palette = model.palette;
         let host = model.surfaces.primary_mut().unwrap();
         let tinted = tint(SurfaceGrid {
             render: &mut host.render,
+            palette,
         });
         let selected = tinted.cell(0, 0);
         let outside = tinted.cell(0, 6);
