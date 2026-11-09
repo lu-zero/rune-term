@@ -421,7 +421,7 @@ fn theme_choice(choice: &Palette, current: &Palette) -> El {
     };
     let meta_color = crate::theme::linear(current.muted);
     let is_builtin = crate::theme::resolve_builtin(&choice.name).is_some();
-    let mut right = row().gap(6.0).items_center();
+    let mut right = row().gap(8.0).items_center();
     if !choice.author.is_empty() {
         right = right.child(text(choice.author.as_str()).color(meta_color));
     }
@@ -442,26 +442,30 @@ fn theme_choice(choice: &Palette, current: &Palette) -> El {
         );
     }
     let edit_name = name.clone();
-    right = right.child(row_action(
-        "✎",
-        &format!("theme-edit-{name}"),
-        current,
-        true,
-        move |model, tx| {
-            crate::app::edit_theme_named(model, tx, &edit_name);
-        },
-    ));
     let del_name = name.clone();
     let del_enabled = !is_builtin;
-    right = right.child(row_action(
-        "✕",
-        &format!("theme-del-{name}"),
-        current,
-        del_enabled,
-        move |model, tx| {
-            crate::app::delete_theme_named(model, tx, &del_name);
-        },
-    ));
+    let actions = row()
+        .gap(2.0)
+        .items_center()
+        .child(row_action(
+            "✎",
+            &format!("theme-edit-{name}"),
+            current,
+            true,
+            move |model, tx| {
+                crate::app::edit_theme_named(model, tx, &edit_name);
+            },
+        ))
+        .child(row_action(
+            "✕",
+            &format!("theme-del-{name}"),
+            current,
+            del_enabled,
+            move |model, tx| {
+                crate::app::delete_theme_named(model, tx, &del_name);
+            },
+        ));
+    right = right.child(actions);
     row()
         .key(format!("theme-{name}"))
         .w_full()
