@@ -1,3 +1,5 @@
+Filed as https://github.com/anomalyco/rune/issues/393
+
 ## Title
 `Input: expose modifier changes while pointer is stationary for hover affordance`
 
