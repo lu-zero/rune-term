@@ -25,6 +25,7 @@ pub fn run() {
 pub fn app() -> App<Model> {
     let mut settings = MenuItem::new("Settings…", |model: &mut Model, _tx: &mut Tx| {
         model.settings_open = true;
+        model.settings_tab = crate::model::SettingsTab::Font;
     });
     #[cfg(target_os = "macos")]
     if let Ok(sc) = "cmd+comma".parse::<rune::Shortcut>() {
@@ -158,6 +159,7 @@ pub fn apply_theme(model: &mut Model, _tx: &mut Tx, name: &str) {
 pub fn copy_theme(model: &mut Model, _tx: &mut Tx) {
     let name = model.config.copy_theme(&model.palette.name);
     model.palette = model.config.resolve_palette();
+    model.settings_tab = crate::model::SettingsTab::Theme;
     if let Some(custom) = model.config.custom_themes.get(&name) {
         model.theme_editor = Some(crate::model::ThemeEditor::from_custom(&name, custom));
     }
@@ -168,6 +170,7 @@ pub fn copy_theme(model: &mut Model, _tx: &mut Tx) {
 
 pub fn edit_theme(model: &mut Model, _tx: &mut Tx) {
     let name = model.palette.name.clone();
+    model.settings_tab = crate::model::SettingsTab::Theme;
     if let Some(custom) = model.config.custom_themes.get(&name) {
         model.theme_editor = Some(crate::model::ThemeEditor::from_custom(&name, custom));
     }

@@ -16,6 +16,12 @@ pub struct Preedit {
     pub cursor: Option<(usize, usize)>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SettingsTab {
+    Font,
+    Theme,
+}
+
 pub struct ThemeEditor {
     pub original_name: String,
     pub name: TextEdit,
@@ -60,6 +66,7 @@ pub struct Model {
     pub(crate) pending_inject: Option<Vec<u8>>,
     pub(crate) pending_link_open: Option<String>,
     pub(crate) settings_open: bool,
+    pub(crate) settings_tab: SettingsTab,
     pub(crate) theme_editor: Option<ThemeEditor>,
 }
 
@@ -106,6 +113,7 @@ pub fn init() -> Model {
         pending_inject,
         pending_link_open: None,
         settings_open: false,
+        settings_tab: SettingsTab::Font,
         theme_editor: None,
     }
 }

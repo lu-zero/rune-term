@@ -71,8 +71,139 @@ pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
 
 fn settings_panel(model: &Model) -> El {
     let p = model.palette.as_ref();
+    let header = row()
+        .w_full()
+        .items_center()
+        .justify_between()
+        .child(text("Settings").color(text_color(p)))
+        .child(settings_chip("Close", "close-settings", p, |model, _tx| {
+            model.settings_open = false;
+            model.theme_editor = None;
+        }));
+    let tabs = row()
+        .w_full()
+        .gap(6.0)
+        .child(settings_tab_chip(
+            "Font",
+            crate::model::SettingsTab::Font,
+            model.settings_tab,
+            p,
+        ))
+        .child(settings_tab_chip(
+            "Theme",
+            crate::model::SettingsTab::Theme,
+            model.settings_tab,
+            p,
+        ));
+    let body = match model.settings_tab {
+        crate::model::SettingsTab::Font => font_settings(model, p),
+        crate::model::SettingsTab::Theme => theme_settings(model, p),
+    };
+    let card = col()
+        .key("settings")
+        .w(520.0)
+        .max_h(560.0)
+        .fill(theme::linear(p.tab_bg))
+        .border(1.0, theme::linear(p.active_border))
+        .radius(12.0)
+        .gap(12.0)
+        .pl(18.0)
+        .pr(18.0)
+        .pt(16.0)
+        .pb(16.0)
+        .modal(true, |model: &mut Model| {
+            model.settings_open = false;
+            model.theme_editor = None;
+        })
+        .child(header)
+        .child(tabs)
+        .child(body);
+    rune::el()
+        .key("settings-overlay")
+        .absolute(0.0, 0.0)
+        .w_full()
+        .h_full()
+        .center()
+        .child(card)
+}
+
+fn settings_tab_chip(
+    label: &str,
+    tab: crate::model::SettingsTab,
+    active: crate::model::SettingsTab,
+    p: &Palette,
+) -> El {
+    let selected = tab == active;
+    el().key(format!("settings-tab-{label}"))
+        .pl(12.0)
+        .pr(12.0)
+        .pt(6.0)
+        .pb(6.0)
+        .radius(7.0)
+        .border(
+            if selected { 1.5 } else { 1.0 },
+            theme::linear(if selected { p.accent } else { p.active_border }),
+        )
+        .fill(theme::linear(if selected { p.bg } else { p.tab_bg }))
+        .focusable(true)
+        .on_press_tx(move |model: &mut Model, _tx| {
+            model.settings_tab = tab;
+        })
+        .child(text(label).color(if selected {
+            text_color(p)
+        } else {
+            theme::linear(p.muted)
+        }))
+}
+
+fn font_settings(model: &Model, p: &Palette) -> El {
     let (cw, ch) = model.cell_points;
     let size = model.font_size;
+    col()
+        .w_full()
+        .grow(1.0)
+        .gap(10.0)
+        .child(text("Font size").color(text_color(p)))
+        .child(
+            row()
+                .w_full()
+                .gap(8.0)
+                .items_center()
+                .child(settings_step("−", "font-dec", p, -1.0))
+                .child(
+                    el().grow(1.0)
+                        .h(34.0)
+                        .center()
+                        .radius(8.0)
+                        .fill(theme::linear(p.bg))
+                        .border(1.0, theme::linear(p.active_border))
+                        .child(
+                            text(format!("{size:.0} pt · Cascadia Code NF")).color(text_color(p)),
+                        ),
+                )
+                .child(settings_step("+", "font-inc", p, 1.0)),
+        )
+        .child(
+            row()
+                .w_full()
+                .gap(6.0)
+                .child(font_preset(11.0, p))
+                .child(font_preset(12.0, p))
+                .child(font_preset(14.0, p))
+                .child(font_preset(16.0, p))
+                .child(font_preset(18.0, p))
+                .child(font_preset(20.0, p)),
+        )
+        .child(
+            text(format!("Cell {cw:.1}×{ch:.1} pt · saved to config"))
+                .color(theme::linear(p.muted)),
+        )
+}
+
+fn theme_settings(model: &Model, p: &Palette) -> El {
+    if model.theme_editor.is_some() {
+        return theme_editor_view(model);
+    }
     let mut themes = col().w_full().gap(4.0);
     for t in theme::builtins() {
         themes = themes.child(theme_choice(t, p));
@@ -83,7 +214,7 @@ fn settings_panel(model: &Model) -> El {
     }
     let theme_list = col()
         .w_full()
-        .h(110.0)
+        .h(180.0)
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
@@ -101,7 +232,7 @@ fn settings_panel(model: &Model) -> El {
         .items_center()
         .justify_between()
         .gap(8.0)
-        .child(text("Theme").color(text_color(p)));
+        .child(text("Palette").color(text_color(p)));
     let mut theme_actions = row().gap(6.0).items_center();
     theme_actions = theme_actions.child(settings_chip("Copy", "theme-copy", p, |model, tx| {
         crate::app::copy_theme(model, tx);
@@ -116,98 +247,15 @@ fn settings_panel(model: &Model) -> El {
             }));
     }
     theme_header = theme_header.child(theme_actions);
-
-    let mut theme_section = col()
+    col()
         .w_full()
+        .grow(1.0)
         .gap(8.0)
         .child(theme_header)
         .child(theme_list)
         .child(text(p.name.as_str()).color(theme::linear(p.muted)))
         .child(text(format!("Palette by {}", p.author)).color(theme::linear(p.muted)))
-        .child(text(p.url.as_str()).color(theme::linear(p.muted)));
-    if model.theme_editor.is_some() {
-        theme_section = theme_section.child(theme_editor_view(model));
-    }
-
-    let card = col()
-        .key("settings")
-        .w(460.0)
-        .max_h(640.0)
-        .scroll(ScrollSpec {
-            stick_bottom: false,
-        })
-        .fill(theme::linear(p.tab_bg))
-        .border(1.0, theme::linear(p.active_border))
-        .radius(12.0)
-        .gap(14.0)
-        .pl(18.0)
-        .pr(18.0)
-        .pt(16.0)
-        .pb(16.0)
-        .modal(true, |model: &mut Model| {
-            model.settings_open = false;
-            model.theme_editor = None;
-        })
-        .child(
-            row()
-                .w_full()
-                .items_center()
-                .justify_between()
-                .child(text("Settings").color(text_color(p)))
-                .child(settings_chip("Close", "close-settings", p, |model, _tx| {
-                    model.settings_open = false;
-                    model.theme_editor = None;
-                })),
-        )
-        .child(
-            col()
-                .w_full()
-                .gap(8.0)
-                .child(text("Font size").color(text_color(p)))
-                .child(
-                    row()
-                        .w_full()
-                        .gap(8.0)
-                        .items_center()
-                        .child(settings_step("−", "font-dec", p, -1.0))
-                        .child(
-                            el().grow(1.0)
-                                .h(34.0)
-                                .center()
-                                .radius(8.0)
-                                .fill(theme::linear(p.bg))
-                                .border(1.0, theme::linear(p.active_border))
-                                .child(
-                                    text(format!("{size:.0} pt · Cascadia Code NF"))
-                                        .color(text_color(p)),
-                                ),
-                        )
-                        .child(settings_step("+", "font-inc", p, 1.0)),
-                )
-                .child(
-                    row()
-                        .w_full()
-                        .gap(6.0)
-                        .child(font_preset(11.0, p))
-                        .child(font_preset(12.0, p))
-                        .child(font_preset(14.0, p))
-                        .child(font_preset(16.0, p))
-                        .child(font_preset(18.0, p))
-                        .child(font_preset(20.0, p)),
-                )
-                .child(
-                    text(format!("Cell {cw:.1}×{ch:.1} pt · saved to config"))
-                        .color(theme::linear(p.muted)),
-                ),
-        )
-        .child(theme_section);
-    rune::el()
-        .key("settings-overlay")
-        .absolute(0.0, 0.0)
-        .w_full()
-        .h_full()
-        .center()
-        .child(card)
+        .child(text(p.url.as_str()).color(theme::linear(p.muted)))
 }
 
 fn theme_editor_view(model: &Model) -> El {
@@ -215,74 +263,66 @@ fn theme_editor_view(model: &Model) -> El {
     let Some(editor) = &model.theme_editor else {
         return col();
     };
-    let mut form = col()
-        .w_full()
-        .gap(6.0)
-        .pt(8.0)
-        .child(text("Edit custom theme").color(text_color(p)))
-        .child(editor_row("Name", "te-name", &editor.name, p, |m| {
+    let mut grid = col().w_full().gap(6.0);
+    let rows: [(
+        &str,
+        &str,
+        &rune::TextEdit,
+        fn(&mut Model) -> &mut rune::TextEdit,
+    ); 8] = [
+        ("Name", "te-name", &editor.name, |m| {
             &mut m.theme_editor.as_mut().unwrap().name
-        }));
-    let colors: [(&str, &str, fn(&mut Model) -> &mut rune::TextEdit); 7] = [
-        ("Background", "te-bg", |m| {
+        }),
+        ("Background", "te-bg", &editor.bg, |m| {
             &mut m.theme_editor.as_mut().unwrap().bg
         }),
-        ("Foreground", "te-fg", |m| {
+        ("Foreground", "te-fg", &editor.fg, |m| {
             &mut m.theme_editor.as_mut().unwrap().fg
         }),
-        ("Bright FG", "te-fgb", |m| {
+        ("Bright FG", "te-fgb", &editor.fg_bright, |m| {
             &mut m.theme_editor.as_mut().unwrap().fg_bright
         }),
-        ("Muted", "te-muted", |m| {
+        ("Muted", "te-muted", &editor.muted, |m| {
             &mut m.theme_editor.as_mut().unwrap().muted
         }),
-        ("Tab BG", "te-tab", |m| {
+        ("Tab BG", "te-tab", &editor.tab_bg, |m| {
             &mut m.theme_editor.as_mut().unwrap().tab_bg
         }),
-        ("Border", "te-border", |m| {
+        ("Border", "te-border", &editor.active_border, |m| {
             &mut m.theme_editor.as_mut().unwrap().active_border
         }),
-        ("Accent", "te-accent", |m| {
+        ("Accent", "te-accent", &editor.accent, |m| {
             &mut m.theme_editor.as_mut().unwrap().accent
         }),
     ];
-    let mut grid = col().w_full().gap(4.0);
-    let mut i = 0;
-    while i < colors.len() {
-        let mut r = row().w_full().gap(6.0);
-        let (label, key, get) = colors[i];
-        let edit = &model.theme_editor.as_ref().unwrap();
-        let te = match i {
-            0 => &edit.bg,
-            1 => &edit.fg,
-            2 => &edit.fg_bright,
-            3 => &edit.muted,
-            4 => &edit.tab_bg,
-            5 => &edit.active_border,
-            _ => &edit.accent,
-        };
-        r = r.child(editor_color_field(label, key, te, p, get));
-        if i + 1 < colors.len() {
-            let (label2, key2, get2) = colors[i + 1];
-            let te2 = match i + 1 {
-                1 => &edit.fg,
-                2 => &edit.fg_bright,
-                3 => &edit.muted,
-                4 => &edit.tab_bg,
-                5 => &edit.active_border,
-                _ => &edit.accent,
-            };
-            r = r.child(editor_color_field(label2, key2, te2, p, get2));
-            i += 2;
-        } else {
-            i += 1;
-        }
-        grid = grid.child(r);
+    for (label, key, te, on_edit) in rows {
+        grid = grid.child(editor_row(label, key, te, p, on_edit));
     }
-    form = form
-        .child(grid)
+    col()
+        .w_full()
+        .grow(1.0)
+        .gap(10.0)
         .child(
-            text("Colors: #RRGGBB hex. ANSI 16 copied from source.").color(theme::linear(p.muted)),
+            row()
+                .w_full()
+                .items_center()
+                .justify_between()
+                .child(text("Edit custom theme").color(text_color(p)))
+                .child(text(&editor.original_name).color(theme::linear(p.muted))),
+        )
+        .child(
+            col()
+                .w_full()
+                .grow(1.0)
+                .scroll(ScrollSpec {
+                    stick_bottom: false,
+                })
+                .gap(6.0)
+                .child(grid)
+                .child(
+                    text("Colors: #RRGGBB hex. ANSI 16 copied from source.")
+                        .color(theme::linear(p.muted)),
+                ),
         )
         .child(
             row()
@@ -295,17 +335,7 @@ fn theme_editor_view(model: &Model) -> El {
                 .child(settings_chip("Save", "te-save", p, |model, tx| {
                     crate::app::save_theme_edit(model, tx);
                 })),
-        );
-    col()
-        .w_full()
-        .pt(6.0)
-        .pb(2.0)
-        .border(1.0, crate::theme::linear(p.active_border))
-        .radius(8.0)
-        .pl(10.0)
-        .pr(10.0)
-        .fill(crate::theme::linear(p.bg))
-        .child(form)
+        )
 }
 
 fn editor_row(
@@ -317,10 +347,13 @@ fn editor_row(
 ) -> El {
     row()
         .w_full()
-        .gap(8.0)
+        .h(32.0)
+        .gap(10.0)
         .items_center()
         .child(
-            el().w(72.0)
+            el().w(88.0)
+                .h(32.0)
+                .center_y()
                 .child(text(label).color(theme::linear(p.muted))),
         )
         .child(
@@ -328,42 +361,11 @@ fn editor_row(
                 .key(key)
                 .single_line()
                 .grow(1.0)
-                .h(28.0)
-                .pl(8.0)
-                .pr(8.0)
+                .h(32.0)
+                .pl(10.0)
+                .pr(10.0)
                 .radius(6.0)
-                .fill(crate::theme::linear(p.tab_bg))
-                .border(1.0, crate::theme::linear(p.active_border))
-                .color(text_color(p))
-                .on_edit(on_edit),
-        )
-}
-
-fn editor_color_field(
-    label: &str,
-    key: &'static str,
-    edit: &rune::TextEdit,
-    p: &Palette,
-    on_edit: fn(&mut Model) -> &mut rune::TextEdit,
-) -> El {
-    row()
-        .grow(1.0)
-        .gap(6.0)
-        .items_center()
-        .min_w(0.0)
-        .child(
-            el().w(70.0)
-                .child(text(label).color(theme::linear(p.muted))),
-        )
-        .child(
-            text_input(edit, TextStyle::new(12.0, 400.0))
-                .key(key)
-                .single_line()
-                .grow(1.0)
-                .h(26.0)
-                .pl(6.0)
-                .pr(6.0)
-                .radius(5.0)
+                .center_y()
                 .fill(crate::theme::linear(p.tab_bg))
                 .border(1.0, crate::theme::linear(p.active_border))
                 .color(text_color(p))
