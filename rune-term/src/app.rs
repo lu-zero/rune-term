@@ -4,7 +4,7 @@ use std::sync::atomic::Ordering;
 
 use rune::compose::DeviceKey;
 use rune::render::{Instance, KIND_EFFECT};
-use rune::{App, AppSpec, Compositor, Frame, Titlebar, Tx};
+use rune::{App, AppSpec, Compositor, Frame, MenuItem, Titlebar, Tx};
 use term_grid::images::ImageBucket;
 use term_grid::{DrawSlot, GridRenderer, SolidSlot};
 
@@ -23,10 +23,18 @@ pub fn run() {
 }
 
 pub fn app() -> App<Model> {
+    let mut settings = MenuItem::new("Settings…", |model: &mut Model, _tx: &mut Tx| {
+        model.settings_open = true;
+    });
+    #[cfg(target_os = "macos")]
+    if let Ok(sc) = "cmd+comma".parse::<rune::Shortcut>() {
+        settings = settings.key_equivalent(sc);
+    }
     App::new(spec())
         .compositor(GridCompositor::default())
         .on_ime(ime::on_ime)
         .titlebar(Titlebar::new(chrome::TITLEBAR_H))
+        .menu_item(settings)
 }
 
 fn spec() -> AppSpec<Model> {
