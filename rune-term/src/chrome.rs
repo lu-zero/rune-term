@@ -172,12 +172,12 @@ fn settings_tab_chip(
 fn font_settings(model: &Model, p: &Palette) -> El {
     let (cw, ch) = model.cell_points;
     let size = model.font_size;
+    let _ = (cw, ch);
     col()
         .w_full()
         .grow(1.0)
         .gap(10.0)
         .pb(8.0)
-        .child(text("Font size").color(text_color(p)))
         .child(
             row()
                 .w_full()
@@ -207,10 +207,6 @@ fn font_settings(model: &Model, p: &Palette) -> El {
                 .child(font_preset(16.0, p))
                 .child(font_preset(18.0, p))
                 .child(font_preset(20.0, p)),
-        )
-        .child(
-            text(format!("Cell {cw:.1}×{ch:.1} pt · saved to config"))
-                .color(theme::linear(p.muted)),
         )
 }
 
