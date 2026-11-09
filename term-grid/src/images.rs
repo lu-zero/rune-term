@@ -278,6 +278,7 @@ impl ImagePass {
         let _ = sixel::draw;
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn draw(
         &mut self,
         device: &wgpu::Device,

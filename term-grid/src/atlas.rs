@@ -194,8 +194,8 @@ impl Atlas {
                 atlas: 0,
             });
         }
-        drop(scaler);
-        let ascii_rows = (95 + cols - 1) / cols;
+        let _ = scaler;
+        let ascii_rows = 95u32.div_ceil(cols);
         Self {
             pixels,
             ascii,
@@ -329,7 +329,7 @@ impl Atlas {
             .normalized_coords(coords)
             .build();
         let image = Render::new(&[Source::Outline]).render(&mut scaler, gid);
-        drop(scaler);
+        let _ = scaler;
         let image = image?;
         let (gw, gh) = (image.placement.width, image.placement.height);
         if gw == 0 || gh == 0 || image.data.len() < (gw * gh) as usize {
@@ -404,13 +404,13 @@ impl Atlas {
                 });
             }
             self.paint_fallback_gray(origin, slot_w, slot_h, &drawn);
-            return Some(GlyphRect {
+            Some(GlyphRect {
                 x: origin.0,
                 y: origin.1,
                 w: slot_w,
                 h: slot_h,
                 atlas: 0,
-            });
+            })
         }
         #[cfg(not(target_os = "macos"))]
         {
@@ -572,6 +572,7 @@ fn cover(byte: u8) -> u8 {
     (t.powf(0.75) * 255.0).round() as u8
 }
 
+#[allow(clippy::too_many_arguments)]
 fn blit(
     pixels: &mut [u8],
     origin_x: u32,
@@ -632,9 +633,9 @@ fn block_covers(ch: char, x: u32, y: u32, w: u32, h: u32) -> bool {
     let from_left = |k: u32| x < w * k / 8;
     let from_bottom = |k: u32| y >= h * (8 - k) / 8;
     let shade = |level: u8| match level {
-        1 => (x % 2) == 0 && (y % 2) == 0,
-        2 => (x + y) % 2 == 0,
-        _ => !((x % 2) == 1 && (y % 2) == 1),
+        1 => x.is_multiple_of(2) && y.is_multiple_of(2),
+        2 => (x + y).is_multiple_of(2),
+        _ => !(x % 2 == 1 && y % 2 == 1),
     };
     match ch {
         '\u{2580}' => top,
@@ -717,6 +718,7 @@ fn fills_em(image: &Image, em_w: f32, ascent: f32, body: f32) -> bool {
     left <= pad_x && right >= em_w - pad_x && top <= pad_y && bottom >= body - pad_y
 }
 
+#[allow(clippy::too_many_arguments)]
 fn paint_em(
     pixels: &mut [u8],
     origin: (u32, u32),

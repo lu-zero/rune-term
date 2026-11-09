@@ -27,7 +27,7 @@ pub struct Thumb {
 
 /// `track`, `top`, and `height` share one unit. Offset 0 sits on the bottom.
 pub fn thumb(track: f32, history: usize, rows: usize, offset: usize, min_thumb: f32) -> Thumb {
-    if !(track > 0.0) || rows == 0 {
+    if track.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) || rows == 0 {
         return Thumb {
             top: 0.0,
             height: 0.0,
@@ -213,7 +213,7 @@ pub(crate) fn pointer(
     let history = host.surface.history_size();
     let rows = host.render.lines();
     let offset = host.render.display_offset();
-    if history == 0 || rows == 0 || !(track > 0.0) {
+    if history == 0 || rows == 0 || track.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
         tx.live_only();
         return grab;
     }

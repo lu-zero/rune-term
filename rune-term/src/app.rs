@@ -156,10 +156,6 @@ pub fn apply_theme(model: &mut Model, _tx: &mut Tx, name: &str) {
     }
 }
 
-pub fn copy_theme(model: &mut Model, tx: &mut Tx) {
-    copy_theme_named(model, tx, &model.palette.name.clone());
-}
-
 pub fn copy_theme_named(model: &mut Model, _tx: &mut Tx, source_name: &str) {
     let name = model.config.copy_theme(source_name);
     model.palette = model.config.resolve_palette();
@@ -170,10 +166,6 @@ pub fn copy_theme_named(model: &mut Model, _tx: &mut Tx, source_name: &str) {
     if let Err(err) = model.config.save() {
         eprintln!("rune-term: failed to save settings: {err}");
     }
-}
-
-pub fn edit_theme(model: &mut Model, tx: &mut Tx) {
-    edit_theme_named(model, tx, &model.palette.name.clone());
 }
 
 pub fn edit_theme_named(model: &mut Model, tx: &mut Tx, name: &str) {
@@ -236,10 +228,6 @@ pub fn save_theme_edit(model: &mut Model, _tx: &mut Tx) {
     if let Err(err) = model.config.save() {
         eprintln!("rune-term: failed to save settings: {err}");
     }
-}
-
-pub fn delete_theme(model: &mut Model, tx: &mut Tx) {
-    delete_theme_named(model, tx, &model.palette.name.clone());
 }
 
 pub fn delete_theme_named(model: &mut Model, _tx: &mut Tx, name: &str) {

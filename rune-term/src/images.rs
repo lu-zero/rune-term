@@ -51,6 +51,7 @@ impl Images {
         self.placements.clear();
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn draw_bucket(
         &mut self,
         device: &Device,

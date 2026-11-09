@@ -287,6 +287,7 @@ fn theme_editor_view(model: &Model) -> El {
         return col();
     };
     let mut grid = col().w_full().gap(6.0);
+    #[allow(clippy::type_complexity)]
     let rows: [(
         &str,
         &str,
@@ -453,14 +454,26 @@ fn theme_choice(choice: &Palette, current: &Palette) -> El {
         );
     }
     let edit_name = name.clone();
-    right = right.child(row_action("✎", &format!("theme-edit-{name}"), current, true, move |model, tx| {
-        crate::app::edit_theme_named(model, tx, &edit_name);
-    }));
+    right = right.child(row_action(
+        "✎",
+        &format!("theme-edit-{name}"),
+        current,
+        true,
+        move |model, tx| {
+            crate::app::edit_theme_named(model, tx, &edit_name);
+        },
+    ));
     let del_name = name.clone();
     let del_enabled = !is_builtin;
-    right = right.child(row_action("✕", &format!("theme-del-{name}"), current, del_enabled, move |model, tx| {
-        crate::app::delete_theme_named(model, tx, &del_name);
-    }));
+    right = right.child(row_action(
+        "✕",
+        &format!("theme-del-{name}"),
+        current,
+        del_enabled,
+        move |model, tx| {
+            crate::app::delete_theme_named(model, tx, &del_name);
+        },
+    ));
     row()
         .key(format!("theme-{name}"))
         .w_full()
@@ -499,11 +512,7 @@ fn row_action(
     } else {
         crate::theme::linear(p.muted)
     };
-    let mut e = el().key(key)
-        .w(22.0)
-        .h(22.0)
-        .center()
-        .radius(4.0);
+    let mut e = el().key(key).w(22.0).h(22.0).center().radius(4.0);
     if enabled {
         e = e.hover(hover_overlay(p)).on_press_tx(on_press);
     }

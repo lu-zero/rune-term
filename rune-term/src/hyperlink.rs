@@ -175,7 +175,7 @@ impl<S: GridSource> GridSource for Tint<S> {
         if let Some(hover) = &self.hover {
             if hover.line == line && col >= hover.start && col <= hover.end {
                 sample.underline = true;
-                sample.fg = solid(0x4385_BE);
+                sample.fg = solid(0x0043_85BE);
                 sample.fg[3] = 255;
             }
         }
@@ -193,9 +193,9 @@ impl<S: GridSource> GridSource for Tint<S> {
 
 fn solid(value: u32) -> [u8; 4] {
     [
-        ((value >> 16) & 0xff) as u8,
-        ((value >> 8) & 0xff) as u8,
-        (value & 0xff) as u8,
+        ((value >> 16) & 0x0000_00FF) as u8,
+        ((value >> 8) & 0x0000_00FF) as u8,
+        (value & 0x0000_00FF) as u8,
         255,
     ]
 }

@@ -39,7 +39,7 @@ pub fn is_chord(key: &Key, mods: Mods) -> bool {
     let Key::Command(c) = key else {
         return false;
     };
-    if c.to_ascii_lowercase() != 'f' {
+    if !c.eq_ignore_ascii_case(&'f') {
         return false;
     }
     if cfg!(target_os = "macos") {

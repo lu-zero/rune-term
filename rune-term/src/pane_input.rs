@@ -108,6 +108,7 @@ pub fn on_drag_mark(model: &mut Model, mark: u32, drag: &mut Drag, scale: f32, t
 
 /// The program takes a click when `mouse_button` returns true. Otherwise the
 /// left button starts a local selection. Shift makes that return false.
+#[allow(clippy::too_many_arguments)]
 fn gesture(
     model: &mut Model,
     mark: u32,
@@ -322,7 +323,7 @@ fn cell_for_wheel(host: &HostSurface, x: f32, y: f32, scale: f32) -> (u16, u16) 
 }
 
 fn edge_cell(local: f32, pitch: f32, count: u16) -> u16 {
-    if count == 0 || !(pitch > 0.0) || local < 0.0 {
+    if count == 0 || pitch.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) || local < 0.0 {
         0
     } else {
         count - 1
@@ -332,7 +333,7 @@ fn edge_cell(local: f32, pitch: f32, count: u16) -> u16 {
 /// The first half of the cell is [`librio::Side::Left`]. A backwards drag
 /// can include column 0 because the side follows the pointer.
 fn side_at(x: f32, col: u16, pitch: f32) -> librio::Side {
-    if !(pitch > 0.0) {
+    if pitch.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
         return librio::Side::Left;
     }
     let into = x - f32::from(col) * pitch;
@@ -422,6 +423,7 @@ fn target_host(model: &mut Model, mark: u32) -> Option<&mut HostSurface> {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn deliver(
     model: &mut Model,
     mark: u32,

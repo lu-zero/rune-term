@@ -59,7 +59,7 @@ const _: () = {
     assert!(std::mem::size_of::<CellBg>() == 4);
     assert!(std::mem::size_of::<CellText>() == 48);
     assert!(std::mem::size_of::<GridUniforms>() == 160);
-    assert!(std::mem::size_of::<GridUniforms>() % 16 == 0);
+    assert!(std::mem::size_of::<GridUniforms>().is_multiple_of(16));
     assert!(CellText::ATLAS_GRAYSCALE == 0);
     assert!(CellText::ATLAS_COLOR == 1);
     assert!(GridUniforms::FLAG_DISPLAY_P3 == 1);

@@ -71,17 +71,10 @@ impl Default for Profile {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub struct Profiles {
     #[serde(rename = "Default")]
     pub default: Profile,
-}
-
-impl Default for Profiles {
-    fn default() -> Self {
-        Self {
-            default: Profile::default(),
-        }
-    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
