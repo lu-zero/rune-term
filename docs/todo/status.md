@@ -60,6 +60,9 @@ The numbers are that plan's.
 - [~] **16. Settings.** Cmd+, opens a minimal settings modal showing the
       fixed font (Cascadia Code NF 14pt, cell metrics) and Flexoki dark theme.
       Live font-size/palette changes and persistence are not wired yet.
+      Design: [`settings-profiles.md`](./settings-profiles.md) (iTerm-style
+      profiles as session templates, TOML settings + named profiles; no
+      Lua/import stacks, no arrangement restore).
 - [x] **17. Box-drawing and braille sprites.** Box drawing, block elements
       (`U+2580–U+259F`), braille, legacy computing sextants/octants, powerline/
       extra separators (`U+E0B0–U+E0BF`, `U+E0D2`, `U+E0D4`), geometric corner
