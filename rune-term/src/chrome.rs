@@ -403,21 +403,29 @@ fn theme_choice(choice: &Palette, current: &Palette) -> El {
     };
     let fill = if active { current.tab_bg } else { current.bg };
     let name = choice.name.clone();
-    let mut label = name.clone();
+    let name_label = name.clone();
+    let name_color = if active {
+        text_color(current)
+    } else {
+        crate::theme::linear(current.fg)
+    };
+    let meta_color = crate::theme::linear(current.muted);
+    let mut right = row().gap(8.0).items_center();
     if !choice.author.is_empty() {
-        label.push_str(" · ");
-        label.push_str(&choice.author);
+        right = right.child(text(choice.author.as_str()).color(meta_color));
     }
     if !choice.url.is_empty() {
-        label.push(' ');
-        label.push_str(&choice.url);
+        right = right.child(text("↗").color(meta_color));
     }
-    el().key(format!("theme-{name}"))
+    row()
+        .key(format!("theme-{name}"))
         .w_full()
         .h(32.0)
         .pl(10.0)
         .pr(10.0)
+        .gap(10.0)
         .items_center()
+        .justify_between()
         .radius(6.0)
         .border(if active { 1.5 } else { 1.0 }, crate::theme::linear(border))
         .fill(crate::theme::linear(fill))
@@ -426,16 +434,13 @@ fn theme_choice(choice: &Palette, current: &Palette) -> El {
             crate::app::apply_theme(model, tx, &name);
         })
         .child(
-            text(label)
+            text(name_label)
                 .grow(1.0)
                 .min_w(0.0)
                 .truncate()
-                .color(if active {
-                    text_color(current)
-                } else {
-                    crate::theme::linear(current.muted)
-                }),
+                .color(name_color),
         )
+        .child(right)
 }
 
 fn settings_chip(
