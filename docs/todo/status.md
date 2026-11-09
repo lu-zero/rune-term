@@ -58,12 +58,13 @@ The numbers are that plan's.
       kitty image and verifies pixels. Sixel/iTerm2 remain item 18.
 - [ ] **16. Settings.** The palette and the 14 point face are fixed in the
       tree.
-- [~] **17. Box-drawing and braille sprites.** Box drawing, block elements
+- [x] **17. Box-drawing and braille sprites.** Box drawing, block elements
       (`U+2580–U+259F`), braille, legacy computing sextants/octants, powerline/
       extra separators (`U+E0B0–U+E0BF`, `U+E0D2`, `U+E0D4`), geometric corner
       triangles, and branch drawing glyphs (`U+F5D0–U+F60D`) are rasterized into
-      the gray atlas and cached like glyphs. Remaining sprite families still
-      come from the face or cascade.
+      the gray atlas and cached like glyphs, matching the Rio/sugarloaf sprite
+      families this tree targets. Other symbols still come from the face or
+      cascade.
 - [ ] **18. Sixel and iTerm2.**
 - [~] **19. Hyperlinks and URL opening.** OSC 8 and detected URLs can be
       hovered and opened, without breaking mouse-reporting apps or selection.
