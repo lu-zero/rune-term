@@ -231,15 +231,21 @@ pub fn on_pointer_move_mark(
                 None
             }
         };
-        if host.hover_link != hover {
+        let changed = host.hover_link != hover;
+        if changed {
             host.hover_link = hover;
-            tx.wake_after(Duration::ZERO);
         }
         if let Some((col, row)) = cell {
             host.surface.mouse_motion(col, row, 3, mods);
         }
+        if changed {
+            tx.wake_after(Duration::ZERO);
+        } else {
+            tx.live_only();
+        }
+    } else {
+        tx.live_only();
     }
-    tx.live_only();
 }
 
 pub fn on_secondary_mark(

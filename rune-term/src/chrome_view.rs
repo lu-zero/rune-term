@@ -102,15 +102,11 @@ fn single(model: &Model, scale: f32) -> El {
         .on_layout_tx(move |model: &mut Model, rect, tx: &mut Tx| {
             app::on_pane_layout(model, (rect[2], rect[3]), scale, tx);
         });
-    let (cursor, cell_px) = model
+    let cell_px = model
         .surfaces
         .primary()
-        .map(|host| (host.render.cursor(), host.cell_px))
-        .unwrap_or(((0, 0), (0, 0)));
-    let cursor_cell = (
-        u16::try_from(cursor.1).unwrap_or(0),
-        u16::try_from(cursor.0).unwrap_or(0),
-    );
+        .map(|host| host.cell_px)
+        .unwrap_or((0, 0));
     col()
         .w_full()
         .grow(1.0)
@@ -118,7 +114,7 @@ fn single(model: &Model, scale: f32) -> El {
         .min_w(0.0)
         .child(ime::mount_caret(
             wire(pane, PANE_MARK, scale),
-            cursor_cell,
+            model.cursor_cell,
             cell_px,
             scale,
         ))
@@ -189,20 +185,16 @@ fn leaf_el(leaf: &Leaf, model: &Model, scale: f32, cell: (f32, f32)) -> El {
                 tx.live_only();
             }
         });
-    let (cursor_cell, cell_px) = model
+    let focused = model
+        .tabs
+        .get(model.active)
+        .is_some_and(|tab| tab.focused == id);
+    let cursor_cell = if focused { model.cursor_cell } else { (0, 0) };
+    let cell_px = model
         .surfaces
         .get(surface)
-        .map(|host| {
-            let (row, col) = host.render.cursor();
-            (
-                (
-                    u16::try_from(col).unwrap_or(0),
-                    u16::try_from(row).unwrap_or(0),
-                ),
-                host.cell_px,
-            )
-        })
-        .unwrap_or(((0, 0), (0, 0)));
+        .map(|host| host.cell_px)
+        .unwrap_or((0, 0));
     let pane = col()
         .w_full()
         .grow(1.0)
