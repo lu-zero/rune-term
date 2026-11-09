@@ -22,6 +22,8 @@ pub struct Palette {
     pub active_border: u32,
     pub accent: u32,
     pub ansi16: [[u8; 3]; 16],
+    pub author: &'static str,
+    pub url: &'static str,
 }
 
 impl Palette {
@@ -123,6 +125,8 @@ pub const FLEXOKI_BLACK: Palette = Palette {
         hex(0x3AA9_9F),
         hex(0xE6E4_D9),
     ],
+    author: "Steph Ango",
+    url: "https://stephango.com/flexoki",
 };
 
 /// Flexoki dark using the palette's base background.
@@ -153,6 +157,8 @@ pub const FLEXOKI_DARK: Palette = Palette {
         hex(0x3AA9_9F),
         hex(0xFFFC_F0),
     ],
+    author: "Steph Ango",
+    url: "https://stephango.com/flexoki",
 };
 
 pub const FLEXOKI_LIGHT: Palette = Palette {
@@ -182,6 +188,8 @@ pub const FLEXOKI_LIGHT: Palette = Palette {
         hex(0x3AA9_9F),
         hex(0xCECD_C3),
     ],
+    author: "Steph Ango",
+    url: "https://stephango.com/flexoki",
 };
 
 /// <https://draculatheme.com>
@@ -212,6 +220,8 @@ pub const DRACULA: Palette = Palette {
         hex(0xA4FF_FF),
         hex(0xFFFF_FF),
     ],
+    author: "Dracula Theme",
+    url: "https://draculatheme.com",
 };
 
 /// <https://www.nordtheme.com>
@@ -242,6 +252,8 @@ pub const NORD: Palette = Palette {
         hex(0x8FBC_BB),
         hex(0xECEF_F4),
     ],
+    author: "Sven Greb / Arctic Ice Studio",
+    url: "https://www.nordtheme.com",
 };
 
 /// <https://ethanschoonover.com/solarized/>
@@ -272,6 +284,8 @@ pub const SOLARIZED_DARK: Palette = Palette {
         hex(0x93A1_A1),
         hex(0xFDF6_E3),
     ],
+    author: "Ethan Schoonover",
+    url: "https://ethanschoonover.com/solarized/",
 };
 
 /// <https://ethanschoonover.com/solarized/>
@@ -302,6 +316,8 @@ pub const SOLARIZED_LIGHT: Palette = Palette {
         hex(0x93A1_A1),
         hex(0xFDF6_E3),
     ],
+    author: "Ethan Schoonover",
+    url: "https://ethanschoonover.com/solarized/",
 };
 
 /// <https://github.com/morhetz/gruvbox>
@@ -332,6 +348,8 @@ pub const GRUVBOX_DARK: Palette = Palette {
         hex(0x8EC0_7C),
         hex(0xEBDB_B2),
     ],
+    author: "Pavel Pertsev (morhetz)",
+    url: "https://github.com/morhetz/gruvbox",
 };
 
 /// <https://catppuccin.com>
@@ -362,4 +380,6 @@ pub const CATPPUCCIN_MOCHA: Palette = Palette {
         hex(0x94E2_D5),
         hex(0xA6AD_C8),
     ],
+    author: "Catppuccin",
+    url: "https://catppuccin.com",
 };
