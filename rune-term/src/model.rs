@@ -38,6 +38,21 @@ pub struct ThemeEditor {
     pub created_at: u64,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct GridDrawStamp {
+    pub shown: Option<librio::SurfaceId>,
+    pub search: String,
+    pub hover: Option<crate::hyperlink::HoverLink>,
+    pub preedit: Option<Preedit>,
+    pub theme: String,
+}
+
+impl GridDrawStamp {
+    pub fn invalidate_theme(&mut self) {
+        self.theme.clear();
+    }
+}
+
 pub struct Model {
     pub engine: Engine,
     pub tabs: Vec<Tab>,
@@ -57,12 +72,7 @@ pub struct Model {
     pub search_open: bool,
     pub query: TextEdit,
     /// The pattern the last grid upload tinted. Empty when search was closed.
-    pub(crate) search_drawn: String,
-    /// The shell the last grid upload drew. A tab change forces the next one.
-    pub(crate) grid_shown: Option<librio::SurfaceId>,
-    pub(crate) hover_drawn: Option<crate::hyperlink::HoverLink>,
-    pub(crate) preedit_drawn: Option<Preedit>,
-    pub(crate) theme_drawn: String,
+    pub(crate) grid_draw: GridDrawStamp,
     pub(crate) shared: Arc<Shared>,
     pub(crate) pending_inject: Option<Vec<u8>>,
     pub(crate) pending_link_open: Option<String>,
@@ -104,11 +114,10 @@ pub fn init() -> Model {
         cursor_cell: (0, 0),
         search_open: false,
         query: TextEdit::new(""),
-        search_drawn: String::new(),
-        grid_shown: None,
-        hover_drawn: None,
-        preedit_drawn: None,
-        theme_drawn: palette.name.clone(),
+        grid_draw: GridDrawStamp {
+            theme: palette.name.clone(),
+            ..GridDrawStamp::default()
+        },
         palette,
         shared,
         pending_inject,

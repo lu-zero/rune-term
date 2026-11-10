@@ -21,17 +21,19 @@ pub fn sync(
     queue: &wgpu::Queue,
 ) {
     let shown = search::shown(model);
-    let force_search = shown != model.search_drawn;
     let active = model.surfaces.shown_id();
     let hover = model
         .surfaces
         .primary()
         .and_then(|host| host.hover_link.clone());
-    let force_hover = hover != model.hover_drawn;
     let preedit = model.preedit.clone();
-    let force_preedit = preedit != model.preedit_drawn;
-    let force_theme = model.palette.name != model.theme_drawn;
-    let switched = model.grid_shown != active;
+
+    let force_search = shown != model.grid_draw.search;
+    let force_hover = hover != model.grid_draw.hover;
+    let force_preedit = preedit != model.grid_draw.preedit;
+    let force_theme = model.palette.name != model.grid_draw.theme;
+    let switched = model.grid_draw.shown != active;
+
     let mut drew = false;
     let shared = Arc::clone(&model.shared);
     for host in model.surfaces.iter_mut() {
@@ -88,10 +90,10 @@ pub fn sync(
     if !drew {
         images.clear();
     } else {
-        model.search_drawn = shown;
-        model.grid_shown = active;
-        model.hover_drawn = hover;
-        model.preedit_drawn = preedit;
-        model.theme_drawn = model.palette.name.clone();
+        model.grid_draw.search = shown;
+        model.grid_draw.shown = active;
+        model.grid_draw.hover = hover;
+        model.grid_draw.preedit = preedit;
+        model.grid_draw.theme = model.palette.name.clone();
     }
 }

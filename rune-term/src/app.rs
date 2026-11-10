@@ -174,7 +174,7 @@ pub fn edit_theme_named(model: &mut Model, tx: &mut Tx, name: &str) {
         model.config.set_theme(name.to_owned());
         model.palette = model.config.resolve_palette();
         model.theme_editor = Some(crate::model::ThemeEditor::from_custom(name, &custom));
-        model.theme_drawn = String::new();
+        model.grid_draw.invalidate_theme();
     } else if crate::theme::resolve_builtin(name).is_some() {
         copy_theme_named(model, tx, name);
     }
@@ -183,7 +183,7 @@ pub fn edit_theme_named(model: &mut Model, tx: &mut Tx, name: &str) {
 pub fn cancel_theme_edit(model: &mut Model, _tx: &mut Tx) {
     model.theme_editor = None;
     model.palette = model.config.resolve_palette();
-    model.theme_drawn = String::new();
+    model.grid_draw.invalidate_theme();
 }
 
 pub fn preview_theme_edit(model: &mut Model, _tx: &mut Tx) {
@@ -197,7 +197,7 @@ pub fn preview_theme_edit(model: &mut Model, _tx: &mut Tx) {
         .cloned()
         .unwrap_or_else(|| crate::settings::CustomTheme::from_palette(&model.palette));
     model.palette = editor.preview_palette(&fallback);
-    model.theme_drawn = String::new();
+    model.grid_draw.invalidate_theme();
 }
 
 pub fn save_theme_edit(model: &mut Model, _tx: &mut Tx) {
@@ -218,13 +218,13 @@ pub fn save_theme_edit(model: &mut Model, _tx: &mut Tx) {
             || model.config.custom_themes.contains_key(&name))
     {
         model.theme_editor = Some(crate::model::ThemeEditor::from_custom(&original, &custom));
-        model.theme_drawn = String::new();
+        model.grid_draw.invalidate_theme();
         return;
     }
     model.config.custom_themes.insert(name.clone(), custom);
     model.config.set_theme(name);
     model.palette = model.config.resolve_palette();
-    model.theme_drawn = String::new();
+    model.grid_draw.invalidate_theme();
     if let Err(err) = model.config.save() {
         eprintln!("rune-term: failed to save settings: {err}");
     }
@@ -245,7 +245,7 @@ pub fn delete_theme_named(model: &mut Model, _tx: &mut Tx, name: &str) {
     if model.palette.name == name {
         model.config.set_theme("Flexoki Black".to_owned());
         model.palette = model.config.resolve_palette();
-        model.theme_drawn = String::new();
+        model.grid_draw.invalidate_theme();
     }
     if let Err(err) = model.config.save() {
         eprintln!("rune-term: failed to save settings: {err}");
