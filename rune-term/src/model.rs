@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use librio::Engine;
-use rune::TextEdit;
+use rune::{Mods, TextEdit};
 
 use crate::chrome::{Leaf, LeafId, Node, Tab, LEAF, PANE_MARK};
 use crate::delegate::{self, Shared};
@@ -66,6 +66,7 @@ pub(crate) struct GridDrawStamp {
     pub shown: Option<librio::SurfaceId>,
     pub search: String,
     pub hover: Option<crate::hyperlink::HoverLink>,
+    pub hover_active: bool,
     pub preedit: Option<Preedit>,
     pub theme: String,
 }
@@ -100,6 +101,7 @@ pub struct Model {
     pub(crate) pending_inject: Option<Vec<u8>>,
     pub(crate) pending_link_open: Option<String>,
     pub(crate) settings_mode: SettingsMode,
+    pub held_mods: rune::Mods,
 }
 
 pub fn init() -> Model {
@@ -144,6 +146,7 @@ pub fn init() -> Model {
         pending_inject,
         pending_link_open: None,
         settings_mode: SettingsMode::Closed,
+        held_mods: Mods::default(),
     }
 }
 

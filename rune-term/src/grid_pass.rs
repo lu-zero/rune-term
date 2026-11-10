@@ -26,10 +26,12 @@ pub fn sync(
         .surfaces
         .primary()
         .and_then(|host| host.hover_link.clone());
+    let hover_active = hover.is_some() && crate::hyperlink::open_mods_rune(model.held_mods);
     let preedit = model.preedit.clone();
 
     let force_search = shown != model.grid_draw.search;
-    let force_hover = hover != model.grid_draw.hover;
+    let force_hover =
+        hover != model.grid_draw.hover || hover_active != model.grid_draw.hover_active;
     let force_preedit = preedit != model.grid_draw.preedit;
     let force_theme = model.palette.name != model.grid_draw.theme;
     let switched = model.grid_draw.shown != active;
@@ -93,6 +95,7 @@ pub fn sync(
         model.grid_draw.search = shown;
         model.grid_draw.shown = active;
         model.grid_draw.hover = hover;
+        model.grid_draw.hover_active = hover_active;
         model.grid_draw.preedit = preedit;
         model.grid_draw.theme = model.palette.name.clone();
     }

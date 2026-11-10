@@ -37,6 +37,18 @@ pub fn app() -> App<Model> {
     App::new(spec())
         .compositor(GridCompositor::default())
         .on_ime(ime::on_ime)
+        .on_modifiers(|model, mods, tx| {
+            let changed = model.held_mods != mods;
+            model.held_mods = mods;
+            if changed
+                && model
+                    .surfaces
+                    .iter_mut()
+                    .any(|host| host.hover_link.is_some())
+            {
+                tx.wake_after(std::time::Duration::ZERO);
+            }
+        })
         .titlebar(Titlebar::new(chrome::TITLEBAR_H))
         .menu_item(settings)
 }

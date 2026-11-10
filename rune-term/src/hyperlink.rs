@@ -5,6 +5,14 @@ use term_grid::{CellSample, CursorSample, GridSource};
 
 use crate::surfaces::HostSurface;
 
+pub fn open_mods_rune(mods: rune::Mods) -> bool {
+    if cfg!(target_os = "macos") {
+        mods.logo && !mods.ctrl && !mods.alt && !mods.shift
+    } else {
+        mods.ctrl && !mods.alt && !mods.shift && !mods.logo
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HoverLink {
     pub line: usize,

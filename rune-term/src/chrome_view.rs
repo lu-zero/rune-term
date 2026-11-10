@@ -93,7 +93,10 @@ pub fn focus_leaf(model: &mut Model, id: LeafId) -> bool {
 }
 
 fn single(model: &Model, scale: f32) -> El {
-    let pane = effect(PANE_MARK)
+    let hover_active = model.surfaces.primary().is_some_and(|host| {
+        host.hover_link.is_some() && crate::hyperlink::open_mods_rune(model.held_mods)
+    });
+    let mut pane = effect(PANE_MARK)
         .key("pane")
         .grow(1.0)
         .min_w(0.0)
@@ -102,6 +105,9 @@ fn single(model: &Model, scale: f32) -> El {
         .on_layout_tx(move |model: &mut Model, rect, tx: &mut Tx| {
             app::on_pane_layout(model, (rect[2], rect[3]), scale, tx);
         });
+    if hover_active {
+        pane = pane.cursor(rune::Cursor::Pointer);
+    }
     let cell_px = model
         .surfaces
         .primary()
@@ -171,7 +177,10 @@ fn leaf_el(leaf: &Leaf, model: &Model, scale: f32, cell: (f32, f32)) -> El {
     let surface = leaf.surface;
     let id = leaf.id;
     let mark = leaf.mark;
-    let pane = effect(mark)
+    let hover_active = model.surfaces.by_mark(mark).is_some_and(|host| {
+        host.hover_link.is_some() && crate::hyperlink::open_mods_rune(model.held_mods)
+    });
+    let mut pane = effect(mark)
         .key(format!("pane-{mark}"))
         .grow(1.0)
         .min_w(0.0)
@@ -185,6 +194,9 @@ fn leaf_el(leaf: &Leaf, model: &Model, scale: f32, cell: (f32, f32)) -> El {
                 tx.live_only();
             }
         });
+    if hover_active {
+        pane = pane.cursor(rune::Cursor::Pointer);
+    }
     let focused = model
         .tabs
         .get(model.active)
