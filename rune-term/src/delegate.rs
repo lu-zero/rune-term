@@ -446,4 +446,57 @@ mod tests {
         assert_eq!(rt.state.surfaces.len(), 1);
         assert_eq!(rt.state.tabs.len(), 1);
     }
+
+    #[test]
+    fn closing_focused_leaf_in_split_moves_focus_and_shown_surface() {
+        let mut model = host();
+        assert!(crate::chrome_view::split_focused(
+            &mut model,
+            Axis::Horizontal
+        ));
+        let (left_surface, right_surface, right_id) = match &model.tabs[0].root {
+            Node::Split { left, right, .. } => {
+                let (left, right) = match (left.as_ref(), right.as_ref()) {
+                    (Node::Leaf(l), Node::Leaf(r)) => (l, r),
+                    other => panic!("expected two leaves, got {other:?}"),
+                };
+                (left.surface, right.surface, right.id)
+            }
+            other => panic!("expected a split, got {other:?}"),
+        };
+        assert!(crate::chrome_view::focus_leaf(&mut model, right_id));
+        assert_eq!(model.surfaces.shown_id(), Some(right_surface));
+        model.shared.delegate().close_surface(right_surface);
+        let rt = latch(model, true);
+        assert!(rt.shell_request.is_none());
+        assert_eq!(rt.state.surfaces.len(), 1);
+        assert_eq!(rt.state.surfaces.shown_id(), Some(left_surface));
+        match &rt.state.tabs[0].root {
+            Node::Leaf(leaf) => {
+                assert_eq!(leaf.surface, left_surface);
+                assert_eq!(rt.state.tabs[0].focused, leaf.id);
+            }
+            other => panic!("expected one remaining leaf, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn closing_shell_in_background_tab_updates_that_tab() {
+        let mut model = host();
+        assert!(crate::tabs::open(&mut model));
+        assert!(crate::tabs::select(&mut model, 0));
+        let bg_surface = crate::tabs::surface_of(&model.tabs[1]).expect("bg tab surface");
+        let active_surface = crate::tabs::surface_of(&model.tabs[0]).expect("active tab surface");
+        model.shared.delegate().close_surface(bg_surface);
+        let rt = latch(model, true);
+        assert!(rt.shell_request.is_none());
+        assert_eq!(rt.state.tabs.len(), 1);
+        assert_eq!(rt.state.active, 0);
+        assert_eq!(rt.state.surfaces.len(), 1);
+        assert_eq!(rt.state.surfaces.shown_id(), Some(active_surface));
+        assert_eq!(
+            crate::tabs::surface_of(&rt.state.tabs[0]),
+            Some(active_surface)
+        );
+    }
 }

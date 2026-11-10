@@ -135,6 +135,43 @@ fn try_open_link_at(model: &mut Model, mark: u32, x: f32, y: f32, scale: f32) ->
     }
 }
 
+fn begin_local_selection(
+    host: &mut HostSurface,
+    cell: Option<(u16, u16)>,
+    x: f32,
+    _y: f32,
+    clicks: u32,
+    scale: f32,
+) -> bool {
+    let Some((col, row)) = cell else {
+        return false;
+    };
+    host.surface.selection_begin(
+        i32::from(row),
+        usize::from(col),
+        crate::selection::kind(clicks),
+        side_at(x, col, drawn_pitch(host.cell_px.0, scale)),
+    );
+    true
+}
+
+fn update_local_selection(
+    host: &mut HostSurface,
+    cell: Option<(u16, u16)>,
+    x: f32,
+    _y: f32,
+    scale: f32,
+) {
+    let Some((col, row)) = cell else {
+        return;
+    };
+    host.surface.selection_update(
+        i32::from(row),
+        usize::from(col),
+        side_at(x, col, drawn_pitch(host.cell_px.0, scale)),
+    );
+}
+
 /// The program takes a click when `mouse_button` returns true. Otherwise the
 /// left button starts a local selection. Shift makes that return false.
 #[allow(clippy::too_many_arguments)]
@@ -176,17 +213,7 @@ fn gesture(
                 None => false,
             };
             if button == 0 && !taken {
-                if let Some((col, row)) = cell {
-                    host.surface.selection_begin(
-                        i32::from(row),
-                        usize::from(col),
-                        crate::selection::kind(clicks),
-                        side_at(x, col, drawn_pitch(host.cell_px.0, scale)),
-                    );
-                    host.selecting = true;
-                } else {
-                    host.selecting = false;
-                }
+                host.selecting = begin_local_selection(host, cell, x, y, clicks, scale);
             } else {
                 if taken {
                     host.surface.selection_clear();
@@ -196,13 +223,7 @@ fn gesture(
         }
         Phase::Move => {
             if host.selecting {
-                if let Some((col, row)) = cell {
-                    host.surface.selection_update(
-                        i32::from(row),
-                        usize::from(col),
-                        side_at(x, col, drawn_pitch(host.cell_px.0, scale)),
-                    );
-                }
+                update_local_selection(host, cell, x, y, scale);
             } else if let (Some(held), Some((col, row))) = (host.pointer_button, cell) {
                 host.surface.mouse_motion(col, row, held, mods);
             }
@@ -212,13 +233,7 @@ fn gesture(
             host.pointer_button = None;
             host.selecting = false;
             if selecting {
-                if let Some((col, row)) = cell {
-                    host.surface.selection_update(
-                        i32::from(row),
-                        usize::from(col),
-                        side_at(x, col, drawn_pitch(host.cell_px.0, scale)),
-                    );
-                }
+                update_local_selection(host, cell, x, y, scale);
             } else if let Some((col, row)) = cell {
                 host.surface.mouse_button(col, row, button, false, mods);
             }
