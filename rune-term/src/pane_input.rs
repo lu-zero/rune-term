@@ -284,14 +284,67 @@ pub fn on_secondary_mark(
     let Some(host) = model.surfaces.by_mark_mut(mark) else {
         return;
     };
-    let Some((col, row)) = cell_under(host, point.x, point.y, scale) else {
-        return;
-    };
     let mods = modifiers(tx.mods());
-    // Rune delivers the secondary button only on release.
-    host.surface.mouse_button(col, row, 2, true, mods);
-    host.surface.mouse_button(col, row, 2, false, mods);
-    tx.live_only();
+    let mouse_reporting = host.surface.mode_bits() & 1 != 0;
+    if mouse_reporting && !mods.contains(Modifiers::SHIFT) {
+        let Some((col, row)) = cell_under(host, point.x, point.y, scale) else {
+            return;
+        };
+        // Rune delivers the secondary button only on release.
+        host.surface.mouse_button(col, row, 2, true, mods);
+        host.surface.mouse_button(col, row, 2, false, mods);
+        tx.live_only();
+        return;
+    }
+
+    let has_selection = host.surface.selection_text().is_some_and(|t| !t.is_empty());
+    let mut menu = rune::PopupMenu::new();
+    if has_selection {
+        menu = menu.item(rune::PopupItem::new("copy", "Copy"));
+    }
+    menu = menu
+        .item(rune::PopupItem::new("paste", "Paste"))
+        .separator()
+        .item(rune::PopupItem::new("search", "Search"))
+        .item(rune::PopupItem::new("new-tab", "New Tab"));
+    tx.popup_menu(
+        menu,
+        format!("pane-{mark}"),
+        move |model: &mut Model, picked, tx| {
+            if let Some(id) = picked {
+                context_action(model, mark, id, tx);
+            }
+        },
+    );
+}
+
+fn context_action(model: &mut Model, mark: u32, id: &str, tx: &mut Tx) {
+    match id {
+        "copy" => {
+            let Some(text) = model
+                .surfaces
+                .by_mark_mut(mark)
+                .and_then(|host| host.surface.selection_text())
+                .filter(|text| !text.is_empty())
+            else {
+                return;
+            };
+            tx.copy(text);
+        }
+        "paste" => tx.request_paste(),
+        "search" => {
+            if model.search_open {
+                model.search_open = false;
+                model.query.focused = false;
+            } else {
+                crate::search::open(model);
+            }
+        }
+        "new-tab" => {
+            crate::tabs::open(model);
+        }
+        _ => {}
+    }
 }
 
 fn cell_under(host: &HostSurface, x: f32, y: f32, scale: f32) -> Option<(u16, u16)> {
