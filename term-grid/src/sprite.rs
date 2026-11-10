@@ -833,7 +833,7 @@ fn rounded_cap(c: &mut Canvas, filled: bool, flip: bool) {
     let h = c.h as f32;
     let r = w.min(h / 2.0);
     // kappa for quarter-circle cubic approximation
-    let k = r * 0.5522847498;
+    let k = r * 0.552_284_8;
     let mut pb = PathBuilder::new();
     if flip {
         pb.move_to(w, 0.0);
@@ -1178,7 +1178,7 @@ fn node(canvas: &mut Canvas, filled: bool, up: bool, right: bool, down: bool, le
 }
 
 fn circle_path(cx: f32, cy: f32, r: f32) -> Option<Path> {
-    let k = r * 0.5522847498;
+    let k = r * 0.552_284_8;
     let mut pb = PathBuilder::new();
     pb.move_to(cx + r, cy);
     pb.cubic_to(cx + r, cy + k, cx + k, cy + r, cx, cy + r);

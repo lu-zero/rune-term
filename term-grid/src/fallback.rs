@@ -151,7 +151,7 @@ fn rasterize(font: &CTFont, glyph: u16, color: bool) -> Option<Drawn> {
 
     if color {
         bgra_to_rgba(&mut bytes);
-        if bytes.chunks_exact(4).all(|px| px[3] == 0) {
+        if bytes.as_chunks::<4>().0.iter().all(|px| px[3] == 0) {
             return None;
         }
     } else if bytes.iter().all(|px| *px == 0) {
@@ -169,7 +169,7 @@ fn rasterize(font: &CTFont, glyph: u16, color: bool) -> Option<Drawn> {
 }
 
 fn bgra_to_rgba(bytes: &mut [u8]) {
-    for px in bytes.chunks_exact_mut(4) {
+    for px in bytes.as_chunks_mut::<4>().0 {
         px.swap(0, 2);
     }
 }
