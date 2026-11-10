@@ -20,4 +20,4 @@ librio = { git = "https://github.com/raphamorim/rio", branch = "main", default-f
 rune = { git = "https://github.com/lu-zero/rune", branch = "physical-key-text" }
 
 [patch."https://github.com/raphamorim/rio"]
-librio = { git = "https://github.com/lu-zero/rio", branch = "librio-update-rearm" }
+librio = { git = "https://github.com/lu-zero/rio", branch = "librio-update-rearm-reflow" }
