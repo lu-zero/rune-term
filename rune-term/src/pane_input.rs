@@ -309,7 +309,7 @@ pub fn on_secondary_mark(
         .item(rune::PopupItem::new("new-tab", "New Tab"));
     tx.popup_menu(
         menu,
-        format!("pane-{mark}"),
+        point.window(),
         move |model: &mut Model, picked, tx| {
             if let Some(id) = picked {
                 context_action(model, mark, id, tx);
