@@ -34,6 +34,19 @@ pub fn open(model: &mut Model) {
     model.query.focused = true;
 }
 
+pub fn close(model: &mut Model) {
+    model.search_open = false;
+    model.query.focused = false;
+}
+
+pub fn toggle(model: &mut Model) {
+    if model.search_open {
+        close(model);
+    } else {
+        open(model);
+    }
+}
+
 /// Cmd+F on macOS. Ctrl+Shift+F everywhere else.
 pub fn is_chord(key: &Key, mods: Mods) -> bool {
     let Key::Command(c) = key else {

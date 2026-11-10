@@ -332,14 +332,7 @@ fn context_action(model: &mut Model, mark: u32, id: &str, tx: &mut Tx) {
             tx.copy(text);
         }
         "paste" => tx.request_paste(),
-        "search" => {
-            if model.search_open {
-                model.search_open = false;
-                model.query.focused = false;
-            } else {
-                crate::search::open(model);
-            }
-        }
+        "search" => crate::search::toggle(model),
         "new-tab" => {
             crate::tabs::open(model);
         }
