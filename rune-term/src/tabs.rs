@@ -87,15 +87,17 @@ pub fn close(model: &mut Model, index: usize, tx: &mut Tx) {
         model.active = model.tabs.len() - 1;
     }
     show_active(model);
+    focus_active(model, tx);
 }
 
-/// Bring the selected tab back into the strip. Opening one past the
-/// window's edge would leave its box off to the side.
+/// Bring the selected tab back into the strip and focus its pane. Opening one
+/// past the window's edge would leave its box off to the side.
 pub fn reveal(model: &Model, tx: &mut Tx) {
     if model.tabs.is_empty() {
         return;
     }
     tx.scroll_into_view_in("tabs", format!("tab-{}", model.active));
+    focus_active(model, tx);
 }
 
 /// Point the pane at the selected tab. A shell exit calls this too.
@@ -104,6 +106,17 @@ pub fn show_active(model: &mut Model) {
         return;
     };
     model.surfaces.show(id);
+}
+
+/// Focus the active tab's focused pane element, so keyboard input lands there.
+pub fn focus_active(model: &Model, tx: &mut Tx) {
+    let Some(tab) = model.tabs.get(model.active) else {
+        return;
+    };
+    let Some(mark) = mark_at(&tab.root, tab.focused).or_else(|| first_mark(&tab.root)) else {
+        return;
+    };
+    tx.focus(format!("pane-{mark}"), false);
 }
 
 /// The shell this tab shows.
@@ -149,6 +162,21 @@ fn first_surface(node: &Node) -> Option<SurfaceId> {
     match node {
         Node::Leaf(leaf) => Some(leaf.surface),
         Node::Split { left, .. } => first_surface(left),
+    }
+}
+
+fn mark_at(node: &Node, id: LeafId) -> Option<u32> {
+    match node {
+        Node::Leaf(leaf) if leaf.id == id => Some(leaf.mark),
+        Node::Leaf(_) => None,
+        Node::Split { left, right, .. } => mark_at(left, id).or_else(|| mark_at(right, id)),
+    }
+}
+
+fn first_mark(node: &Node) -> Option<u32> {
+    match node {
+        Node::Leaf(leaf) => Some(leaf.mark),
+        Node::Split { left, .. } => first_mark(left),
     }
 }
 

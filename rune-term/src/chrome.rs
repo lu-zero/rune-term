@@ -737,7 +737,9 @@ fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {
             .radius(TAB_RADIUS)
             .preserve_focus_on_press(true)
             .on_press_tx(move |model: &mut Model, tx| {
-                if !crate::tabs::select(model, index) {
+                if crate::tabs::select(model, index) {
+                    crate::tabs::focus_active(model, tx);
+                } else {
                     tx.live_only();
                 }
             });
@@ -761,6 +763,7 @@ fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {
             .preserve_focus_on_press(true)
             .on_press_tx(move |model: &mut Model, tx| {
                 crate::tabs::close(model, index, tx);
+                crate::tabs::focus_active(model, tx);
             })
             .child(text("×").color(theme::linear(p.muted)));
         strip = strip.child(tab.child(label).child(close));
