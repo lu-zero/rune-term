@@ -222,11 +222,7 @@ pub(crate) fn open_host(model: &mut Model, mark: u32, cols: u16, rows: u16) -> S
         wheel_remainder: 0.0,
         pointer_button: None,
         selecting: false,
-        scrollbar_hover: false,
-        scrollbar_active_until: 0.0,
-        scrollbar_opacity: 0.0,
-        scrollbar_fade_start: 0.0,
-        scrollbar_fade_from: 0.0,
+        scrollbar: crate::scrollback::ScrollbarState::default(),
         hover_link: None,
         hover_probe: None,
     });

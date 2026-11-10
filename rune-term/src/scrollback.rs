@@ -20,6 +20,27 @@ const SCROLL_BIT: u32 = 0x8000_0000;
 const HIDE_DELAY: Duration = Duration::from_millis(400);
 const FADE_DUR: f64 = 0.18;
 
+#[derive(Clone, Copy, Debug)]
+pub struct ScrollbarState {
+    pub hover: bool,
+    pub active_until: f64,
+    pub opacity: f32,
+    pub fade_start: f64,
+    pub fade_from: f32,
+}
+
+impl Default for ScrollbarState {
+    fn default() -> Self {
+        Self {
+            hover: false,
+            active_until: 0.0,
+            opacity: 0.0,
+            fade_start: 0.0,
+            fade_from: 0.0,
+        }
+    }
+}
+
 pub struct Thumb {
     pub top: f32,
     pub height: f32,
@@ -104,41 +125,42 @@ fn host_mut(model: &mut Model, pane: u32) -> Option<&mut crate::surfaces::HostSu
 
 /// Wheel and programmatic scroll keep the bar visible briefly.
 pub fn note_activity(host: &mut HostSurface, tx: &mut Tx) {
-    host.scrollbar_active_until = f64::INFINITY;
-    host.scrollbar_opacity = 1.0;
-    host.scrollbar_fade_start = 0.0;
+    host.scrollbar.active_until = f64::INFINITY;
+    host.scrollbar.opacity = 1.0;
+    host.scrollbar.fade_start = 0.0;
     tx.wake_after(HIDE_DELAY);
 }
 
 pub(crate) fn refresh(model: &mut Model, now: f64, tx: &mut Tx) -> bool {
     let mut wake = false;
     for host in model.surfaces.iter_mut() {
+        let sb = &mut host.scrollbar;
         let scrollable = host.surface.history_size() > 0 || host.render.display_offset() > 0;
         if !scrollable {
-            fade_opacity(host, now, &mut wake);
+            fade_opacity(sb, now, &mut wake);
             continue;
         }
-        if host.scrollbar_hover || host.render.display_offset() > 0 {
-            host.scrollbar_active_until = 0.0;
-            host.scrollbar_opacity = 1.0;
-            host.scrollbar_fade_start = 0.0;
+        if sb.hover || host.render.display_offset() > 0 {
+            sb.active_until = 0.0;
+            sb.opacity = 1.0;
+            sb.fade_start = 0.0;
             continue;
         }
-        if host.scrollbar_active_until.is_infinite() {
-            host.scrollbar_active_until = now + HIDE_DELAY.as_secs_f64();
-            host.scrollbar_opacity = 1.0;
-            host.scrollbar_fade_start = 0.0;
+        if sb.active_until.is_infinite() {
+            sb.active_until = now + HIDE_DELAY.as_secs_f64();
+            sb.opacity = 1.0;
+            sb.fade_start = 0.0;
             wake = true;
             continue;
         }
-        if host.scrollbar_active_until > now {
-            host.scrollbar_opacity = 1.0;
-            host.scrollbar_fade_start = 0.0;
+        if sb.active_until > now {
+            sb.opacity = 1.0;
+            sb.fade_start = 0.0;
             wake = true;
             continue;
         }
-        host.scrollbar_active_until = 0.0;
-        fade_opacity(host, now, &mut wake);
+        sb.active_until = 0.0;
+        fade_opacity(sb, now, &mut wake);
     }
     if wake {
         tx.wake_after(Duration::from_millis(16));
@@ -146,22 +168,22 @@ pub(crate) fn refresh(model: &mut Model, now: f64, tx: &mut Tx) -> bool {
     false
 }
 
-fn fade_opacity(host: &mut HostSurface, now: f64, wake: &mut bool) {
-    if host.scrollbar_opacity <= 0.0 {
-        host.scrollbar_opacity = 0.0;
-        host.scrollbar_fade_start = 0.0;
+fn fade_opacity(sb: &mut ScrollbarState, now: f64, wake: &mut bool) {
+    if sb.opacity <= 0.0 {
+        sb.opacity = 0.0;
+        sb.fade_start = 0.0;
         return;
     }
-    if host.scrollbar_fade_start == 0.0 {
-        host.scrollbar_fade_start = now;
-        host.scrollbar_fade_from = host.scrollbar_opacity;
+    if sb.fade_start == 0.0 {
+        sb.fade_start = now;
+        sb.fade_from = sb.opacity;
     }
-    let t = ((now - host.scrollbar_fade_start) / FADE_DUR).clamp(0.0, 1.0);
+    let t = ((now - sb.fade_start) / FADE_DUR).clamp(0.0, 1.0);
     let inv = 1.0 - t;
-    host.scrollbar_opacity = host.scrollbar_fade_from * (inv * inv * inv) as f32;
-    if host.scrollbar_opacity <= 0.0005 {
-        host.scrollbar_opacity = 0.0;
-        host.scrollbar_fade_start = 0.0;
+    sb.opacity = sb.fade_from * (inv * inv * inv) as f32;
+    if sb.opacity <= 0.0005 {
+        sb.opacity = 0.0;
+        sb.fade_start = 0.0;
     } else {
         *wake = true;
     }
@@ -176,12 +198,12 @@ pub fn column(pane: u32) -> El {
         .h_full()
         .on_hover_change(move |model: &mut Model, inside, tx| {
             if let Some(host) = host_mut(model, pane) {
-                host.scrollbar_hover = inside;
+                host.scrollbar.hover = inside;
                 if inside {
-                    host.scrollbar_active_until = 0.0;
+                    host.scrollbar.active_until = 0.0;
                     if host.surface.history_size() > 0 || host.render.display_offset() > 0 {
-                        host.scrollbar_opacity = 1.0;
-                        host.scrollbar_fade_start = 0.0;
+                        host.scrollbar.opacity = 1.0;
+                        host.scrollbar.fade_start = 0.0;
                     }
                 } else {
                     note_activity(host, tx);
@@ -261,7 +283,7 @@ impl Bars {
         let Some(host) = host_ref(model, pane_of(site.mark)) else {
             return;
         };
-        let opacity = host.scrollbar_opacity;
+        let opacity = host.scrollbar.opacity;
         if opacity <= 0.0 {
             return;
         }
