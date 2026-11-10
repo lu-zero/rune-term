@@ -106,6 +106,35 @@ pub fn on_drag_mark(model: &mut Model, mark: u32, drag: &mut Drag, scale: f32, t
     );
 }
 
+enum LinkAction {
+    None,
+    Opened,
+    Confirm(String),
+}
+
+fn try_open_link_at(model: &mut Model, mark: u32, x: f32, y: f32, scale: f32) -> LinkAction {
+    let Some(host) = model.surfaces.by_mark_mut(mark) else {
+        return LinkAction::None;
+    };
+    let cell = cell_under(host, x, y, scale);
+    let Some(link) = cell
+        .and_then(|(col, row)| crate::hyperlink::resolve(host, usize::from(row), usize::from(col)))
+    else {
+        return LinkAction::None;
+    };
+    host.surface.selection_clear();
+    host.pointer_button = None;
+    host.selecting = false;
+    host.hover_link = None;
+    host.hover_probe = None;
+    if crate::hyperlink::open_decision(&link.uri) == crate::hyperlink::OpenDecision::WarnAndOpen {
+        LinkAction::Confirm(link.uri)
+    } else {
+        let _ = crate::hyperlink::open_uri(&link.uri);
+        LinkAction::Opened
+    }
+}
+
 /// The program takes a click when `mouse_button` returns true. Otherwise the
 /// left button starts a local selection. Shift makes that return false.
 #[allow(clippy::too_many_arguments)]
@@ -122,38 +151,7 @@ fn gesture(
     tx: &mut Tx,
 ) {
     if phase == Phase::Down && button == 0 && crate::hyperlink::open_mods(mods) {
-        enum LinkAction {
-            None,
-            Opened,
-            Confirm(String),
-        }
-        let action = {
-            let Some(host) = model.surfaces.by_mark_mut(mark) else {
-                return;
-            };
-            let cell = cell_under(host, x, y, scale);
-            match cell.and_then(|(col, row)| {
-                crate::hyperlink::resolve(host, usize::from(row), usize::from(col))
-            }) {
-                Some(link) => {
-                    host.surface.selection_clear();
-                    host.pointer_button = None;
-                    host.selecting = false;
-                    host.hover_link = None;
-                    host.hover_probe = None;
-                    if crate::hyperlink::open_decision(&link.uri)
-                        == crate::hyperlink::OpenDecision::WarnAndOpen
-                    {
-                        LinkAction::Confirm(link.uri)
-                    } else {
-                        let _ = crate::hyperlink::open_uri(&link.uri);
-                        LinkAction::Opened
-                    }
-                }
-                None => LinkAction::None,
-            }
-        };
-        match action {
+        match try_open_link_at(model, mark, x, y, scale) {
             LinkAction::Opened => {
                 tx.wake_after(Duration::ZERO);
                 return;
@@ -1612,5 +1610,91 @@ mod tests {
         rt.frame(0.0);
         rt.frame(0.0);
         assert_eq!(rt.state.shared.take_output(), b"pasted");
+    }
+
+    #[test]
+    fn focus_loss_clears_pointer_hover_and_selection_state() {
+        let mut model = host();
+        select_hello(&mut model);
+        {
+            let host = model.surfaces.primary_mut().unwrap();
+            host.wheel_remainder = 0.3;
+            host.pointer_button = Some(0);
+            host.selecting = true;
+            host.hover_link = Some(crate::hyperlink::HoverLink {
+                line: 0,
+                start: 0,
+                end: 1,
+                uri: "https://example.com".to_string(),
+            });
+            host.hover_probe = Some((0, 0, None));
+        }
+        assert!(!on_physical(
+            &mut model,
+            &PhysicalInput::FocusLost,
+            &mut Tx::default()
+        ));
+        let host = model.surfaces.primary().unwrap();
+        assert_eq!(host.wheel_remainder, 0.0);
+        assert!(host.pointer_button.is_none());
+        assert!(!host.selecting);
+        assert!(host.hover_link.is_none());
+        assert!(host.hover_probe.is_none());
+    }
+
+    #[test]
+    fn mod_click_on_risky_link_requests_confirmation() {
+        let mut model = host();
+        sized(&mut model);
+        {
+            let host = model.surfaces.primary_mut().unwrap();
+            host.surface
+                .inject_output(b"\x1b]8;;file:///tmp/x\x07link\x1b]8;;\x07");
+            host.render.update();
+        }
+        let (_capture, _opened) = crate::hyperlink::capture_opens();
+        let mods = if cfg!(target_os = "macos") {
+            librio::Modifiers::SUPER
+        } else {
+            librio::Modifiers::CTRL
+        };
+        gesture_at(&mut model, Phase::Down, 1.0, 1.0, 1, mods);
+        assert_eq!(model.pending_link_open.as_deref(), Some("file:///tmp/x"));
+        assert!(crate::hyperlink::take_captured_opens().is_empty());
+        assert!(model.shared.take_output().is_empty());
+        assert!(model
+            .surfaces
+            .primary()
+            .unwrap()
+            .surface
+            .selection_text()
+            .is_none());
+    }
+
+    #[test]
+    fn secondary_click_forwards_to_mouse_reporting_program() {
+        let mut model = host();
+        sized(&mut model);
+        model
+            .surfaces
+            .primary_mut()
+            .unwrap()
+            .surface
+            .inject_output(b"HELLO\x1b[?1000h\x1b[?1006h");
+        let mut point = PointerEvent::default();
+        point.x = 1.0;
+        point.y = 1.0;
+        on_secondary_mark(
+            &mut model,
+            crate::chrome::PANE_MARK,
+            point,
+            1.0,
+            &mut Tx::default(),
+        );
+        let out = model.shared.take_output();
+        assert!(
+            out.windows(3).any(|w| w == b"\x1b[<"),
+            "expected mouse report, got {out:?}"
+        );
     }
 }

@@ -188,3 +188,130 @@ fn find_leaf_mut(node: &mut Node, id: LeafId) -> Option<&mut Leaf> {
         }
     }
 }
+
+#[cfg(all(test, not(feature = "pty")))]
+mod tests {
+    use super::*;
+    use crate::delegate;
+    use crate::model;
+
+    fn host() -> Model {
+        let mut model = model::init();
+        delegate::setup(&mut model, std::sync::Arc::new(|| {}));
+        model
+    }
+
+    fn shown(model: &Model) -> SurfaceId {
+        model.surfaces.shown_id().expect("shown surface")
+    }
+
+    fn active_surface(model: &Model) -> SurfaceId {
+        surface_of(&model.tabs[model.active]).expect("active tab surface")
+    }
+
+    #[test]
+    fn open_adds_and_selects_a_new_tab_with_its_surface() {
+        let mut model = host();
+        assert_eq!(model.tabs.len(), 1);
+        let first = shown(&model);
+        assert!(open(&mut model));
+        assert_eq!(model.tabs.len(), 2);
+        assert_eq!(model.active, 1);
+        let second = shown(&model);
+        assert_ne!(second, first);
+        assert_eq!(active_surface(&model), second);
+        assert_eq!(model.surfaces.len(), 2);
+    }
+
+    #[test]
+    fn select_switches_active_tab_and_shown_surface() {
+        let mut model = host();
+        open(&mut model);
+        open(&mut model);
+        let s0 = surface_of(&model.tabs[0]).unwrap();
+        let s1 = surface_of(&model.tabs[1]).unwrap();
+        let s2 = surface_of(&model.tabs[2]).unwrap();
+        assert_eq!(shown(&model), s2);
+        assert!(!select(&mut model, 2));
+        assert!(select(&mut model, 0));
+        assert_eq!(model.active, 0);
+        assert_eq!(shown(&model), s0);
+        assert!(select(&mut model, 1));
+        assert_eq!(shown(&model), s1);
+        assert!(!select(&mut model, 99));
+    }
+
+    #[test]
+    fn select_digit_is_one_based_and_cycle_wraps() {
+        let mut model = host();
+        open(&mut model);
+        open(&mut model);
+        assert!(!select_digit(&mut model, 0));
+        assert!(select_digit(&mut model, 1));
+        assert_eq!(model.active, 0);
+        assert!(select_digit(&mut model, 3));
+        assert_eq!(model.active, 2);
+        assert!(cycle(&mut model, 1));
+        assert_eq!(model.active, 0);
+        assert!(cycle(&mut model, -1));
+        assert_eq!(model.active, 2);
+        assert_eq!(shown(&model), surface_of(&model.tabs[2]).unwrap());
+    }
+
+    #[test]
+    fn closing_a_tab_before_active_keeps_selection_and_surface() {
+        let mut model = host();
+        open(&mut model);
+        open(&mut model);
+        let s1 = surface_of(&model.tabs[1]).unwrap();
+        let s2 = surface_of(&model.tabs[2]).unwrap();
+        assert_eq!(model.active, 2);
+        close(&mut model, 0, &mut Tx::default());
+        assert_eq!(model.tabs.len(), 2);
+        assert_eq!(model.active, 1);
+        assert_eq!(surface_of(&model.tabs[0]).unwrap(), s1);
+        assert_eq!(shown(&model), s2);
+    }
+
+    #[test]
+    fn closing_active_tab_selects_a_valid_tab_and_shows_it() {
+        let mut model = host();
+        open(&mut model);
+        open(&mut model);
+        let s0 = surface_of(&model.tabs[0]).unwrap();
+        let s2 = surface_of(&model.tabs[2]).unwrap();
+        assert!(select(&mut model, 1));
+        close(&mut model, 1, &mut Tx::default());
+        assert_eq!(model.tabs.len(), 2);
+        assert!(model.active < model.tabs.len());
+        assert_eq!(shown(&model), active_surface(&model));
+        assert!(shown(&model) == s0 || shown(&model) == s2);
+        // closing the last remaining in this scenario keeps a valid shown surface
+        close_active(&mut model, &mut Tx::default());
+        assert_eq!(model.tabs.len(), 1);
+        assert_eq!(model.active, 0);
+        assert_eq!(shown(&model), active_surface(&model));
+    }
+
+    #[test]
+    fn show_active_resyncs_shown_surface_to_focused_tab() {
+        let mut model = host();
+        open(&mut model);
+        let s0 = surface_of(&model.tabs[0]).unwrap();
+        model.active = 0;
+        model.surfaces.show(surface_of(&model.tabs[1]).unwrap());
+        assert_ne!(shown(&model), s0);
+        show_active(&mut model);
+        assert_eq!(shown(&model), s0);
+    }
+
+    #[test]
+    fn set_title_updates_the_owning_tab() {
+        let mut model = host();
+        open(&mut model);
+        let s1 = surface_of(&model.tabs[1]).unwrap();
+        set_title(&mut model, s1, "other".to_string());
+        assert_eq!(model.tabs[0].title, "rune-term");
+        assert_eq!(model.tabs[1].title, "other");
+    }
+}
