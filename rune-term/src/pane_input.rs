@@ -1712,4 +1712,89 @@ mod tests {
             "expected mouse report, got {out:?}"
         );
     }
+
+    #[test]
+    fn a_program_captured_drag_reports_press_and_release_without_selection() {
+        let mut model = host();
+        sized(&mut model);
+        model
+            .surfaces
+            .primary_mut()
+            .unwrap()
+            .surface
+            .inject_output(b"HELLO WORLD\x1b[?1000h\x1b[?1006h");
+        let mods = librio::Modifiers::empty();
+        gesture_at(&mut model, Phase::Down, 1.0, 1.0, 1, mods);
+        assert_eq!(model.surfaces.primary().unwrap().pointer_button, Some(0));
+        assert!(!model.surfaces.primary().unwrap().selecting);
+        gesture_at(&mut model, Phase::Move, 21.0, 1.0, 1, mods);
+        gesture_at(&mut model, Phase::Up, 21.0, 1.0, 1, mods);
+        let out = model.shared.take_output();
+        let reports = out.windows(3).filter(|w| *w == b"\x1b[<").count();
+        assert!(
+            reports >= 2,
+            "expected press/release mouse reports, got {reports} in {out:?}"
+        );
+        assert!(model
+            .surfaces
+            .primary()
+            .unwrap()
+            .surface
+            .selection_text()
+            .is_none());
+        assert!(model.surfaces.primary().unwrap().pointer_button.is_none());
+    }
+
+    #[test]
+    fn local_selection_update_outside_grid_keeps_last_in_bounds_extent() {
+        let mut model = host();
+        sized(&mut model);
+        model
+            .surfaces
+            .primary_mut()
+            .unwrap()
+            .surface
+            .inject_output(b"HELLO WORLD");
+        gesture_at(
+            &mut model,
+            Phase::Down,
+            1.0,
+            1.0,
+            1,
+            librio::Modifiers::empty(),
+        );
+        gesture_at(
+            &mut model,
+            Phase::Move,
+            47.0,
+            1.0,
+            1,
+            librio::Modifiers::empty(),
+        );
+        gesture_at(
+            &mut model,
+            Phase::Move,
+            5000.0,
+            5000.0,
+            1,
+            librio::Modifiers::empty(),
+        );
+        gesture_at(
+            &mut model,
+            Phase::Up,
+            5000.0,
+            5000.0,
+            1,
+            librio::Modifiers::empty(),
+        );
+        let text = model
+            .surfaces
+            .primary()
+            .unwrap()
+            .surface
+            .selection_text()
+            .unwrap_or_default();
+        assert!(text.contains("HELLO"), "{text:?}");
+        assert!(!text.contains("WORLD"), "{text:?}");
+    }
 }
