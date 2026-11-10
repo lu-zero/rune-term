@@ -22,6 +22,29 @@ pub enum SettingsTab {
     Theme,
 }
 
+#[derive(Clone, Debug)]
+pub struct SettingsUi {
+    pub tab: SettingsTab,
+    pub theme_editor: Option<ThemeEditor>,
+}
+
+#[derive(Clone, Debug)]
+pub enum SettingsMode {
+    Closed,
+    Open(Box<SettingsUi>),
+}
+
+impl SettingsMode {
+    pub fn is_open(&self) -> bool {
+        matches!(self, Self::Open(_))
+    }
+
+    pub fn close(&mut self) {
+        *self = Self::Closed;
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct ThemeEditor {
     pub original_name: String,
     pub name: TextEdit,
@@ -76,9 +99,7 @@ pub struct Model {
     pub(crate) shared: Arc<Shared>,
     pub(crate) pending_inject: Option<Vec<u8>>,
     pub(crate) pending_link_open: Option<String>,
-    pub(crate) settings_open: bool,
-    pub(crate) settings_tab: SettingsTab,
-    pub(crate) theme_editor: Option<ThemeEditor>,
+    pub(crate) settings_mode: SettingsMode,
 }
 
 pub fn init() -> Model {
@@ -122,9 +143,7 @@ pub fn init() -> Model {
         shared,
         pending_inject,
         pending_link_open: None,
-        settings_open: false,
-        settings_tab: SettingsTab::Font,
-        theme_editor: None,
+        settings_mode: SettingsMode::Closed,
     }
 }
 

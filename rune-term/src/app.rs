@@ -24,8 +24,11 @@ pub fn run() {
 
 pub fn app() -> App<Model> {
     let mut settings = MenuItem::new("Settings…", |model: &mut Model, _tx: &mut Tx| {
-        model.settings_open = true;
-        model.settings_tab = crate::model::SettingsTab::Font;
+        model.settings_mode =
+            crate::model::SettingsMode::Open(Box::new(crate::model::SettingsUi {
+                tab: crate::model::SettingsTab::Font,
+                theme_editor: None,
+            }));
     });
     #[cfg(target_os = "macos")]
     if let Ok(sc) = "cmd+comma".parse::<rune::Shortcut>() {
@@ -159,35 +162,60 @@ pub fn apply_theme(model: &mut Model, _tx: &mut Tx, name: &str) {
 pub fn copy_theme_named(model: &mut Model, _tx: &mut Tx, source_name: &str) {
     let name = model.config.copy_theme(source_name);
     model.palette = model.config.resolve_palette();
-    model.settings_tab = crate::model::SettingsTab::Theme;
-    if let Some(custom) = model.config.custom_themes.get(&name) {
-        model.theme_editor = Some(crate::model::ThemeEditor::from_custom(&name, custom));
+    if let Some(custom) = model.config.custom_themes.get(&name).cloned() {
+        model.settings_mode =
+            crate::model::SettingsMode::Open(Box::new(crate::model::SettingsUi {
+                tab: crate::model::SettingsTab::Theme,
+                theme_editor: Some(crate::model::ThemeEditor::from_custom(&name, &custom)),
+            }));
+    } else if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+        ui.tab = crate::model::SettingsTab::Theme;
+        ui.theme_editor = None;
+    } else {
+        model.settings_mode =
+            crate::model::SettingsMode::Open(Box::new(crate::model::SettingsUi {
+                tab: crate::model::SettingsTab::Theme,
+                theme_editor: None,
+            }));
     }
+    model.grid_draw.invalidate_theme();
     if let Err(err) = model.config.save() {
         eprintln!("rune-term: failed to save settings: {err}");
     }
 }
 
 pub fn edit_theme_named(model: &mut Model, tx: &mut Tx, name: &str) {
-    model.settings_tab = crate::model::SettingsTab::Theme;
     if let Some(custom) = model.config.custom_themes.get(name).cloned() {
         model.config.set_theme(name.to_owned());
         model.palette = model.config.resolve_palette();
-        model.theme_editor = Some(crate::model::ThemeEditor::from_custom(name, &custom));
+        model.settings_mode =
+            crate::model::SettingsMode::Open(Box::new(crate::model::SettingsUi {
+                tab: crate::model::SettingsTab::Theme,
+                theme_editor: Some(crate::model::ThemeEditor::from_custom(name, &custom)),
+            }));
         model.grid_draw.invalidate_theme();
     } else if crate::theme::resolve_builtin(name).is_some() {
         copy_theme_named(model, tx, name);
+    } else if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+        ui.tab = crate::model::SettingsTab::Theme;
+        ui.theme_editor = None;
     }
 }
 
 pub fn cancel_theme_edit(model: &mut Model, _tx: &mut Tx) {
-    model.theme_editor = None;
+    if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+        ui.tab = crate::model::SettingsTab::Theme;
+        ui.theme_editor = None;
+    }
     model.palette = model.config.resolve_palette();
     model.grid_draw.invalidate_theme();
 }
 
 pub fn preview_theme_edit(model: &mut Model, _tx: &mut Tx) {
-    let Some(editor) = &model.theme_editor else {
+    let crate::model::SettingsMode::Open(ui) = &model.settings_mode else {
+        return;
+    };
+    let Some(editor) = ui.theme_editor.as_ref() else {
         return;
     };
     let fallback = model
@@ -201,11 +229,20 @@ pub fn preview_theme_edit(model: &mut Model, _tx: &mut Tx) {
 }
 
 pub fn save_theme_edit(model: &mut Model, _tx: &mut Tx) {
-    let Some(editor) = model.theme_editor.take() else {
+    let editor = match &mut model.settings_mode {
+        crate::model::SettingsMode::Open(ui) => {
+            ui.tab = crate::model::SettingsTab::Theme;
+            ui.theme_editor.take()
+        }
+        _ => return,
+    };
+    let Some(editor) = editor else {
         return;
     };
     let Some((name, custom)) = editor.to_custom() else {
-        model.theme_editor = Some(editor);
+        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+            ui.theme_editor = Some(editor);
+        }
         return;
     };
     let original = editor.original_name.clone();
@@ -217,7 +254,9 @@ pub fn save_theme_edit(model: &mut Model, _tx: &mut Tx) {
         && (crate::theme::resolve_builtin(&name).is_some()
             || model.config.custom_themes.contains_key(&name))
     {
-        model.theme_editor = Some(crate::model::ThemeEditor::from_custom(&original, &custom));
+        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+            ui.theme_editor = Some(crate::model::ThemeEditor::from_custom(&original, &custom));
+        }
         model.grid_draw.invalidate_theme();
         return;
     }
@@ -235,12 +274,15 @@ pub fn delete_theme_named(model: &mut Model, _tx: &mut Tx, name: &str) {
         return;
     }
     model.config.custom_themes.remove(name);
-    if model
-        .theme_editor
-        .as_ref()
-        .is_some_and(|e| e.original_name == name)
-    {
-        model.theme_editor = None;
+    if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+        if ui
+            .theme_editor
+            .as_ref()
+            .is_some_and(|e| e.original_name == name)
+        {
+            ui.tab = crate::model::SettingsTab::Theme;
+            ui.theme_editor = None;
+        }
     }
     if model.palette.name == name {
         model.config.set_theme("Flexoki Black".to_owned());

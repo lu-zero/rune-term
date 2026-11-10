@@ -491,7 +491,11 @@ fn deliver(
             return true;
         }
         if code == term_input::PhysicalKeyCode::Comma {
-            model.settings_open = true;
+            model.settings_mode =
+                crate::model::SettingsMode::Open(Box::new(crate::model::SettingsUi {
+                    tab: crate::model::SettingsTab::Font,
+                    theme_editor: None,
+                }));
             return true;
         }
         if code == term_input::PhysicalKeyCode::KeyV {

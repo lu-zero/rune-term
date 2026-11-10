@@ -64,22 +64,31 @@ pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
     if let Some(uri) = &model.pending_link_open {
         root = root.child(confirm_open_link(uri, p));
     }
-    if model.settings_open {
+    if model.settings_mode.is_open() {
         root = root.child(settings_panel(model));
     }
     root
 }
 
+fn close_settings(model: &mut Model) {
+    model.settings_mode.close();
+    model.palette = model.config.resolve_palette();
+    model.grid_draw.invalidate_theme();
+}
+
 fn settings_panel(model: &Model) -> El {
     let p = model.palette.as_ref();
+    let active_tab = match &model.settings_mode {
+        crate::model::SettingsMode::Open(ui) => ui.tab,
+        crate::model::SettingsMode::Closed => crate::model::SettingsTab::Font,
+    };
     let header = row()
         .w_full()
         .items_center()
         .justify_between()
         .child(text("Settings").color(text_color(p)))
         .child(settings_chip("Close", "close-settings", p, |model, _tx| {
-            model.settings_open = false;
-            model.theme_editor = None;
+            close_settings(model);
         }));
     let tabs = row()
         .w_full()
@@ -87,16 +96,16 @@ fn settings_panel(model: &Model) -> El {
         .child(settings_tab_chip(
             "Font",
             crate::model::SettingsTab::Font,
-            model.settings_tab,
+            active_tab,
             p,
         ))
         .child(settings_tab_chip(
             "Theme",
             crate::model::SettingsTab::Theme,
-            model.settings_tab,
+            active_tab,
             p,
         ));
-    let body = match model.settings_tab {
+    let body = match active_tab {
         crate::model::SettingsTab::Font => font_settings(model, p),
         crate::model::SettingsTab::Theme => theme_settings(model, p),
     };
@@ -121,8 +130,7 @@ fn settings_panel(model: &Model) -> El {
         .pt(space::S3)
         .pb(space::S3)
         .modal(true, |model: &mut Model| {
-            model.settings_open = false;
-            model.theme_editor = None;
+            close_settings(model);
         })
         .child(header)
         .child(tabs)
@@ -161,7 +169,9 @@ fn settings_tab_chip(
         .fill(theme::linear(if selected { p.bg } else { p.tab_bg }))
         .focusable(true)
         .on_press_tx(move |model: &mut Model, _tx| {
-            model.settings_tab = tab;
+            if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                ui.tab = tab;
+            }
         })
         .child(text(label).color(if selected {
             text_color(p)
@@ -232,7 +242,10 @@ fn font_settings(model: &Model, p: &Palette) -> El {
 }
 
 fn theme_settings(model: &Model, p: &Palette) -> El {
-    if model.theme_editor.is_some() {
+    if matches!(
+        &model.settings_mode,
+        crate::model::SettingsMode::Open(ui) if ui.theme_editor.is_some()
+    ) {
         return theme_editor_view(model);
     }
     let mut themes = col().w_full().gap(4.0);
@@ -271,8 +284,12 @@ fn theme_settings(model: &Model, p: &Palette) -> El {
 
 fn theme_editor_view(model: &Model) -> El {
     let p = model.palette.as_ref();
-    let Some(editor) = &model.theme_editor else {
-        return col();
+    let editor = match &model.settings_mode {
+        crate::model::SettingsMode::Open(ui) => match ui.theme_editor.as_ref() {
+            Some(editor) => editor,
+            None => return col(),
+        },
+        _ => return col(),
     };
     let mut grid = col().w_full().gap(6.0);
     #[allow(clippy::type_complexity)]
@@ -283,34 +300,79 @@ fn theme_editor_view(model: &Model) -> El {
         fn(&mut Model) -> &mut rune::TextEdit,
     ); 10] = [
         ("Name", "te-name", &editor.name, |m| {
-            &mut m.theme_editor.as_mut().unwrap().name
+            match &mut m.settings_mode {
+                crate::model::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().name,
+                _ => unreachable!(),
+            }
         }),
         ("Author", "te-author", &editor.author, |m| {
-            &mut m.theme_editor.as_mut().unwrap().author
+            match &mut m.settings_mode {
+                crate::model::SettingsMode::Open(ui) => {
+                    &mut ui.theme_editor.as_mut().unwrap().author
+                }
+                _ => unreachable!(),
+            }
         }),
         ("URL", "te-url", &editor.url, |m| {
-            &mut m.theme_editor.as_mut().unwrap().url
+            match &mut m.settings_mode {
+                crate::model::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().url,
+                _ => unreachable!(),
+            }
         }),
         ("Background", "te-bg", &editor.bg, |m| {
-            &mut m.theme_editor.as_mut().unwrap().bg
+            match &mut m.settings_mode {
+                crate::model::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().bg,
+                _ => unreachable!(),
+            }
         }),
         ("Foreground", "te-fg", &editor.fg, |m| {
-            &mut m.theme_editor.as_mut().unwrap().fg
+            match &mut m.settings_mode {
+                crate::model::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().fg,
+                _ => unreachable!(),
+            }
         }),
         ("Bright FG", "te-fgb", &editor.fg_bright, |m| {
-            &mut m.theme_editor.as_mut().unwrap().fg_bright
+            match &mut m.settings_mode {
+                crate::model::SettingsMode::Open(ui) => {
+                    &mut ui.theme_editor.as_mut().unwrap().fg_bright
+                }
+                _ => unreachable!(),
+            }
         }),
         ("Muted", "te-muted", &editor.muted, |m| {
-            &mut m.theme_editor.as_mut().unwrap().muted
+            match &mut m.settings_mode {
+                crate::model::SettingsMode::Open(ui) => {
+                    &mut ui.theme_editor.as_mut().unwrap().muted
+                }
+                _ => unreachable!(),
+            }
         }),
         ("Tab BG", "te-tab", &editor.tab_bg, |m| {
-            &mut m.theme_editor.as_mut().unwrap().tab_bg
+            match &mut m.settings_mode {
+                crate::model::SettingsMode::Open(ui) => {
+                    &mut ui.theme_editor.as_mut().unwrap().tab_bg
+                }
+                _ => unreachable!(),
+            }
         }),
-        ("Border", "te-border", &editor.active_border, |m| {
-            &mut m.theme_editor.as_mut().unwrap().active_border
-        }),
+        (
+            "Border",
+            "te-border",
+            &editor.active_border,
+            |m| match &mut m.settings_mode {
+                crate::model::SettingsMode::Open(ui) => {
+                    &mut ui.theme_editor.as_mut().unwrap().active_border
+                }
+                _ => unreachable!(),
+            },
+        ),
         ("Accent", "te-accent", &editor.accent, |m| {
-            &mut m.theme_editor.as_mut().unwrap().accent
+            match &mut m.settings_mode {
+                crate::model::SettingsMode::Open(ui) => {
+                    &mut ui.theme_editor.as_mut().unwrap().accent
+                }
+                _ => unreachable!(),
+            }
         }),
     ];
     for (label, key, te, on_edit) in rows {
