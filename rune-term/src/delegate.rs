@@ -551,7 +551,11 @@ mod tests {
             }
             other => panic!("expected a split, got {other:?}"),
         };
-        assert!(crate::chrome_view::focus_leaf(&mut model, right_id));
+        assert!(crate::chrome_view::focus_leaf(
+            &mut model,
+            right_id,
+            &mut rune::Tx::default()
+        ));
         assert_eq!(model.surfaces.shown_id(), Some(right_surface));
         model.shared.delegate().close_surface(right_surface);
         let rt = latch(model, true);

@@ -74,23 +74,36 @@ pub fn split_focused(model: &mut Model, axis: Axis) -> bool {
     true
 }
 
-/// Returns whether focus moved.
-pub fn focus_leaf(model: &mut Model, id: LeafId) -> bool {
+/// Returns whether focus moved. Also focuses the pane element in Rune.
+pub fn focus_leaf(model: &mut Model, id: LeafId, tx: &mut Tx) -> bool {
     let Some(active) = model.tabs.get(model.active).map(|_| model.active) else {
+        return false;
+    };
+    let Some(mark) = leaf_mark(&model.tabs[active].root, id) else {
         return false;
     };
     let (moved, surface) = {
         let tab = &mut model.tabs[active];
-        if tab.focused == id || !contains(&tab.root, id) {
+        if !contains(&tab.root, id) {
             return false;
         }
+        let moved = tab.focused != id;
         tab.focused = id;
-        (true, leaf_surface(&tab.root, id))
+        (moved, leaf_surface(&tab.root, id))
     };
-    if let Some(surface) = surface.filter(|id| *id != 0) {
+    if let Some(surface) = surface.filter(|sid| *sid != 0) {
         model.surfaces.show(surface);
     }
+    tx.focus(format!("pane-{mark}"), false);
     moved
+}
+
+fn leaf_mark(node: &Node, id: LeafId) -> Option<u32> {
+    match node {
+        Node::Leaf(leaf) if leaf.id == id => Some(leaf.mark),
+        Node::Leaf(_) => None,
+        Node::Split { left, right, .. } => leaf_mark(left, id).or_else(|| leaf_mark(right, id)),
+    }
 }
 
 fn single(model: &Model, scale: f32) -> El {
@@ -191,7 +204,7 @@ fn leaf_el(leaf: &Leaf, model: &Model, scale: f32, cell: (f32, f32)) -> El {
             layout_leaf(model, surface, (rect[2], rect[3]), scale, tx);
         })
         .on_press_tx(move |model: &mut Model, tx: &mut Tx| {
-            if !focus_leaf(model, id) {
+            if !focus_leaf(model, id, tx) {
                 tx.live_only();
             }
         });
@@ -578,9 +591,9 @@ mod tests {
         assert_ne!(left_surface, right_surface);
         assert_ne!(left_mark, right_mark);
 
-        assert!(focus_leaf(&mut model, right_id));
+        assert!(focus_leaf(&mut model, right_id, &mut rune::Tx::default()));
         assert_eq!(model.tabs[0].focused, right_id);
-        assert!(!focus_leaf(&mut model, right_id));
+        assert!(!focus_leaf(&mut model, right_id, &mut rune::Tx::default()));
         {
             let host = model.surfaces.get_mut(left_surface).unwrap();
             host.surface.inject_output(b"only-a\r\n");
