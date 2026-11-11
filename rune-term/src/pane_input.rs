@@ -529,6 +529,7 @@ fn deliver(
                 crate::model::SettingsMode::Open(Box::new(crate::model::SettingsUi {
                     tab: crate::model::SettingsTab::Font,
                     theme_editor: None,
+                    profile_editor: None,
                 }));
             return true;
         }

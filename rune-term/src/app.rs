@@ -28,6 +28,7 @@ pub fn app() -> App<Model> {
             crate::model::SettingsMode::Open(Box::new(crate::model::SettingsUi {
                 tab: crate::model::SettingsTab::Font,
                 theme_editor: None,
+                profile_editor: None,
             }));
     });
     #[cfg(target_os = "macos")]
@@ -179,6 +180,7 @@ pub fn copy_theme_named(model: &mut Model, _tx: &mut Tx, source_name: &str) {
             crate::model::SettingsMode::Open(Box::new(crate::model::SettingsUi {
                 tab: crate::model::SettingsTab::Theme,
                 theme_editor: Some(crate::model::ThemeEditor::from_custom(&name, &custom)),
+                profile_editor: None,
             }));
     } else if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
         ui.tab = crate::model::SettingsTab::Theme;
@@ -188,6 +190,7 @@ pub fn copy_theme_named(model: &mut Model, _tx: &mut Tx, source_name: &str) {
             crate::model::SettingsMode::Open(Box::new(crate::model::SettingsUi {
                 tab: crate::model::SettingsTab::Theme,
                 theme_editor: None,
+                profile_editor: None,
             }));
     }
     model.grid_draw.invalidate_theme();
@@ -204,6 +207,7 @@ pub fn edit_theme_named(model: &mut Model, tx: &mut Tx, name: &str) {
             crate::model::SettingsMode::Open(Box::new(crate::model::SettingsUi {
                 tab: crate::model::SettingsTab::Theme,
                 theme_editor: Some(crate::model::ThemeEditor::from_custom(name, &custom)),
+                profile_editor: None,
             }));
         model.grid_draw.invalidate_theme();
     } else if crate::theme::resolve_builtin(name).is_some() {
@@ -539,9 +543,7 @@ pub fn update_profile_field(
 }
 
 pub fn duplicate_profile(model: &mut Model, _tx: &mut Tx, source: &str) -> Option<String> {
-    let Some(profile) = model.config.profile(source).cloned() else {
-        return None;
-    };
+    let profile = model.config.profile(source).cloned()?;
     let base = format!("{source} Copy");
     let mut name = base.clone();
     let mut n = 2u32;
@@ -584,6 +586,63 @@ pub fn delete_profile(model: &mut Model, _tx: &mut Tx, name: &str) -> bool {
         return false;
     }
     true
+}
+
+pub fn edit_profile_named(model: &mut Model, _tx: &mut Tx, name: &str) {
+    let Some(profile) = model.config.profile(name).cloned() else {
+        return;
+    };
+    model.settings_mode = crate::model::SettingsMode::Open(Box::new(crate::model::SettingsUi {
+        tab: crate::model::SettingsTab::Profiles,
+        theme_editor: None,
+        profile_editor: Some(crate::model::ProfileEditor::from_profile(name, &profile)),
+    }));
+}
+
+pub fn cancel_profile_edit(model: &mut Model, _tx: &mut Tx) {
+    if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+        ui.tab = crate::model::SettingsTab::Profiles;
+        ui.profile_editor = None;
+    }
+}
+
+pub fn save_profile_edit(model: &mut Model, tx: &mut Tx) {
+    let Some((editor, original)) = (match &model.settings_mode {
+        crate::model::SettingsMode::Open(ui) => ui
+            .profile_editor
+            .as_ref()
+            .map(|e| (e.clone(), e.original_name.clone())),
+        _ => None,
+    }) else {
+        return;
+    };
+    let Some((new_name, profile)) = editor.to_profile() else {
+        return;
+    };
+    if !model.config.profiles.contains_key(&original) {
+        return;
+    }
+    if new_name != original && model.config.profiles.contains_key(&new_name) {
+        return;
+    }
+    if let Some(p) = model.config.profiles.get_mut(&original) {
+        *p = profile;
+    }
+    if new_name != original {
+        if !rename_profile(model, tx, &original, &new_name) {
+            return;
+        }
+    } else {
+        model.config.normalize();
+        crate::tabs::apply_active_profile(model);
+        if let Err(err) = model.config.save() {
+            eprintln!("rune-term: failed to save settings: {err}");
+        }
+    }
+    if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+        ui.tab = crate::model::SettingsTab::Profiles;
+        ui.profile_editor = None;
+    }
 }
 
 #[cfg(test)]

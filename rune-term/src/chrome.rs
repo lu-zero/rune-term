@@ -582,6 +582,12 @@ fn row_action(
 }
 
 fn profiles_settings(model: &Model, p: &Palette) -> El {
+    if matches!(
+        &model.settings_mode,
+        crate::model::SettingsMode::Open(ui) if ui.profile_editor.is_some()
+    ) {
+        return profile_editor_view(model);
+    }
     let default_name = model.config.default_profile_name().to_owned();
     let mut names: Vec<String> = model.config.profile_names().map(str::to_owned).collect();
     names.sort();
@@ -612,6 +618,7 @@ fn profiles_settings(model: &Model, p: &Palette) -> El {
         let name_for_set = name.clone();
         let name_for_dup = name.clone();
         let name_for_del = name.clone();
+        let name_for_edit = name.clone();
         let name_label = name.clone();
         let label_color = if is_default {
             text_color(p)
@@ -630,12 +637,23 @@ fn profiles_settings(model: &Model, p: &Palette) -> El {
             },
         ));
         actions = actions.child(row_action(
+            "✎",
+            &format!("profile-edit-{name}"),
+            p,
+            true,
+            move |model, tx| {
+                crate::app::edit_profile_named(model, tx, &name_for_edit);
+            },
+        ));
+        actions = actions.child(row_action(
             "⎘",
             &format!("profile-dup-{name}"),
             p,
             true,
             move |model, tx| {
-                let _ = crate::app::duplicate_profile(model, tx, &name_for_dup);
+                if let Some(new_name) = crate::app::duplicate_profile(model, tx, &name_for_dup) {
+                    crate::app::edit_profile_named(model, tx, &new_name);
+                }
             },
         ));
         actions = actions.child(row_action(
@@ -704,7 +722,9 @@ fn profiles_settings(model: &Model, p: &Palette) -> El {
         p,
         |model, tx| {
             let src = model.config.default_profile_name().to_owned();
-            let _ = crate::app::duplicate_profile(model, tx, &src);
+            if let Some(name) = crate::app::duplicate_profile(model, tx, &src) {
+                crate::app::edit_profile_named(model, tx, &name);
+            }
         },
     ));
 
@@ -715,6 +735,175 @@ fn profiles_settings(model: &Model, p: &Palette) -> El {
         .pb(space::S2)
         .child(actions)
         .child(list)
+}
+
+fn profile_editor_view(model: &Model) -> El {
+    let p = model.palette.as_ref();
+    let editor = match &model.settings_mode {
+        crate::model::SettingsMode::Open(ui) => match ui.profile_editor.as_ref() {
+            Some(editor) => editor,
+            None => return col(),
+        },
+        _ => return col(),
+    };
+    let mut grid = col().w_full().gap(6.0);
+    #[allow(clippy::type_complexity)]
+    let rows: [(
+        &str,
+        &str,
+        &rune::TextEdit,
+        fn(&mut Model) -> &mut rune::TextEdit,
+    ); 8] = [
+        ("Name", "pe-name", &editor.name, |m| {
+            match &mut m.settings_mode {
+                crate::model::SettingsMode::Open(ui) => {
+                    &mut ui.profile_editor.as_mut().unwrap().name
+                }
+                _ => unreachable!(),
+            }
+        }),
+        (
+            "Font family",
+            "pe-font-family",
+            &editor.font_family,
+            |m| match &mut m.settings_mode {
+                crate::model::SettingsMode::Open(ui) => {
+                    &mut ui.profile_editor.as_mut().unwrap().font_family
+                }
+                _ => unreachable!(),
+            },
+        ),
+        (
+            "Font size",
+            "pe-font-size",
+            &editor.font_size,
+            |m| match &mut m.settings_mode {
+                crate::model::SettingsMode::Open(ui) => {
+                    &mut ui.profile_editor.as_mut().unwrap().font_size
+                }
+                _ => unreachable!(),
+            },
+        ),
+        ("Theme", "pe-theme", &editor.theme, |m| {
+            match &mut m.settings_mode {
+                crate::model::SettingsMode::Open(ui) => {
+                    &mut ui.profile_editor.as_mut().unwrap().theme
+                }
+                _ => unreachable!(),
+            }
+        }),
+        ("Backend", "pe-backend", &editor.backend, |m| {
+            match &mut m.settings_mode {
+                crate::model::SettingsMode::Open(ui) => {
+                    &mut ui.profile_editor.as_mut().unwrap().backend
+                }
+                _ => unreachable!(),
+            }
+        }),
+        (
+            "Shell program",
+            "pe-shell-program",
+            &editor.shell_program,
+            |m| match &mut m.settings_mode {
+                crate::model::SettingsMode::Open(ui) => {
+                    &mut ui.profile_editor.as_mut().unwrap().shell_program
+                }
+                _ => unreachable!(),
+            },
+        ),
+        (
+            "Shell args",
+            "pe-shell-args",
+            &editor.shell_args,
+            |m| match &mut m.settings_mode {
+                crate::model::SettingsMode::Open(ui) => {
+                    &mut ui.profile_editor.as_mut().unwrap().shell_args
+                }
+                _ => unreachable!(),
+            },
+        ),
+        ("CWD", "pe-cwd", &editor.cwd, |m| {
+            match &mut m.settings_mode {
+                crate::model::SettingsMode::Open(ui) => {
+                    &mut ui.profile_editor.as_mut().unwrap().cwd
+                }
+                _ => unreachable!(),
+            }
+        }),
+    ];
+    for (label, key, te, on_edit) in rows {
+        grid = grid.child(profile_editor_row(label, key, te, p, on_edit));
+    }
+    col()
+        .w_full()
+        .grow(1.0)
+        .gap(10.0)
+        .child(
+            row()
+                .w_full()
+                .items_center()
+                .justify_between()
+                .child(text("Edit profile").color(text_color(p)))
+                .child(text(&editor.original_name).color(theme::linear(p.muted))),
+        )
+        .child(
+            col()
+                .w_full()
+                .grow(1.0)
+                .scroll(ScrollSpec {
+                    stick_bottom: false,
+                })
+                .gap(6.0)
+                .child(grid),
+        )
+        .child(
+            row()
+                .w_full()
+                .gap(8.0)
+                .justify_center()
+                .child(settings_chip("Cancel", "pe-cancel", p, |model, tx| {
+                    crate::app::cancel_profile_edit(model, tx);
+                }))
+                .child(settings_chip("Save", "pe-save", p, |model, tx| {
+                    crate::app::save_profile_edit(model, tx);
+                })),
+        )
+}
+
+fn profile_editor_row(
+    label: &str,
+    key: &'static str,
+    edit: &rune::TextEdit,
+    p: &Palette,
+    on_edit: fn(&mut Model) -> &mut rune::TextEdit,
+) -> El {
+    let input = text_input(edit, TextStyle::new(13.0, 400.0))
+        .key(key)
+        .single_line()
+        .grow(1.0)
+        .h(30.0)
+        .pl(10.0)
+        .pr(10.0)
+        .pt(7.0)
+        .pb(7.0)
+        .radius(6.0)
+        .items_center()
+        .fill(theme::linear(p.tab_bg))
+        .border(1.0, theme::linear(p.active_border))
+        .color(text_color(p))
+        .on_edit(on_edit);
+    row()
+        .w_full()
+        .h(32.0)
+        .gap(10.0)
+        .items_center()
+        .child(
+            el().w(96.0)
+                .h(32.0)
+                .items_center()
+                .child(text(label).color(theme::linear(p.muted))),
+        )
+        .child(input)
 }
 
 fn settings_chip(

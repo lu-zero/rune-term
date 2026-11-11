@@ -27,6 +27,7 @@ pub enum SettingsTab {
 pub struct SettingsUi {
     pub tab: SettingsTab,
     pub theme_editor: Option<ThemeEditor>,
+    pub profile_editor: Option<ProfileEditor>,
 }
 
 #[derive(Clone, Debug)]
@@ -60,6 +61,19 @@ pub struct ThemeEditor {
     pub accent: TextEdit,
     pub ansi16: Vec<[u8; 3]>,
     pub created_at: u64,
+}
+
+#[derive(Clone, Debug)]
+pub struct ProfileEditor {
+    pub original_name: String,
+    pub name: TextEdit,
+    pub font_family: TextEdit,
+    pub font_size: TextEdit,
+    pub theme: TextEdit,
+    pub backend: TextEdit,
+    pub shell_program: TextEdit,
+    pub shell_args: TextEdit,
+    pub cwd: TextEdit,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -150,6 +164,118 @@ pub fn init() -> Model {
         pending_link_open: None,
         settings_mode: SettingsMode::Closed,
         held_mods: Mods::default(),
+    }
+}
+
+impl ProfileEditor {
+    pub fn from_profile(name: &str, profile: &crate::settings::Profile) -> Self {
+        let (shell_program, shell_args) = match &profile.shell {
+            Some(shell) => (
+                shell.program.clone().unwrap_or_default(),
+                shell.args.join(" "),
+            ),
+            None => (String::new(), String::new()),
+        };
+        Self {
+            original_name: name.to_owned(),
+            name: TextEdit::new(name),
+            font_family: TextEdit::new(&profile.font_family),
+            font_size: TextEdit::new(
+                profile
+                    .font_size
+                    .map(|s| {
+                        if (s.fract()).abs() < f32::EPSILON {
+                            format!("{s:.0}")
+                        } else {
+                            format!("{s}")
+                        }
+                    })
+                    .unwrap_or_default(),
+            ),
+            theme: TextEdit::new(profile.theme.clone().unwrap_or_default()),
+            backend: TextEdit::new(&profile.backend),
+            shell_program: TextEdit::new(shell_program),
+            shell_args: TextEdit::new(shell_args),
+            cwd: TextEdit::new(profile.cwd.clone().unwrap_or_default()),
+        }
+    }
+
+    pub fn to_profile(&self) -> Option<(String, crate::settings::Profile)> {
+        let name = self.name.text.trim().to_owned();
+        if name.is_empty() {
+            return None;
+        }
+        let font_size = {
+            let t = self.font_size.text.trim();
+            if t.is_empty() {
+                None
+            } else {
+                Some(t.parse::<f32>().ok()?)
+            }
+        };
+        let theme = {
+            let t = self.theme.text.trim();
+            if t.is_empty() {
+                None
+            } else {
+                Some(t.to_owned())
+            }
+        };
+        let backend = {
+            let t = self.backend.text.trim();
+            if t.is_empty() {
+                "local".to_owned()
+            } else {
+                t.to_owned()
+            }
+        };
+        let font_family = {
+            let t = self.font_family.text.trim();
+            if t.is_empty() {
+                "Cascadia Code NF".to_owned()
+            } else {
+                t.to_owned()
+            }
+        };
+        let cwd = {
+            let t = self.cwd.text.trim();
+            if t.is_empty() {
+                None
+            } else {
+                Some(t.to_owned())
+            }
+        };
+        let shell = {
+            let program = self.shell_program.text.trim();
+            let args = self.shell_args.text.trim();
+            if program.is_empty() && args.is_empty() {
+                None
+            } else {
+                Some(crate::settings::ShellSpec {
+                    program: if program.is_empty() {
+                        None
+                    } else {
+                        Some(program.to_owned())
+                    },
+                    args: if args.is_empty() {
+                        Vec::new()
+                    } else {
+                        args.split_whitespace().map(str::to_owned).collect()
+                    },
+                })
+            }
+        };
+        Some((
+            name,
+            crate::settings::Profile {
+                font_family,
+                font_size,
+                theme,
+                backend,
+                shell,
+                cwd,
+            },
+        ))
     }
 }
 

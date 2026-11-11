@@ -371,26 +371,9 @@ pub fn config_path() -> PathBuf {
 }
 
 fn config_dir() -> PathBuf {
-    #[cfg(target_os = "macos")]
-    {
-        if let Some(home) = std::env::var_os("HOME") {
-            return PathBuf::from(home)
-                .join("Library")
-                .join("Application Support")
-                .join("rune-term");
-        }
-    }
-    #[cfg(target_os = "windows")]
-    {
-        if let Some(appdata) = std::env::var_os("APPDATA") {
-            return PathBuf::from(appdata).join("rune-term");
-        }
-    }
-    if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
-        return PathBuf::from(xdg).join("rune-term");
-    }
-    if let Some(home) = std::env::var_os("HOME") {
-        return PathBuf::from(home).join(".config").join("rune-term");
+    use etcetera::BaseStrategy;
+    if let Ok(xdg) = etcetera::base_strategy::Xdg::new() {
+        return xdg.config_dir().join("rune-term");
     }
     PathBuf::from(".").join("rune-term")
 }
