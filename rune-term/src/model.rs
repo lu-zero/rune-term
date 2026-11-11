@@ -160,11 +160,11 @@ pub fn init() -> Model {
             ..GridDrawStamp::default()
         },
         palette,
-        shared,
+        shared: std::sync::Arc::clone(&shared),
         pending_inject,
         pending_link_open: None,
         settings_mode: SettingsMode::Closed,
-        _ipc: Some(crate::ipc::start()),
+        _ipc: Some(crate::ipc::start(shared)),
         held_mods: Mods::default(),
     }
 }

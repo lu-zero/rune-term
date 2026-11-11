@@ -3,7 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{mpsc, Arc, Mutex};
 
 use librio::{Action, ClipboardType, RenderState, SurfaceDelegate, SurfaceDesc, SurfaceId};
 use rune::{Tx, Waker};
@@ -56,6 +56,12 @@ pub struct Shared {
     waker: Mutex<Option<Waker>>,
     flags: Mutex<Flags>,
     output: Mutex<Vec<u8>>,
+    control: Mutex<
+        Vec<(
+            term_control::Request,
+            mpsc::SyncSender<term_control::Response>,
+        )>,
+    >,
     rearms: AtomicUsize,
 }
 
@@ -79,6 +85,7 @@ impl Shared {
                 pending: HashSet::new(),
             }),
             output: Mutex::new(Vec::new()),
+            control: Mutex::new(Vec::new()),
             rearms: AtomicUsize::new(0),
         })
     }
@@ -114,6 +121,24 @@ impl Shared {
 
     pub(crate) fn note_rearm(&self) {
         self.rearms.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub(crate) fn enqueue_control(
+        &self,
+        req: term_control::Request,
+        tx: mpsc::SyncSender<term_control::Response>,
+    ) {
+        self.control.lock().expect("control").push((req, tx));
+        self.wake();
+    }
+
+    fn take_control(
+        &self,
+    ) -> Vec<(
+        term_control::Request,
+        mpsc::SyncSender<term_control::Response>,
+    )> {
+        std::mem::take(&mut *self.control.lock().expect("control"))
     }
 
     fn take_events(&self) -> Vec<HostEvent> {
@@ -295,6 +320,9 @@ pub fn poll(model: &mut Model, now: f64, tx: &mut Tx) -> bool {
         if apply(model, event, tx) {
             chrome = true;
         }
+    }
+    for (req, resp_tx) in model.shared.take_control() {
+        let _ = resp_tx.send(crate::ipc::handle_control_request(model, req));
     }
     if let Some(bytes) = model.pending_inject.take() {
         if let Some(host) = model.surfaces.primary_mut() {
