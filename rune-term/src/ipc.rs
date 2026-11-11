@@ -5,6 +5,8 @@
 //! are bridged to the main thread via the shared control queue.
 
 use std::io::{BufReader, BufWriter};
+#[cfg(unix)]
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
@@ -144,11 +146,7 @@ fn handle_connection(
     let mut reader = BufReader::new(reader_stream);
     let mut writer = BufWriter::new(stream);
 
-    loop {
-        let req: Option<Request> = match read_message(&mut reader) {
-            Ok(r) => r,
-            Err(_) => break,
-        };
+    while let Ok(req) = read_message(&mut reader) {
         let Some(req) = req else { break };
         let resp = handle_request(req, &socket_path, &shared);
         if write_message(&mut writer, &resp).is_err() {
@@ -158,7 +156,7 @@ fn handle_connection(
 }
 
 #[cfg(unix)]
-fn handle_request(req: Request, socket_path: &PathBuf, shared: &Arc<Shared>) -> Response {
+fn handle_request(req: Request, socket_path: &Path, shared: &Arc<Shared>) -> Response {
     match req {
         Request::Hello(hello) => Response::Hello {
             protocol_version: PROTOCOL_VERSION.max(hello.protocol_version),
@@ -207,12 +205,12 @@ fn bridge_to_ui(req: Request, shared: &Arc<Shared>) -> Response {
 }
 
 #[cfg(unix)]
-fn app_info(socket_path: &PathBuf) -> AppInfo {
+fn app_info(socket_path: &Path) -> AppInfo {
     AppInfo {
         name: "rune-term".to_owned(),
         version: env!("CARGO_PKG_VERSION").to_owned(),
         pid: Some(std::process::id()),
-        socket: Some(socket_path.clone()),
+        socket: Some(socket_path.to_path_buf()),
     }
 }
 

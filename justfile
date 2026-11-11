@@ -9,6 +9,10 @@ fmt:
 fmt-check:
     cargo fmt --all -- --check
 
+clippy:
+    cargo clippy -p term-grid -p term-input -p term-control -p rune-term-ctl --all-targets -- -D warnings
+    cargo clippy -p rune-term --all-targets --no-default-features --features graphics -- -D warnings
+
 check:
     cargo check --workspace --all-targets
 
@@ -30,10 +34,13 @@ test-headless:
 
 test: test-lib
 
+# Pre-commit gate: formatting, clippy (no warnings), and lib tests.
+check-all: fmt-check clippy test-lib
+
 run:
     cargo run -p rune-term
 
-ci: fmt-check check-lib test-lib
+ci: check-all
 
 ctl *args:
     cargo run -p rune-term-ctl -- {{args}}

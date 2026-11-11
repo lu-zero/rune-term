@@ -264,16 +264,6 @@ fn expand_tilde(path: &str) -> String {
     path.to_owned()
 }
 
-pub(crate) fn surface_desc_for_profile(
-    config: &crate::settings::ConfigFile,
-    profile: &str,
-    cols: u16,
-    rows: u16,
-) -> SurfaceDesc {
-    let resolved = config.resolve_profile(profile);
-    surface_desc_for(&resolved, cols, rows)
-}
-
 /// One surface, one damage flag, one effect mark.
 pub(crate) fn open_host(
     model: &mut Model,

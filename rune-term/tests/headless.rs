@@ -93,7 +93,9 @@ fn bytes(color: Color) -> [u8; 3] {
 
 fn count_near(pixels: &[u8], expected: [u8; 3], tol: u8) -> usize {
     pixels
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .filter(|px| {
             px[0].abs_diff(expected[0]) <= tol
                 && px[1].abs_diff(expected[1]) <= tol
@@ -178,7 +180,9 @@ fn kitty_image_pixels_appear() {
     let (width, height, pixels) = read_png(&path);
     assert_eq!((width, height), (800, 500));
     let red = pixels
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .filter(|px| px[0] >= 220 && px[1] <= 40 && px[2] <= 40 && px[3] >= 250)
         .count();
     assert!(

@@ -16,8 +16,10 @@ comments, and docs: a pattern being there does not make it correct.
 
 ## Working here
 
-- `cargo fmt --all -- --check` passes before a commit. There is no justfile
-  and no git hook.
+- Code must pass the usual checks before a commit: `just check-all` (runs
+  `cargo fmt --all -- --check`, clippy with `-D warnings`, and lib tests).
+  Do not commit code that is ill-formatted, has clippy lints, or has clippy
+  warnings. There is no git hook enforcing this.
 - Sibling checkouts (`../rune`, `../rio`, `../wezterm`) are for reading.
   The workspace depends on upstream `rune` and `librio`. `[patch]` replaces
   those sources with `https://github.com/lu-zero/rune` branch
