@@ -1,0 +1,11 @@
+[package]
+name = "term-control"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Control protocol types and helpers for rune-term IPC/CLI."
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

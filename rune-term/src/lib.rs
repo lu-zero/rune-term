@@ -17,7 +17,7 @@ mod resize;
 mod scrollback;
 mod search;
 mod selection;
-mod settings;
+pub mod settings;
 mod split;
 mod surfaces;
 mod tabs;

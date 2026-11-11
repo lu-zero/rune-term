@@ -14,11 +14,13 @@ check:
 
 check-lib:
     cargo check -p rune-term --no-default-features --lib
+    cargo check -p term-control -p rune-term-ctl
 
 test-lib:
     cargo test -p term-grid --lib
     cargo test -p term-input --lib
     cargo test -p rune-term --no-default-features --lib
+    cargo test -p term-control --lib
 
 test-grid:
     cargo test -p rune-term --test grid_pipeline
@@ -32,3 +34,6 @@ run:
     cargo run -p rune-term
 
 ci: fmt-check check-lib test-lib
+
+ctl *args:
+    cargo run -p rune-term-ctl -- {{args}}
