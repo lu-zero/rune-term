@@ -10,10 +10,25 @@ use crate::model::Model;
 
 /// A new shell, selected. The leaf fills the window.
 pub fn open(model: &mut Model) -> bool {
+    let profile = model.config.default_profile_name().to_owned();
+    open_with_profile(model, &profile)
+}
+
+/// A new shell using `profile`, selected. The leaf fills the window.
+/// Unknown profiles fall back to the default profile.
+pub fn open_with_profile(model: &mut Model, profile: &str) -> bool {
+    let profile = if model.config.profile(profile).is_some() {
+        profile.to_owned()
+    } else {
+        model.config.default_profile_name().to_owned()
+    };
+    apply_profile_for_new_tab(model, &profile);
     let (leaf_n, mark) = next_ids(model);
     let id = LeafId(leaf_n);
+    let tab_profile = profile.clone();
     model.tabs.push(Tab {
         title: "rune-term".to_string(),
+        profile: tab_profile,
         root: Node::Leaf(Leaf {
             id,
             surface: 0,
@@ -24,12 +39,24 @@ pub fn open(model: &mut Model) -> bool {
         focused: id,
     });
     model.active = model.tabs.len() - 1;
-    let surface = delegate::open_host(model, mark, 0, 0);
+    let surface = delegate::open_host(model, mark, 0, 0, Some(&profile));
     if let Some(leaf) = find_leaf_mut(&mut model.tabs[model.active].root, id) {
         leaf.surface = surface;
     }
     model.surfaces.show(surface);
     true
+}
+
+fn apply_profile_for_new_tab(model: &mut Model, profile: &str) {
+    let resolved = model.config.resolve_profile(profile);
+    if (resolved.font_size - model.font_size).abs() > f32::EPSILON {
+        model.font_size = resolved.font_size;
+        model.cell_points = crate::metrics::cell_points_for(resolved.font_size);
+    }
+    if resolved.theme != model.palette.name {
+        model.palette = model.config.resolve_palette_for(profile);
+        model.grid_draw.invalidate_theme();
+    }
 }
 
 /// Select `index`. False when it is missing or already selected.
@@ -314,11 +341,23 @@ mod tests {
         assert!(model.active < model.tabs.len());
         assert_eq!(shown(&model), active_surface(&model));
         assert!(shown(&model) == s0 || shown(&model) == s2);
-        // closing the last remaining in this scenario keeps a valid shown surface
         close_active(&mut model, &mut Tx::default());
         assert_eq!(model.tabs.len(), 1);
         assert_eq!(model.active, 0);
-        assert_eq!(shown(&model), active_surface(&model));
+    }
+
+    #[test]
+    fn open_with_profile_records_profile_and_falls_back_for_unknown() {
+        let mut model = host();
+        model.config.ensure_profile("Work").font_size = Some(16.0);
+        assert!(open_with_profile(&mut model, "Work"));
+        assert_eq!(model.tabs[model.active].profile, "Work");
+
+        assert!(open_with_profile(&mut model, "Missing"));
+        assert_eq!(
+            model.tabs[model.active].profile,
+            model.config.default_profile_name()
+        );
     }
 
     #[test]

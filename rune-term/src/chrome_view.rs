@@ -66,7 +66,8 @@ pub fn split_focused(model: &mut Model, axis: Axis) -> bool {
     let Some((cols, rows, mark)) = leaf_shape(&model.tabs[active].root, new_id) else {
         return false;
     };
-    let surface = delegate::open_host(model, mark, cols, rows);
+    let profile = model.tabs.get(active).map(|t| t.profile.clone());
+    let surface = delegate::open_host(model, mark, cols, rows, profile.as_deref());
     if let Some(leaf) = find_leaf_mut(&mut model.tabs[active].root, new_id) {
         leaf.surface = surface;
     }

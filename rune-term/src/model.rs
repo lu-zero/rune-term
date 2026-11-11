@@ -20,6 +20,7 @@ pub struct Preedit {
 pub enum SettingsTab {
     Font,
     Theme,
+    Profiles,
 }
 
 #[derive(Clone, Debug)]
@@ -113,10 +114,12 @@ pub fn init() -> Model {
     let resolved = config.resolve();
     let font_size = resolved.font_size;
     let palette = config.resolve_palette();
+    let profile = config.default_profile_name().to_owned();
     Model {
         engine,
         tabs: vec![Tab {
             title: "rune-term".to_string(),
+            profile,
             root: Node::Leaf(Leaf {
                 id: LEAF,
                 surface: 0,

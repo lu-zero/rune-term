@@ -320,6 +320,23 @@ pub fn on_secondary_mark(
         .separator()
         .item(rune::PopupItem::new("search", "Search"))
         .item(rune::PopupItem::new("new-tab", "New Tab"));
+    let default_name = model.config.default_profile_name().to_owned();
+    let mut names: Vec<String> = model.config.profile_names().map(str::to_owned).collect();
+    names.sort();
+    if names.len() > 1 || names.first().is_some_and(|n| n != &default_name) {
+        menu = menu.separator();
+        for name in names {
+            let label = if name == default_name {
+                format!("New Tab: {name} (default)")
+            } else {
+                format!("New Tab: {name}")
+            };
+            menu = menu.item(rune::PopupItem::new(
+                format!("new-tab-profile:{name}"),
+                label,
+            ));
+        }
+    }
     tx.popup_menu(
         menu,
         point.window(),
@@ -331,12 +348,12 @@ pub fn on_secondary_mark(
     );
 }
 
-fn context_action(model: &mut Model, mark: u32, id: &str, tx: &mut Tx) {
+fn context_action(model: &mut Model, _mark: u32, id: &str, tx: &mut Tx) {
     match id {
         "copy" => {
             let Some(text) = model
                 .surfaces
-                .by_mark_mut(mark)
+                .by_mark_mut(_mark)
                 .and_then(|host| host.surface.selection_text())
                 .filter(|text| !text.is_empty())
             else {
@@ -348,6 +365,10 @@ fn context_action(model: &mut Model, mark: u32, id: &str, tx: &mut Tx) {
         "search" => crate::search::toggle(model),
         "new-tab" => {
             crate::tabs::open(model);
+        }
+        _ if id.starts_with("new-tab-profile:") => {
+            let name = &id["new-tab-profile:".len()..];
+            crate::tabs::open_with_profile(model, name);
         }
         _ => {}
     }

@@ -65,7 +65,8 @@ The numbers are that plan's.
       size and theme on init; Cascadia Code NF metrics scale with font size.
       Named profile UI/switching, font family wired to atlas, and broader
       settings polish remain. Design:
-      [`settings-profiles.md`](./settings-profiles.md).
+      [`settings-profiles.md`](./settings-profiles.md). Follow-on:
+      [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
 - [x] **17. Box-drawing and braille sprites.** Box drawing, block elements
       (`U+2580–U+259F`), braille, legacy computing sextants/octants, powerline/
       extra separators (`U+E0B0–U+E0BF`, `U+E0D2`, `U+E0D4`), geometric corner
@@ -102,6 +103,47 @@ The numbers are that plan's.
             logged; `open_uri_with` provides a confirmation/policy hook. Mod+click
             prompts for risky/non-web schemes with a modal confirmation; safe web
             and mailto schemes open directly.
+
+## Planned (design drafted)
+
+These items extend the original plan; designs are drafted, implementation not
+started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
+
+- [~] **20. Profiles and creation.** Named/default profiles and “open with
+      profile”, applied at session/tab/pane creation (settings, shell/cwd/env),
+      then a versioned, capability-validated `backend`/target stanza as the
+      uniform creation/attach template. Config supports named `[profiles.*]`
+      with default-profile resolution/fallback/persistence, and `Profile`
+      carries `font_family`/`font_size`/`theme` plus `backend` (default
+      `local`), `shell` (program/args), and `cwd` wired into local
+      `SurfaceDesc` creation. Tabs record a profile; `open_with_profile`
+      (and pane context menu entries) creates a tab for a selected profile,
+      falling back to the default for unknown names. Settings includes a
+      Profiles tab to view profiles, set the default, duplicate, create, and
+      delete (persisted). Per-tab/per-pane setting application (font/theme are
+      currently model-global), richer profile editing, and full creation-time
+      backend semantics remain. Design:
+      [`settings-profiles.md`](./settings-profiles.md),
+      [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
+- [ ] **21. IPC and automation.** Owner-scoped local control plane
+      (versioned, capability-gated): query/events, then create-from-profile /
+      focus / close / resize, then input/capture, targeting `it2`-like
+      scripting. Design: [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
+- [ ] **22. CLI, docs, and tooling.** CLI aligned with IPC using `winnow-args`,
+      with generated man pages/reference docs; `justfile` for build/test/run and
+      install across lean/fat/helper compositions. Design:
+      [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
+- [ ] **23. Multiplexer-backed sessions.** Explicit session concept and
+      backend abstraction (local `librio` vs multiplexer), covering create /
+      attach / detach / resume, multi-client policy, and remoting/share
+      capabilities. rmux-first, applicable to tmux-class backends. Design:
+      [`multiplexer-sessions.md`](./multiplexer-sessions.md).
+- [ ] **24. Backend adapters and composition.** Fat/lean packaging (features
+      and/or `rune-term-*` helpers) with progressive adapters: local, rmux
+      (local), ssh/tmux (wrapper or native), rmux (web-share client), osewa,
+      and experimental rmux-roaming/predictive work. Design:
+      [`multiplexer-sessions.md`](./multiplexer-sessions.md),
+      [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
 
 ## Outside this repository
 

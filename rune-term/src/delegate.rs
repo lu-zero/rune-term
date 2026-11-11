@@ -192,17 +192,62 @@ impl SurfaceDelegate for Delegate {
 
 pub fn setup(model: &mut Model, waker: Waker) {
     model.shared.set_waker(waker);
-    let id = open_host(model, PANE_MARK, 0, 0);
+    let profile = model
+        .tabs
+        .get(model.active)
+        .map(|t| t.profile.clone())
+        .unwrap_or_else(|| model.config.default_profile_name().to_owned());
+    let id = open_host(model, PANE_MARK, 0, 0, Some(&profile));
     crate::chrome_view::attach_initial(model, id);
 }
 
+fn surface_desc_for(resolved: &crate::settings::Resolved, cols: u16, rows: u16) -> SurfaceDesc {
+    let mut desc = SurfaceDesc::default();
+    if cols > 0 {
+        desc.cols = cols;
+    }
+    if rows > 0 {
+        desc.rows = rows;
+    }
+    if let Some(shell) = &resolved.shell {
+        desc.shell = shell.program.clone();
+        desc.args = shell.args.clone();
+    }
+    if let Some(cwd) = &resolved.cwd {
+        desc.working_dir = Some(expand_tilde(cwd));
+    }
+    desc
+}
+
+fn expand_tilde(path: &str) -> String {
+    if path == "~" {
+        if let Some(home) = std::env::var_os("HOME") {
+            return home.to_string_lossy().into_owned();
+        }
+    } else if let Some(rest) = path.strip_prefix("~/") {
+        if let Some(home) = std::env::var_os("HOME") {
+            return std::path::Path::new(&home)
+                .join(rest)
+                .to_string_lossy()
+                .into_owned();
+        }
+    }
+    path.to_owned()
+}
+
 /// One surface, one damage flag, one effect mark.
-pub(crate) fn open_host(model: &mut Model, mark: u32, cols: u16, rows: u16) -> SurfaceId {
+pub(crate) fn open_host(
+    model: &mut Model,
+    mark: u32,
+    cols: u16,
+    rows: u16,
+    profile: Option<&str>,
+) -> SurfaceId {
+    let profile = profile.unwrap_or_else(|| model.config.default_profile_name());
+    let resolved = model.config.resolve_profile(profile);
+    let desc = surface_desc_for(&resolved, cols, rows);
     let flag = Arc::new(AtomicBool::new(false));
-    let surface = model
-        .engine
-        .create_surface(&SurfaceDesc::default())
-        .expect("create surface");
+    let surface = model.engine.create_surface(&desc).expect("create surface");
     let id = surface.id();
     model.shared.insert_flag(id, Arc::clone(&flag));
     let render = RenderState::new(&surface);

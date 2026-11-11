@@ -21,6 +21,25 @@ them with [lu-zero/rune](https://github.com/lu-zero/rune) branch
 `librio-update-rearm`. Cascadia Code NF is vendored in `term-grid/`. wgpu
 is pinned at `=30.0.1`.
 
+### System dependencies
+
+**macOS:** the target platform. Rune uses its Metal GPU backend on Apple
+platforms (system Metal/frameworks), so there are no separate Wayland/X11
+runtime packages to install; the normal macOS/Xcode command-line toolchain is
+expected.
+
+**Linux (Wayland/X11):** building/running the windowed app and linking tests
+that depend on Rune/winit requires the platform input and display libraries.
+At minimum `libxkbcommon` is required (linking fails without it). Depending on
+the session/backend and enabled features, Wayland and/or X11 client libraries
+and common desktop dependencies (e.g. fontconfig/dbus) may also be needed.
+
+Headless GPU tests (`grid_pipeline`, `--no-default-features --test headless`)
+use Rune/wgpu headless rendering and require a working wgpu graphics adapter
+(e.g. Vulkan or OpenGL with appropriate drivers; on headless machines a
+software adapter such as Mesa/lavapipe is often used). Package names vary by
+distribution.
+
 ```
 cargo run -p rune-term
 cargo test -p term-grid --lib

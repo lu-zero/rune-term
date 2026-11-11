@@ -45,6 +45,7 @@ pub fn slot_premul(bg: u32, srgb_blend: bool) -> [f32; 4] {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Tab {
     pub title: String,
+    pub profile: String,
     pub root: Node,
     pub focused: LeafId,
 }
@@ -104,10 +105,17 @@ fn settings_panel(model: &Model) -> El {
             crate::model::SettingsTab::Theme,
             active_tab,
             p,
+        ))
+        .child(settings_tab_chip(
+            "Profiles",
+            crate::model::SettingsTab::Profiles,
+            active_tab,
+            p,
         ));
     let body = match active_tab {
         crate::model::SettingsTab::Font => font_settings(model, p),
         crate::model::SettingsTab::Theme => theme_settings(model, p),
+        crate::model::SettingsTab::Profiles => profiles_settings(model, p),
     };
     let body = col()
         .w_full()
@@ -571,6 +579,142 @@ fn row_action(
         e = e.hover(hover_overlay(p)).on_press_tx(on_press);
     }
     e.child(text(label).color(color))
+}
+
+fn profiles_settings(model: &Model, p: &Palette) -> El {
+    let default_name = model.config.default_profile_name().to_owned();
+    let mut names: Vec<String> = model.config.profile_names().map(str::to_owned).collect();
+    names.sort();
+    let can_delete_any = names.len() > 1;
+
+    let mut list = col().w_full().gap(4.0);
+    for name in &names {
+        let is_default = name == &default_name;
+        let resolved = model.config.resolve_profile(name);
+        let mut meta = format!(
+            "{} pt · {} · {}",
+            resolved.font_size as i32, resolved.theme, resolved.backend
+        );
+        if let Some(cwd) = &resolved.cwd {
+            meta.push_str(" · ");
+            meta.push_str(cwd);
+        }
+        let border = if is_default {
+            theme::linear(p.accent)
+        } else {
+            theme::linear(p.active_border)
+        };
+        let fill = if is_default {
+            theme::linear(p.tab_bg)
+        } else {
+            theme::linear(p.bg)
+        };
+        let name_for_set = name.clone();
+        let name_for_dup = name.clone();
+        let name_for_del = name.clone();
+        let name_label = name.clone();
+        let label_color = if is_default {
+            text_color(p)
+        } else {
+            theme::linear(p.fg)
+        };
+
+        let mut actions = row().gap(2.0).items_center();
+        actions = actions.child(row_action(
+            "★",
+            &format!("profile-default-{name}"),
+            p,
+            !is_default,
+            move |model, tx| {
+                crate::app::set_default_profile(model, tx, &name_for_set);
+            },
+        ));
+        actions = actions.child(row_action(
+            "⎘",
+            &format!("profile-dup-{name}"),
+            p,
+            true,
+            move |model, tx| {
+                let _ = crate::app::duplicate_profile(model, tx, &name_for_dup);
+            },
+        ));
+        actions = actions.child(row_action(
+            "✕",
+            &format!("profile-del-{name}"),
+            p,
+            can_delete_any,
+            move |model, tx| {
+                crate::app::delete_profile(model, tx, &name_for_del);
+            },
+        ));
+
+        let info = col()
+            .grow(1.0)
+            .min_w(0.0)
+            .gap(2.0)
+            .child(
+                text(if is_default {
+                    format!("{name_label} (default)")
+                } else {
+                    name_label
+                })
+                .truncate()
+                .color(label_color),
+            )
+            .child(text(meta).truncate().color(theme::linear(p.muted)));
+
+        let row_el = row()
+            .key(format!("profile-{name}"))
+            .w_full()
+            .min_h(40.0)
+            .pl(10.0)
+            .pr(6.0)
+            .pt(6.0)
+            .pb(6.0)
+            .gap(10.0)
+            .items_center()
+            .justify_between()
+            .radius(6.0)
+            .border(if is_default { 1.5 } else { 1.0 }, border)
+            .fill(fill)
+            .child(info)
+            .child(actions);
+        list = list.child(row_el);
+    }
+
+    let list = col()
+        .w_full()
+        .grow(1.0)
+        .min_h(220.0)
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        })
+        .radius(radius::MD)
+        .fill(theme::linear(p.bg))
+        .border(1.0, theme::linear(p.active_border))
+        .pt(space::S2)
+        .pb(space::S1)
+        .pl(space::S2)
+        .pr(space::S2)
+        .child(list);
+
+    let actions = row().w_full().gap(space::S2).child(settings_chip(
+        "New Profile",
+        "profile-new",
+        p,
+        |model, tx| {
+            let src = model.config.default_profile_name().to_owned();
+            let _ = crate::app::duplicate_profile(model, tx, &src);
+        },
+    ));
+
+    col()
+        .w_full()
+        .grow(1.0)
+        .gap(space::S3)
+        .pb(space::S2)
+        .child(actions)
+        .child(list)
 }
 
 fn settings_chip(

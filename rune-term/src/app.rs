@@ -479,3 +479,68 @@ fn pane_scissor(site: &rune::render::EffectSite<'_>) -> Option<(u32, u32, u32, u
     }
     Some((sx0, sy0, sx1 - sx0, sy1 - sy0))
 }
+
+pub fn set_default_profile(model: &mut Model, _tx: &mut Tx, name: &str) {
+    if model.config.set_default_profile(name) {
+        let resolved = model.config.resolve();
+        if (resolved.font_size - model.font_size).abs() >= f32::EPSILON {
+            model.font_size = resolved.font_size;
+            model.cell_points = crate::metrics::cell_points_for(resolved.font_size);
+        }
+        if resolved.theme != model.palette.name {
+            model.palette = model.config.resolve_palette();
+            model.grid_draw.invalidate_theme();
+        }
+        if let Err(err) = model.config.save() {
+            eprintln!("rune-term: failed to save settings: {err}");
+        }
+    }
+}
+
+pub fn duplicate_profile(model: &mut Model, _tx: &mut Tx, source: &str) -> Option<String> {
+    let Some(profile) = model.config.profile(source).cloned() else {
+        return None;
+    };
+    let base = format!("{source} Copy");
+    let mut name = base.clone();
+    let mut n = 2u32;
+    while model.config.profile(&name).is_some() {
+        name = format!("{base} {n}");
+        n += 1;
+    }
+    model.config.profiles.insert(name.clone(), profile);
+    if let Err(err) = model.config.save() {
+        eprintln!("rune-term: failed to save settings: {err}");
+        return None;
+    }
+    Some(name)
+}
+
+pub fn delete_profile(model: &mut Model, _tx: &mut Tx, name: &str) -> bool {
+    if model.config.profiles.len() <= 1 || !model.config.profiles.contains_key(name) {
+        return false;
+    }
+    let was_default = model.config.default_profile_name() == name;
+    model.config.profiles.remove(name);
+    if was_default {
+        let next = model
+            .config
+            .profiles
+            .keys()
+            .next()
+            .cloned()
+            .unwrap_or_else(|| crate::settings::DEFAULT_PROFILE.to_owned());
+        model.config.settings.default_profile = next;
+        let resolved = model.config.resolve();
+        model.font_size = resolved.font_size;
+        model.cell_points = crate::metrics::cell_points_for(resolved.font_size);
+        model.palette = model.config.resolve_palette();
+        model.grid_draw.invalidate_theme();
+    }
+    model.config.normalize();
+    if let Err(err) = model.config.save() {
+        eprintln!("rune-term: failed to save settings: {err}");
+        return false;
+    }
+    true
+}
