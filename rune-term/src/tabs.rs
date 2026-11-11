@@ -142,7 +142,7 @@ pub fn show_active(model: &mut Model) {
     model.surfaces.show(id);
 }
 
-fn apply_active_profile(model: &mut Model) {
+pub(crate) fn apply_active_profile(model: &mut Model) {
     let Some(profile) = model.tabs.get(model.active).map(|t| t.profile.clone()) else {
         return;
     };
@@ -376,6 +376,17 @@ mod tests {
         assert_eq!(model.tabs[model.active].profile, "Work");
 
         assert!(open_with_profile(&mut model, "Missing"));
+        assert_eq!(
+            model.tabs[model.active].profile,
+            model.config.default_profile_name()
+        );
+    }
+
+    #[test]
+    fn open_with_unavailable_backend_falls_back_to_default() {
+        let mut model = host();
+        model.config.ensure_profile("Remote").backend = "ssh".to_owned();
+        assert!(open_with_profile(&mut model, "Remote"));
         assert_eq!(
             model.tabs[model.active].profile,
             model.config.default_profile_name()

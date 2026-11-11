@@ -497,6 +497,47 @@ pub fn set_default_profile(model: &mut Model, _tx: &mut Tx, name: &str) {
     }
 }
 
+pub fn rename_profile(model: &mut Model, _tx: &mut Tx, from: &str, to: &str) -> bool {
+    let to = to.trim().to_owned();
+    if !model.config.rename_profile(from, &to) {
+        return false;
+    }
+    for tab in &mut model.tabs {
+        if tab.profile == from {
+            tab.profile = to.clone();
+        }
+    }
+    crate::tabs::apply_active_profile(model);
+    if let Err(err) = model.config.save() {
+        eprintln!("rune-term: failed to save settings: {err}");
+        return false;
+    }
+    true
+}
+
+#[allow(dead_code)]
+pub fn update_profile_field(
+    model: &mut Model,
+    _tx: &mut Tx,
+    name: &str,
+    f: impl FnOnce(&mut crate::settings::Profile),
+) -> bool {
+    let Some(profile) = model.config.profiles.get_mut(name) else {
+        return false;
+    };
+    f(profile);
+    if let Some(tab) = model.tabs.get(model.active) {
+        if tab.profile == name {
+            crate::tabs::apply_active_profile(model);
+        }
+    }
+    if let Err(err) = model.config.save() {
+        eprintln!("rune-term: failed to save settings: {err}");
+        return false;
+    }
+    true
+}
+
 pub fn duplicate_profile(model: &mut Model, _tx: &mut Tx, source: &str) -> Option<String> {
     let Some(profile) = model.config.profile(source).cloned() else {
         return None;
@@ -543,4 +584,43 @@ pub fn delete_profile(model: &mut Model, _tx: &mut Tx, name: &str) -> bool {
         return false;
     }
     true
+}
+
+#[cfg(test)]
+mod tests {
+    use rune::Tx;
+
+    use super::rename_profile;
+
+    #[test]
+    fn rename_profile_updates_tabs() {
+        let dir = std::env::temp_dir().join(format!(
+            "rune-term-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::env::set_var("XDG_CONFIG_HOME", &dir);
+
+        let mut model = crate::model::init();
+        model.config.ensure_profile("Work");
+        crate::tabs::open_with_profile(&mut model, "Work");
+        assert_eq!(model.tabs[model.active].profile, "Work");
+
+        let mut tx = Tx::default();
+        assert!(rename_profile(&mut model, &mut tx, "Work", "Office"));
+        assert!(model.tabs.iter().any(|t| t.profile == "Office"));
+        assert!(!model.tabs.iter().any(|t| t.profile == "Work"));
+        assert!(model.config.profile("Office").is_some());
+        assert_eq!(
+            model.config.default_profile_name(),
+            crate::settings::DEFAULT_PROFILE
+        );
+
+        std::env::remove_var("XDG_CONFIG_HOME");
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }
