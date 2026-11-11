@@ -5,6 +5,8 @@
 //! Transport, authentication/policy, and GUI integration live elsewhere.
 
 use serde::{Deserialize, Serialize};
+
+pub mod codec;
 use std::path::PathBuf;
 
 /// Protocol/API version for the control surface.
