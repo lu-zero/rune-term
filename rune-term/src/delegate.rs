@@ -201,7 +201,11 @@ pub fn setup(model: &mut Model, waker: Waker) {
     crate::chrome_view::attach_initial(model, id);
 }
 
-fn surface_desc_for(resolved: &crate::settings::Resolved, cols: u16, rows: u16) -> SurfaceDesc {
+pub(crate) fn surface_desc_for(
+    resolved: &crate::settings::Resolved,
+    cols: u16,
+    rows: u16,
+) -> SurfaceDesc {
     let mut desc = SurfaceDesc::default();
     if cols > 0 {
         desc.cols = cols;
@@ -233,6 +237,16 @@ fn expand_tilde(path: &str) -> String {
         }
     }
     path.to_owned()
+}
+
+pub(crate) fn surface_desc_for_profile(
+    config: &crate::settings::ConfigFile,
+    profile: &str,
+    cols: u16,
+    rows: u16,
+) -> SurfaceDesc {
+    let resolved = config.resolve_profile(profile);
+    surface_desc_for(&resolved, cols, rows)
 }
 
 /// One surface, one damage flag, one effect mark.
