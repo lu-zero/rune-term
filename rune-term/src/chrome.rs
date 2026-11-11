@@ -71,10 +71,11 @@ pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
     root
 }
 
-fn close_settings(model: &mut Model) {
+fn close_settings(model: &mut Model, tx: &mut rune::Tx) {
     model.settings_mode.close();
     model.palette = model.config.resolve_palette();
     model.grid_draw.invalidate_theme();
+    crate::tabs::focus_active(model, tx);
 }
 
 fn settings_panel(model: &Model) -> El {
@@ -88,8 +89,8 @@ fn settings_panel(model: &Model) -> El {
         .items_center()
         .justify_between()
         .child(text("Settings").color(text_color(p)))
-        .child(settings_chip("Close", "close-settings", p, |model, _tx| {
-            close_settings(model);
+        .child(settings_chip("Close", "close-settings", p, |model, tx| {
+            close_settings(model, tx);
         }));
     let tabs = row()
         .w_full()
@@ -137,8 +138,8 @@ fn settings_panel(model: &Model) -> El {
         .pr(space::S6)
         .pt(space::S3)
         .pb(space::S3)
-        .modal(true, |model: &mut Model| {
-            close_settings(model);
+        .modal_tx(true, |model: &mut Model, tx: &mut rune::Tx| {
+            close_settings(model, tx);
         })
         .child(header)
         .child(tabs)
