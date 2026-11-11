@@ -15,6 +15,7 @@ name = "rune-term"
 path = "src/main.rs"
 
 [dependencies]
+term-control = { path = "../term-control" }
 rune.workspace = true
 librio.workspace = true
 term-grid = { path = "../term-grid" }

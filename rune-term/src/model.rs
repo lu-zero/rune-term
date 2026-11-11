@@ -116,6 +116,7 @@ pub struct Model {
     pub(crate) pending_inject: Option<Vec<u8>>,
     pub(crate) pending_link_open: Option<String>,
     pub(crate) settings_mode: SettingsMode,
+    pub(crate) _ipc: Option<crate::ipc::Server>,
     pub held_mods: rune::Mods,
 }
 
@@ -163,6 +164,7 @@ pub fn init() -> Model {
         pending_inject,
         pending_link_open: None,
         settings_mode: SettingsMode::Closed,
+        _ipc: Some(crate::ipc::start()),
         held_mods: Mods::default(),
     }
 }

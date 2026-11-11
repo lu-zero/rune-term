@@ -84,11 +84,45 @@ fn run(cli: Cli) -> Result<(), String> {
 }
 
 fn cmd_info(json: bool) -> Result<(), String> {
+    let socket = term_control::default_socket_path();
+    if let Some(path) = &socket {
+        if let Ok(resp) = term_control::transport::round_trip(path, &term_control::Request::Info) {
+            if json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&resp).map_err(|e| e.to_string())?
+                );
+            } else {
+                match resp {
+                    term_control::Response::Info { app } => {
+                        println!("app: {} {}", app.name, app.version);
+                        if let Some(pid) = app.pid {
+                            println!("pid: {pid}");
+                        }
+                        if let Some(sock) = app.socket {
+                            println!("socket: {}", sock.display());
+                        }
+                    }
+                    term_control::Response::Error { code, message } => {
+                        println!("ipc error: {code}: {message}");
+                    }
+                    other => {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&other).map_err(|e| e.to_string())?
+                        );
+                    }
+                }
+            }
+            return Ok(());
+        }
+    }
+
     let info = AppInfo {
         name: "rune-term-ctl".to_owned(),
         version: env!("CARGO_PKG_VERSION").to_owned(),
         pid: Some(std::process::id()),
-        socket: term_control::default_socket_path(),
+        socket,
     };
     if json {
         println!(
@@ -96,7 +130,7 @@ fn cmd_info(json: bool) -> Result<(), String> {
             serde_json::json!({
                 "protocol_version": PROTOCOL_VERSION,
                 "client": info,
-                "ipc": { "connected": false, "reason": "live GUI IPC server not implemented yet" }
+                "ipc": { "connected": false, "reason": "live GUI IPC server not available" }
             })
         );
     } else {
@@ -105,7 +139,7 @@ fn cmd_info(json: bool) -> Result<(), String> {
         if let Some(socket) = info.socket {
             println!("socket: {}", socket.display());
         }
-        println!("ipc: not connected (live GUI IPC server not implemented yet)");
+        println!("ipc: not connected (live GUI IPC server not available)");
     }
     Ok(())
 }
@@ -176,23 +210,69 @@ fn cmd_profiles_show(json: bool, name: &str) -> Result<(), String> {
 
 fn cmd_tabs_list(json: bool) -> Result<(), String> {
     let socket = term_control::default_socket_path();
-    let msg = "live GUI IPC server not implemented yet; cannot list running tabs/panes";
-    if json {
-        let out = term_control::Response::Error {
-            code: "ipc_unavailable".to_owned(),
-            message: format!("{msg} (socket: {:?})", socket),
-        };
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&out).map_err(|e| e.to_string())?
-        );
-    } else {
-        eprintln!("{msg}");
-        if let Some(socket) = socket {
-            eprintln!("expected socket: {}", socket.display());
+    if let Some(path) = &socket {
+        match term_control::transport::round_trip(path, &term_control::Request::ListTabs) {
+            Ok(resp) => {
+                if json {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&resp).map_err(|e| e.to_string())?
+                    );
+                } else {
+                    match resp {
+                        term_control::Response::Tabs { windows } => {
+                            if windows.is_empty() {
+                                println!("no windows");
+                            }
+                            for (wi, w) in windows.iter().enumerate() {
+                                println!("window[{wi}] id={} focused={}", w.id, w.focused);
+                                for tab in &w.tabs {
+                                    let active = if tab.active { "*" } else { " " };
+                                    println!(
+                                        "  {active} tab[{}] id={} title={:?} profile={} panes={}",
+                                        tab.index,
+                                        tab.id,
+                                        tab.title,
+                                        tab.profile,
+                                        tab.panes.len()
+                                    );
+                                }
+                            }
+                        }
+                        term_control::Response::Error { code, message } => {
+                            eprintln!("ipc error: {code}: {message}");
+                            return Err(message);
+                        }
+                        other => {
+                            println!(
+                                "{}",
+                                serde_json::to_string_pretty(&other).map_err(|e| e.to_string())?
+                            );
+                        }
+                    }
+                }
+                return Ok(());
+            }
+            Err(err) => {
+                let msg = format!("cannot connect to control socket: {err}");
+                if json {
+                    let out = term_control::Response::Error {
+                        code: "ipc_unavailable".to_owned(),
+                        message: format!("{msg} (socket: {})", path.display()),
+                    };
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&out).map_err(|e| e.to_string())?
+                    );
+                } else {
+                    eprintln!("{msg}");
+                    eprintln!("expected socket: {}", path.display());
+                }
+                return Err(msg);
+            }
         }
     }
-    Err(msg.to_owned())
+    Err("no control socket path available".to_owned())
 }
 
 fn profile_info(cfg: &rune_term::settings::ConfigFile, name: &str) -> ProfileInfo {

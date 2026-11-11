@@ -7,6 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 pub mod codec;
+pub mod transport;
 use std::path::PathBuf;
 
 /// Protocol/API version for the control surface.

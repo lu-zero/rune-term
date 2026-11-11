@@ -10,6 +10,7 @@ mod grid_source;
 mod hyperlink;
 mod images;
 mod ime;
+mod ipc;
 mod metrics;
 mod model;
 mod pane_input;
