@@ -59,8 +59,15 @@ impl Surfaces {
 
     /// The pane, the keys, and the grid follow this shell.
     pub fn show(&mut self, id: SurfaceId) {
-        if self.inner.contains_key(&id) {
-            self.shown = Some(id);
+        if !self.inner.contains_key(&id) || self.shown == Some(id) {
+            return;
+        }
+        if let Some(old) = self.shown.and_then(|old| self.inner.get(&old)) {
+            old.surface.notify_focus(false);
+        }
+        self.shown = Some(id);
+        if let Some(new) = self.inner.get(&id) {
+            new.surface.notify_focus(true);
         }
     }
 
