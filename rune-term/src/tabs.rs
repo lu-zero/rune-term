@@ -15,13 +15,18 @@ pub fn open(model: &mut Model) -> bool {
 }
 
 /// A new shell using `profile`, selected. The leaf fills the window.
-/// Unknown profiles fall back to the default profile.
+/// Unknown profiles, or profiles whose backend is unavailable, fall back
+/// to the default profile.
 pub fn open_with_profile(model: &mut Model, profile: &str) -> bool {
-    let profile = if model.config.profile(profile).is_some() {
+    let mut profile = if model.config.profile(profile).is_some() {
         profile.to_owned()
     } else {
         model.config.default_profile_name().to_owned()
     };
+    if let Err(err) = model.config.validate_backend(&profile) {
+        eprintln!("rune-term: profile '{profile}': {err}; using default profile");
+        profile = model.config.default_profile_name().to_owned();
+    }
     apply_profile_for_new_tab(model, &profile);
     let (leaf_n, mark) = next_ids(model);
     let id = LeafId(leaf_n);
@@ -65,6 +70,7 @@ pub fn select(model: &mut Model, index: usize) -> bool {
         return false;
     }
     model.active = index;
+    apply_active_profile(model);
     show_active(model);
     true
 }
@@ -129,10 +135,26 @@ pub fn reveal(model: &Model, tx: &mut Tx) {
 
 /// Point the pane at the selected tab. A shell exit calls this too.
 pub fn show_active(model: &mut Model) {
+    apply_active_profile(model);
     let Some(id) = model.tabs.get(model.active).and_then(surface_of) else {
         return;
     };
     model.surfaces.show(id);
+}
+
+fn apply_active_profile(model: &mut Model) {
+    let Some(profile) = model.tabs.get(model.active).map(|t| t.profile.clone()) else {
+        return;
+    };
+    let resolved = model.config.resolve_profile(&profile);
+    if (resolved.font_size - model.font_size).abs() > f32::EPSILON {
+        model.font_size = resolved.font_size;
+        model.cell_points = crate::metrics::cell_points_for(resolved.font_size);
+    }
+    if resolved.theme != model.palette.name {
+        model.palette = model.config.resolve_palette_for(&profile);
+        model.grid_draw.invalidate_theme();
+    }
 }
 
 /// Focus the active tab's focused pane element, so keyboard input lands there.

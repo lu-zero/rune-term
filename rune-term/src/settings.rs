@@ -315,6 +315,32 @@ impl ConfigFile {
         }
     }
 
+    pub fn rename_profile(&mut self, from: &str, to: &str) -> bool {
+        let to = to.trim();
+        if to.is_empty() || from == to || !self.profiles.contains_key(from) {
+            return false;
+        }
+        if self.profiles.contains_key(to) {
+            return false;
+        }
+        let Some(profile) = self.profiles.remove(from) else {
+            return false;
+        };
+        self.profiles.insert(to.to_owned(), profile);
+        if self.settings.default_profile == from {
+            self.settings.default_profile = to.to_owned();
+        }
+        true
+    }
+
+    pub fn validate_backend(&self, name: &str) -> Result<(), String> {
+        let resolved = self.resolve_profile(name);
+        match resolved.backend.as_str() {
+            "local" => Ok(()),
+            other => Err(format!("backend '{other}' is not available")),
+        }
+    }
+
     pub fn is_custom_theme(&self, name: &str) -> bool {
         self.custom_themes.contains_key(name)
     }
@@ -486,5 +512,26 @@ args = ["-l"]
         assert_eq!(loaded.default_profile_name(), "Work");
         assert!(loaded.profile("Default").is_some());
         assert_eq!(loaded.resolve_profile("Work").font_size, 16.0);
+    }
+
+    #[test]
+    fn rename_profile_updates_name_and_default() {
+        let mut cfg = ConfigFile::default();
+        cfg.ensure_profile("Work").font_size = Some(16.0);
+        cfg.set_default_profile("Work");
+        assert!(cfg.rename_profile("Work", "Office"));
+        assert!(!cfg.profile_names().any(|n| n == "Work"));
+        assert!(cfg.profile("Office").is_some());
+        assert_eq!(cfg.default_profile_name(), "Office");
+        assert!(!cfg.rename_profile("Office", "Default"));
+        assert!(!cfg.rename_profile("Missing", "X"));
+    }
+
+    #[test]
+    fn validate_backend_accepts_local_and_rejects_unknown() {
+        let mut cfg = ConfigFile::default();
+        assert!(cfg.validate_backend(DEFAULT_PROFILE).is_ok());
+        cfg.ensure_profile("Remote").backend = "ssh".to_owned();
+        assert!(cfg.validate_backend("Remote").is_err());
     }
 }
