@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use term_control::{AppInfo, ProfileInfo, PROTOCOL_VERSION};
@@ -10,6 +11,10 @@ struct Cli {
     /// Output machine-readable JSON.
     #[arg(long, global)]
     json: bool,
+
+    /// Path to the control socket.
+    #[arg(long, global, value_name = "PATH")]
+    socket: Option<PathBuf>,
 
     #[arg(subcommand)]
     command: Command,
@@ -71,20 +76,23 @@ fn main() -> ExitCode {
 }
 
 fn run(cli: Cli) -> Result<(), String> {
+    let socket = term_control::transport::resolve_socket_path(cli.socket.clone());
     match cli.command {
-        Command::Info => cmd_info(cli.json),
+        Command::Info => cmd_info(cli.json, socket.as_deref()),
         Command::Profiles(args) => match args.command {
             ProfilesCommand::List => cmd_profiles_list(cli.json),
             ProfilesCommand::Show { name } => cmd_profiles_show(cli.json, &name),
         },
         Command::Tabs(args) => match args.command {
-            TabsCommand::List => cmd_tabs_list(cli.json),
+            TabsCommand::List => cmd_tabs_list(cli.json, socket.as_deref()),
         },
     }
 }
 
-fn cmd_info(json: bool) -> Result<(), String> {
-    let socket = term_control::default_socket_path();
+fn cmd_info(json: bool, socket: Option<&std::path::Path>) -> Result<(), String> {
+    let socket = socket
+        .map(|p| p.to_path_buf())
+        .or_else(term_control::default_socket_path);
     if let Some(path) = &socket {
         if let Ok(resp) = term_control::transport::round_trip(path, &term_control::Request::Info) {
             if json {
@@ -208,8 +216,10 @@ fn cmd_profiles_show(json: bool, name: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn cmd_tabs_list(json: bool) -> Result<(), String> {
-    let socket = term_control::default_socket_path();
+fn cmd_tabs_list(json: bool, socket: Option<&std::path::Path>) -> Result<(), String> {
+    let socket = socket
+        .map(|p| p.to_path_buf())
+        .or_else(term_control::default_socket_path);
     if let Some(path) = &socket {
         match term_control::transport::round_trip(path, &term_control::Request::ListTabs) {
             Ok(resp) => {
