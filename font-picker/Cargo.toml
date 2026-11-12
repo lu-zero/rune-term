@@ -8,3 +8,6 @@ description = "Small Rune font picker widgets/helpers for rune-term settings."
 
 [dependencies]
 rune.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+fontique = { version = "0.12", default-features = false, features = ["std", "system", "fontconfig-dlopen"] }
