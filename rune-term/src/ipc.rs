@@ -32,16 +32,15 @@ pub struct Server {
 impl Drop for Server {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
+        #[cfg(unix)]
         if let Some(path) = &self.path {
-            term_control::transport::cleanup_socket(path);
-            #[cfg(unix)]
-            {
-                let _ = std::os::unix::net::UnixStream::connect(path);
-            }
+            // Wake the blocking accept loop before removing the socket.
+            let _ = std::os::unix::net::UnixStream::connect(path);
         }
         if let Some(handle) = self.thread.take() {
             let _ = handle.join();
-        } else if let Some(path) = &self.path {
+        }
+        if let Some(path) = &self.path {
             term_control::transport::cleanup_socket(path);
         }
     }
