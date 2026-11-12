@@ -158,26 +158,62 @@ where
     };
     let t = clamp01(t);
     let set_drag = set.clone();
+    let track_bg = Color {
+        r: 0.14,
+        g: 0.14,
+        b: 0.15,
+        a: 1.0,
+    };
+    let track_border = Color {
+        r: 0.32,
+        g: 0.32,
+        b: 0.34,
+        a: 1.0,
+    };
+    let thumb = el().w(14.0).h(14.0).radius(7.0).fill(Color::WHITE).border(
+        1.0,
+        Color {
+            r: 0.0,
+            g: 0.0,
+            b: 0.0,
+            a: 0.35,
+        },
+    );
+
+    let fill_bar = row()
+        .w_full()
+        .h_full()
+        .items_center()
+        .pl(4.0)
+        .pr(4.0)
+        .child(el().h(8.0).radius(4.0).fill(fill).grow(t.max(0.0001)))
+        .child(el().grow((1.0 - t).max(0.0001)));
+
+    let thumb_row = el()
+        .absolute(0.0, 0.0)
+        .w_full()
+        .h_full()
+        .items_center()
+        .child(
+            row()
+                .w_full()
+                .h_full()
+                .items_center()
+                .pl(2.0)
+                .pr(2.0)
+                .child(el().grow(t.max(0.0001)))
+                .child(thumb)
+                .child(el().grow((1.0 - t).max(0.0001))),
+        );
+
     let track = el()
         .key(key)
         .grow(1.0)
-        .h(16.0)
-        .radius(4.0)
-        .fill(Color {
-            r: 0.18,
-            g: 0.18,
-            b: 0.18,
-            a: 1.0,
-        })
-        .border(
-            1.0,
-            Color {
-                r: 0.35,
-                g: 0.35,
-                b: 0.35,
-                a: 1.0,
-            },
-        )
+        .h(18.0)
+        .radius(9.0)
+        .fill(track_bg)
+        .border(1.0, track_border)
+        .center_y()
         .on_drag(move |s: &mut S, d: &mut Drag, _tx| {
             if d.cancelled() {
                 return;
@@ -186,8 +222,10 @@ where
                 return;
             }
             let w = d.w.max(1.0);
-            let x = d.x.clamp(0.0, w);
-            let frac = (x / w).clamp(0.0, 1.0);
+            let inset = 8.0_f32.min(w * 0.5);
+            let span = (w - inset * 2.0).max(1.0);
+            let x = (d.x - inset).clamp(0.0, span);
+            let frac = (x / span).clamp(0.0, 1.0);
             let mut next = hsv;
             match channel {
                 Channel::Hue => next.h = frac * 359.999,
@@ -196,22 +234,18 @@ where
             }
             set_drag(s, next);
         })
-        .child(
-            row()
-                .w_full()
-                .h_full()
-                .items_center()
-                .child(el().w_frac(t.max(0.02)).h_full().radius(4.0).fill(fill)),
-        );
+        .child(fill_bar)
+        .child(thumb_row);
+
     row()
         .w_full()
-        .h(20.0)
+        .h(22.0)
         .gap(8.0)
         .items_center()
         .child(el().w(14.0).child(text(label).color(Color {
-            r: 0.75,
-            g: 0.75,
-            b: 0.75,
+            r: 0.78,
+            g: 0.78,
+            b: 0.80,
             a: 1.0,
         })))
         .child(track)
