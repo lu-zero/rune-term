@@ -30,6 +30,7 @@ pub struct SettingsUi {
     pub profile_editor: Option<ProfileEditor>,
     pub font_family_picker_open: bool,
     pub font_family_before_pick: Option<String>,
+    pub font_search: TextEdit,
 }
 
 #[derive(Clone, Debug)]
@@ -89,6 +90,7 @@ pub struct ProfileEditor {
     pub shell_args: TextEdit,
     pub cwd: TextEdit,
     pub font_picker_open: bool,
+    pub font_search: TextEdit,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -215,6 +217,7 @@ impl ProfileEditor {
             shell_args: TextEdit::new(shell_args),
             cwd: TextEdit::new(profile.cwd.clone().unwrap_or_default()),
             font_picker_open: false,
+            font_search: TextEdit::new(""),
         }
     }
 

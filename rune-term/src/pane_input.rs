@@ -532,6 +532,7 @@ fn deliver(
                     profile_editor: None,
                     font_family_picker_open: false,
                     font_family_before_pick: None,
+                    font_search: rune::TextEdit::new(""),
                 }));
             return true;
         }
