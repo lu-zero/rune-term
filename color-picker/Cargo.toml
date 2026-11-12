@@ -1,0 +1,10 @@
+[package]
+name = "color-picker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Small Rune color picker widgets for rune-term settings."
+
+[dependencies]
+rune.workspace = true
