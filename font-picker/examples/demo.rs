@@ -7,12 +7,17 @@ struct State {
     selected: String,
 }
 
-fn view(s: &State, _cx: &mut Cx<State>) -> El {
+fn view(s: &State, cx: &mut Cx<State>) -> El {
+    let insets = cx.chrome_insets();
+    let leading = insets.leading.max(cx.titlebar_inset());
     col()
         .w_full()
         .h_full()
         .gap(10.0)
-        .padding(20.0)
+        .pt(20.0 + insets.height)
+        .pb(20.0)
+        .pl(20.0 + leading)
+        .pr(20.0 + insets.trailing)
         .fill(Color {
             r: 0.08,
             g: 0.08,
