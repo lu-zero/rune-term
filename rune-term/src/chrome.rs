@@ -1230,11 +1230,10 @@ fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {
     } else {
         TITLEBAR_H
     };
-    let leading = if insets.height > 0.0 {
-        insets.leading
-    } else {
-        cx.titlebar_inset()
-    };
+    // Leave room for native window controls (macOS traffic lights / Windows
+    // caption buttons) that sit over the custom titlebar.
+    let leading = insets.leading.max(cx.titlebar_inset());
+    let trailing = insets.trailing;
     let tab_h = (h - 10.0).max(22.0);
     let mut strip = row()
         .key("tabs")
@@ -1243,7 +1242,7 @@ fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {
         .fill(theme::linear(p.tab_bg))
         .center_y()
         .pl(leading + 10.0)
-        .pr(insets.trailing + 10.0)
+        .pr(trailing + 10.0)
         .gap(6.0)
         .window_drag()
         .scroll_x();
