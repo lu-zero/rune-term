@@ -38,6 +38,7 @@ pub fn app() -> App<Model> {
                 font_family_picker_open: false,
                 font_family_before_pick: None,
                 font_search: rune::TextEdit::new(""),
+                font_picker_active: 0,
             }));
     });
     #[cfg(target_os = "macos")]
@@ -206,6 +207,7 @@ pub fn copy_theme_named(model: &mut Model, _tx: &mut Tx, source_name: &str) {
                 font_family_picker_open: false,
                 font_family_before_pick: None,
                 font_search: rune::TextEdit::new(""),
+                font_picker_active: 0,
             }));
     } else if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
         ui.tab = crate::model::SettingsTab::Theme;
@@ -219,6 +221,7 @@ pub fn copy_theme_named(model: &mut Model, _tx: &mut Tx, source_name: &str) {
                 font_family_picker_open: false,
                 font_family_before_pick: None,
                 font_search: rune::TextEdit::new(""),
+                font_picker_active: 0,
             }));
     }
     model.grid_draw.invalidate_theme();
@@ -239,6 +242,7 @@ pub fn edit_theme_named(model: &mut Model, tx: &mut Tx, name: &str) {
                 font_family_picker_open: false,
                 font_family_before_pick: None,
                 font_search: rune::TextEdit::new(""),
+                font_picker_active: 0,
             }));
         model.grid_draw.invalidate_theme();
     } else if crate::theme::resolve_builtin(name).is_some() {
@@ -642,6 +646,7 @@ pub fn edit_profile_named(model: &mut Model, _tx: &mut Tx, name: &str) {
         font_family_picker_open: false,
         font_family_before_pick: None,
         font_search: rune::TextEdit::new(""),
+        font_picker_active: 0,
     }));
 }
 

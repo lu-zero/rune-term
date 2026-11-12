@@ -533,6 +533,7 @@ fn deliver(
                     font_family_picker_open: false,
                     font_family_before_pick: None,
                     font_search: rune::TextEdit::new(""),
+                    font_picker_active: 0,
                 }));
             return true;
         }
