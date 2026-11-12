@@ -117,10 +117,9 @@ where
 {
     let mut items = col().w_full().gap(2.0);
     for family in families {
-        let family_name = family.clone();
         let is_active = family == active;
         let pick = on_pick.clone();
-        let activate = on_active.clone();
+        let _activate = &on_active;
         let label = family.clone();
         let style =
             TextStyle::new(14.0, if is_active { 500.0 } else { 400.0 }).family(family_for(&label));
@@ -158,7 +157,6 @@ where
                     a: 0.06,
                 }
             })
-            .on_hover(move |s: &mut S| activate(s, &family_name))
             .on_press({
                 let pick = pick.clone();
                 let label = label.clone();
