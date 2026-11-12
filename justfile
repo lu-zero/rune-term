@@ -15,6 +15,7 @@ clippy:
 
 check:
     cargo check --workspace --all-targets
+    cargo check -p rune-term --all-targets --no-default-features --features graphics
 
 check-lib:
     cargo check -p rune-term --no-default-features --lib
