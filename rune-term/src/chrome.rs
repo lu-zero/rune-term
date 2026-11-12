@@ -1235,18 +1235,12 @@ fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {
     let leading = insets.leading.max(cx.titlebar_inset());
     let trailing = insets.trailing;
     let tab_h = (h - 10.0).max(22.0);
-    let vpad = ((h - tab_h) / 2.0).max(0.0);
-    // Nudge content up slightly to align optically with traffic lights.
-    let vpad_top = (vpad - 2.0).max(0.0);
-    let vpad_bottom = vpad + (vpad - vpad_top);
     let mut strip = row()
         .key("tabs")
         .w_full()
         .h(h)
         .fill(theme::linear(p.tab_bg))
-        .items_center()
-        .pt(vpad_top)
-        .pb(vpad_bottom)
+        .center_y()
         .pl(leading + 10.0)
         .pr(trailing + 10.0)
         .gap(6.0)
