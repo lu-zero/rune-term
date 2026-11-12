@@ -1,5 +1,7 @@
 use font_picker::{family_list, preview, FontCatalog};
-use rune::{col, el, text, App, AppSpec, Color, Cx, El};
+use rune::{col, el, row, text, App, AppSpec, Color, Cx, El, Titlebar};
+
+const TITLEBAR_H: f32 = 38.0;
 
 #[derive(Clone, Debug)]
 struct State {
@@ -9,26 +11,43 @@ struct State {
 
 fn view(s: &State, cx: &mut Cx<State>) -> El {
     let insets = cx.chrome_insets();
+    let h = if insets.height > 0.0 {
+        insets.height
+    } else {
+        TITLEBAR_H
+    };
     let leading = insets.leading.max(cx.titlebar_inset());
-    col()
+    let trailing = insets.trailing;
+
+    let header = row()
+        .key("titlebar")
         .w_full()
-        .h_full()
-        .gap(10.0)
-        .pt(20.0)
-        .pb(20.0)
-        .pl(20.0 + leading)
-        .pr(20.0 + insets.trailing)
+        .h(h)
+        .items_center()
+        .pl(leading + 12.0)
+        .pr(trailing + 12.0)
+        .window_drag()
         .fill(Color {
-            r: 0.08,
-            g: 0.08,
-            b: 0.08,
+            r: 0.10,
+            g: 0.10,
+            b: 0.11,
             a: 1.0,
         })
         .child(
             text("Font Picker Demo")
                 .font(rune::tok::type_::TITLE)
                 .color(Color::WHITE),
-        )
+        );
+
+    let content = col()
+        .w_full()
+        .grow(1.0)
+        .min_h(0.0)
+        .gap(10.0)
+        .pt(16.0)
+        .pb(20.0)
+        .pl(20.0)
+        .pr(20.0)
         .child(preview(&s.selected))
         .child(
             el().w_full()
@@ -41,18 +60,31 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                     |s: &mut State, family: &str| s.selected = family.to_owned(),
                 )),
         )
-        .child(text(format!("Selected: {}", s.selected)).color(Color::WHITE))
+        .child(text(format!("Selected: {}", s.selected)).color(Color::WHITE));
+
+    col()
+        .w_full()
+        .h_full()
+        .fill(Color {
+            r: 0.08,
+            g: 0.08,
+            b: 0.08,
+            a: 1.0,
+        })
+        .child(header)
+        .child(content)
 }
 
 fn main() {
     App::new(AppSpec::new(
         "font-picker-demo",
-        (420.0, 360.0),
+        (420.0, 380.0),
         || State {
             catalog: FontCatalog::builtin(),
             selected: "Cascadia Code NF".to_owned(),
         },
         view,
     ))
+    .titlebar(Titlebar::new(TITLEBAR_H))
     .run();
 }
