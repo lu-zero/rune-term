@@ -1,8 +1,7 @@
 //! A small font picker/list helper for Rune UIs.
 //!
 //! `rune-term` currently renders with a bundled/known font configuration, so
-//! this crate focuses on selecting a font family name from available choices
-//! (and can later be extended with system font enumeration).
+//! this crate focuses on selecting a font family name from available choices.
 
 use rune::{col, el, text, Color, El, Key, KeyEvent, ScrollSpec, TextStyle, Tx};
 
@@ -27,6 +26,53 @@ impl FontCatalog {
             "Menlo".to_owned(),
             "SF Mono".to_owned(),
         ])
+    }
+
+    /// Enumerate system font families (when available), with common slot names
+    /// prepended. Falls back to [`Self::builtin`] on unsupported platforms or if
+    /// enumeration yields nothing.
+    pub fn system() -> Self {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            use std::sync::OnceLock;
+            static CATALOG: OnceLock<FontCatalog> = OnceLock::new();
+            CATALOG
+                .get_or_init(|| {
+                    use fontique::{Collection, CollectionOptions};
+                    let mut collection = Collection::new(CollectionOptions {
+                        shared: false,
+                        system_fonts: true,
+                    });
+                    let mut families: Vec<String> =
+                        collection.family_names().map(str::to_owned).collect();
+                    families.sort();
+                    families.dedup();
+                    if !families.is_empty() {
+                        let mut all = vec![
+                            "System Mono (platform)".to_owned(),
+                            "Mono (app slot)".to_owned(),
+                            "Sans (app slot)".to_owned(),
+                        ];
+                        all.extend(families);
+                        Self::new(all)
+                    } else {
+                        let mut catalog = Self::builtin();
+                        catalog
+                            .families
+                            .insert(0, "System Mono (platform)".to_owned());
+                        catalog
+                    }
+                })
+                .clone()
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let mut catalog = Self::builtin();
+            catalog
+                .families
+                .insert(0, "System Mono (platform)".to_owned());
+            catalog
+        }
     }
 
     pub fn filter(&self, query: &str) -> Vec<String> {

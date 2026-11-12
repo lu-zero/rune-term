@@ -85,36 +85,8 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
         .child(content)
 }
 
-fn system_catalog() -> FontCatalog {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        use fontique::{Collection, CollectionOptions};
-        let mut collection = Collection::new(CollectionOptions {
-            shared: false,
-            system_fonts: true,
-        });
-        let mut families: Vec<String> = collection.family_names().map(str::to_owned).collect();
-        families.sort();
-        families.dedup();
-        if !families.is_empty() {
-            let mut all = vec![
-                "System Mono (platform)".to_owned(),
-                "Mono (app slot)".to_owned(),
-                "Sans (app slot)".to_owned(),
-            ];
-            all.extend(families);
-            return FontCatalog::new(all);
-        }
-    }
-    let mut catalog = FontCatalog::builtin();
-    catalog
-        .families
-        .insert(0, "System Mono (platform)".to_owned());
-    catalog
-}
-
 fn init() -> State {
-    let catalog = system_catalog();
+    let catalog = FontCatalog::system();
     let selected = if catalog.families.iter().any(|f| f == "Menlo") {
         "Menlo".to_owned()
     } else if catalog.families.iter().any(|f| f == "Monaco") {

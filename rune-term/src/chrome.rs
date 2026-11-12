@@ -1002,7 +1002,7 @@ fn profile_editor_view(model: &Model) -> El {
         grid = grid.child(profile_editor_row(label, key, te, p, on_edit));
     }
     let current_family = editor.font_family.text.trim().to_owned();
-    let catalog = font_picker::FontCatalog::builtin();
+    let catalog = font_picker::FontCatalog::system();
     let font_picker = col()
         .w_full()
         .gap(6.0)
