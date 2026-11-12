@@ -27,24 +27,24 @@ pub enum OpenDecision {
     WarnAndOpen,
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "pty")))]
 thread_local! {
     static TEST_OPENER: std::cell::RefCell<Option<Vec<String>>> = const {
         std::cell::RefCell::new(None)
     };
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "pty")))]
 pub(crate) struct OpenCapture;
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "pty")))]
 impl Drop for OpenCapture {
     fn drop(&mut self) {
         TEST_OPENER.with(|slot| *slot.borrow_mut() = None);
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "pty")))]
 pub(crate) fn capture_opens() -> (OpenCapture, std::rc::Rc<std::cell::RefCell<Vec<String>>>) {
     let opened = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
     let shared = opened.clone();
@@ -54,7 +54,7 @@ pub(crate) fn capture_opens() -> (OpenCapture, std::rc::Rc<std::cell::RefCell<Ve
     (OpenCapture, shared)
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "pty")))]
 pub(crate) fn take_captured_opens() -> Vec<String> {
     TEST_OPENER.with(|slot| slot.borrow_mut().take().unwrap_or_default())
 }
@@ -121,7 +121,7 @@ pub fn open_uri_with(uri: &str, confirm_risky: impl FnOnce(&str) -> bool) -> boo
             return false;
         }
     }
-    #[cfg(test)]
+    #[cfg(all(test, not(feature = "pty")))]
     {
         let captured = TEST_OPENER.with(|slot| {
             let mut slot = slot.borrow_mut();
