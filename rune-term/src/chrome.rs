@@ -201,47 +201,94 @@ fn settings_card(p: &Palette, content: El) -> El {
 }
 
 fn font_settings(model: &Model, p: &Palette) -> El {
-    let (cw, ch) = model.cell_points;
     let size = model.font_size;
-    let _ = (cw, ch);
-    let card = settings_card(
-        p,
-        col()
-            .w_full()
-            .gap(space::S3)
-            .child(
-                row()
-                    .w_full()
-                    .h(44.0)
-                    .gap(space::S2)
-                    .items_center()
-                    .child(settings_step("−", "font-dec", p, -1.0))
-                    .child(
-                        el().grow(1.0)
-                            .h(36.0)
-                            .center()
-                            .radius(radius::MD)
-                            .fill(theme::linear(p.bg))
-                            .border(1.0, theme::linear(p.active_border))
-                            .child(
-                                text(format!("{size:.0} pt · Cascadia Code NF"))
-                                    .color(text_color(p)),
-                            ),
-                    )
-                    .child(settings_step("+", "font-inc", p, 1.0)),
-            )
-            .child(
-                row()
-                    .w_full()
-                    .gap(space::S2)
-                    .child(font_preset(11.0, p))
-                    .child(font_preset(12.0, p))
-                    .child(font_preset(14.0, p))
-                    .child(font_preset(16.0, p))
-                    .child(font_preset(18.0, p))
-                    .child(font_preset(20.0, p)),
-            ),
+    let resolved = model.config.resolve();
+    let family = if resolved.font_family.trim().is_empty() {
+        "Cascadia Code NF".to_owned()
+    } else {
+        resolved.font_family
+    };
+    let picker_open = matches!(
+        &model.settings_mode,
+        crate::model::SettingsMode::Open(ui) if ui.font_family_picker_open
     );
+
+    let family_entry = {
+        let family_label = family.clone();
+        let mut e = row()
+            .key("font-family-entry")
+            .grow(1.0)
+            .h(36.0)
+            .items_center()
+            .justify_between()
+            .pl(10.0)
+            .pr(10.0)
+            .radius(radius::MD)
+            .fill(theme::linear(p.bg))
+            .border(1.0, theme::linear(p.active_border))
+            .hover(hover_overlay(p))
+            .on_press_tx(|model: &mut Model, _tx| {
+                if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                    ui.font_family_picker_open = !ui.font_family_picker_open;
+                }
+            })
+            .child(
+                text(format!("{size:.0} pt · {family_label}"))
+                    .color(text_color(p))
+                    .truncate(),
+            )
+            .child(text(if picker_open { "▴" } else { "▾" }).color(theme::linear(p.muted)));
+        let _ = &mut e;
+        e
+    };
+
+    let mut card_content = col()
+        .w_full()
+        .gap(space::S3)
+        .child(
+            row()
+                .w_full()
+                .h(44.0)
+                .gap(space::S2)
+                .items_center()
+                .child(settings_step("−", "font-dec", p, -1.0))
+                .child(family_entry)
+                .child(settings_step("+", "font-inc", p, 1.0)),
+        )
+        .child(
+            row()
+                .w_full()
+                .gap(space::S2)
+                .child(font_preset(11.0, p))
+                .child(font_preset(12.0, p))
+                .child(font_preset(14.0, p))
+                .child(font_preset(16.0, p))
+                .child(font_preset(18.0, p))
+                .child(font_preset(20.0, p)),
+        );
+
+    if picker_open {
+        let catalog = font_picker::FontCatalog::system();
+        card_content = card_content.child(
+            el().w_full()
+                .h(220.0)
+                .radius(6.0)
+                .border(1.0, theme::linear(p.active_border))
+                .fill(theme::linear(p.bg))
+                .child(font_picker::family_list::<Model, _>(
+                    &catalog.families,
+                    &family,
+                    |model: &mut Model, selected: &str| {
+                        crate::app::apply_font_family(model, &mut rune::Tx::default(), selected);
+                        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                            ui.font_family_picker_open = false;
+                        }
+                    },
+                )),
+        );
+    }
+
+    let card = settings_card(p, card_content);
     col()
         .w_full()
         .grow(1.0)
@@ -1002,13 +1049,43 @@ fn profile_editor_view(model: &Model) -> El {
         grid = grid.child(profile_editor_row(label, key, te, p, on_edit));
     }
     let current_family = editor.font_family.text.trim().to_owned();
-    let catalog = font_picker::FontCatalog::system();
-    let font_picker = col()
+    let family_label = if current_family.is_empty() {
+        "Cascadia Code NF".to_owned()
+    } else {
+        current_family.clone()
+    };
+    let picker_open = editor.font_picker_open;
+    let font_entry = row()
+        .key("pe-font-family-entry")
+        .w_full()
+        .h(36.0)
+        .items_center()
+        .justify_between()
+        .pl(10.0)
+        .pr(10.0)
+        .radius(6.0)
+        .fill(theme::linear(p.tab_bg))
+        .border(1.0, theme::linear(p.active_border))
+        .hover(hover_overlay(p))
+        .on_press_tx(|model: &mut Model, _tx| {
+            if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                if let Some(editor) = ui.profile_editor.as_mut() {
+                    editor.font_picker_open = !editor.font_picker_open;
+                }
+            }
+        })
+        .child(text(family_label).color(text_color(p)).truncate())
+        .child(text(if picker_open { "▴" } else { "▾" }).color(theme::linear(p.muted)));
+
+    let mut font_picker = col()
         .w_full()
         .gap(6.0)
         .pt(6.0)
         .child(text("Font family").color(theme::linear(p.muted)))
-        .child(
+        .child(font_entry);
+    if picker_open {
+        let catalog = font_picker::FontCatalog::system();
+        font_picker = font_picker.child(
             el().w_full()
                 .h(180.0)
                 .radius(6.0)
@@ -1021,11 +1098,13 @@ fn profile_editor_view(model: &Model) -> El {
                         if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
                             if let Some(editor) = ui.profile_editor.as_mut() {
                                 editor.font_family = rune::TextEdit::new(family);
+                                editor.font_picker_open = false;
                             }
                         }
                     },
                 )),
         );
+    }
     col()
         .w_full()
         .grow(1.0)

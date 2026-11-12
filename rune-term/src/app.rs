@@ -35,6 +35,7 @@ pub fn app() -> App<Model> {
                 tab: crate::model::SettingsTab::Font,
                 theme_editor: None,
                 profile_editor: None,
+                font_family_picker_open: false,
             }));
     });
     #[cfg(target_os = "macos")]
@@ -170,6 +171,19 @@ pub fn apply_font_size(model: &mut Model, tx: &mut Tx, size: f32) {
     }
 }
 
+pub fn apply_font_family(model: &mut Model, _tx: &mut Tx, family: &str) {
+    let family = family.trim();
+    if family.is_empty() {
+        return;
+    }
+    model.config.set_font_family(family);
+    // Font family is stored in config/profile; terminal atlas rendering is not
+    // wired to it yet, but settings UI reflects the saved selection.
+    if let Err(err) = model.config.save() {
+        eprintln!("rune-term: failed to save settings: {err}");
+    }
+}
+
 pub fn apply_theme(model: &mut Model, _tx: &mut Tx, name: &str) {
     model.config.set_theme(name.to_owned());
     model.palette = model.config.resolve_palette();
@@ -187,6 +201,7 @@ pub fn copy_theme_named(model: &mut Model, _tx: &mut Tx, source_name: &str) {
                 tab: crate::model::SettingsTab::Theme,
                 theme_editor: Some(crate::model::ThemeEditor::from_custom(&name, &custom)),
                 profile_editor: None,
+                font_family_picker_open: false,
             }));
     } else if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
         ui.tab = crate::model::SettingsTab::Theme;
@@ -197,6 +212,7 @@ pub fn copy_theme_named(model: &mut Model, _tx: &mut Tx, source_name: &str) {
                 tab: crate::model::SettingsTab::Theme,
                 theme_editor: None,
                 profile_editor: None,
+                font_family_picker_open: false,
             }));
     }
     model.grid_draw.invalidate_theme();
@@ -214,6 +230,7 @@ pub fn edit_theme_named(model: &mut Model, tx: &mut Tx, name: &str) {
                 tab: crate::model::SettingsTab::Theme,
                 theme_editor: Some(crate::model::ThemeEditor::from_custom(name, &custom)),
                 profile_editor: None,
+                font_family_picker_open: false,
             }));
         model.grid_draw.invalidate_theme();
     } else if crate::theme::resolve_builtin(name).is_some() {
@@ -614,6 +631,7 @@ pub fn edit_profile_named(model: &mut Model, _tx: &mut Tx, name: &str) {
         tab: crate::model::SettingsTab::Profiles,
         theme_editor: None,
         profile_editor: Some(crate::model::ProfileEditor::from_profile(name, &profile)),
+        font_family_picker_open: false,
     }));
 }
 

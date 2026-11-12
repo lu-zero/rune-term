@@ -164,6 +164,7 @@ impl CustomTheme {
 
 #[derive(Clone, Debug)]
 pub struct Resolved {
+    pub font_family: String,
     pub font_size: f32,
     pub theme: String,
     pub backend: String,
@@ -237,6 +238,11 @@ impl ConfigFile {
             .profiles
             .get(name)
             .or_else(|| self.profiles.get(DEFAULT_PROFILE));
+        let font_family = profile
+            .map(|p| p.font_family.trim())
+            .filter(|f| !f.is_empty())
+            .unwrap_or("Cascadia Code NF")
+            .to_owned();
         let font_size = profile
             .and_then(|p| p.font_size)
             .unwrap_or(self.settings.font_size);
@@ -257,6 +263,7 @@ impl ConfigFile {
             .filter(|s| !s.is_empty())
             .map(|s| s.to_owned());
         Resolved {
+            font_family,
             font_size: clamp_font_size(font_size),
             theme,
             backend,
@@ -282,6 +289,15 @@ impl ConfigFile {
         self.settings.font_size = size;
         let name = self.default_profile_name().to_owned();
         self.profiles.entry(name).or_default().font_size = Some(size);
+    }
+
+    pub fn set_font_family(&mut self, family: &str) {
+        let family = family.trim();
+        if family.is_empty() {
+            return;
+        }
+        let name = self.default_profile_name().to_owned();
+        self.profiles.entry(name).or_default().font_family = family.to_owned();
     }
 
     pub fn set_theme(&mut self, theme: String) {

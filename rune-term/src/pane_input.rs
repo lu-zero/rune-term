@@ -530,6 +530,7 @@ fn deliver(
                     tab: crate::model::SettingsTab::Font,
                     theme_editor: None,
                     profile_editor: None,
+                    font_family_picker_open: false,
                 }));
             return true;
         }
