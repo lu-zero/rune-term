@@ -14,7 +14,7 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
         .w_full()
         .h_full()
         .gap(10.0)
-        .pt(20.0 + insets.height)
+        .pt(20.0)
         .pb(20.0)
         .pl(20.0 + leading)
         .pr(20.0 + insets.trailing)
