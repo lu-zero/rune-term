@@ -24,7 +24,11 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
             b: 0.08,
             a: 1.0,
         })
-        .child(text("color-picker demo").color(Color::WHITE))
+        .child(
+            text("Color Picker Demo")
+                .font(rune::tok::type_::TITLE)
+                .color(Color::WHITE),
+        )
         .child(
             row()
                 .gap(12.0)

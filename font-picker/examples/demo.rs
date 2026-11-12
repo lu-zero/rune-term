@@ -24,7 +24,11 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
             b: 0.08,
             a: 1.0,
         })
-        .child(text("font-picker demo").color(Color::WHITE))
+        .child(
+            text("Font Picker Demo")
+                .font(rune::tok::type_::TITLE)
+                .color(Color::WHITE),
+        )
         .child(preview(&s.selected))
         .child(
             el().w_full()
