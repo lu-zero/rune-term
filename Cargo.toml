@@ -5,6 +5,7 @@ members = [
     "term-input",
     "term-control",
     "color-picker",
+    "font-picker",
     "rune-term",
     "rune-term-ctl",
 ]

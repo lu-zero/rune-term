@@ -302,12 +302,12 @@ fn theme_editor_view(model: &Model) -> El {
     };
     let mut grid = col().w_full().gap(6.0);
     #[allow(clippy::type_complexity)]
-    let rows: [(
+    let text_rows: [(
         &str,
         &str,
         &rune::TextEdit,
         fn(&mut Model) -> &mut rune::TextEdit,
-    ); 10] = [
+    ); 3] = [
         ("Name", "te-name", &editor.name, |m| {
             match &mut m.settings_mode {
                 crate::model::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().name,
@@ -328,65 +328,37 @@ fn theme_editor_view(model: &Model) -> El {
                 _ => unreachable!(),
             }
         }),
-        ("Background", "te-bg", &editor.bg, |m| {
-            match &mut m.settings_mode {
-                crate::model::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().bg,
-                _ => unreachable!(),
-            }
-        }),
-        ("Foreground", "te-fg", &editor.fg, |m| {
-            match &mut m.settings_mode {
-                crate::model::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().fg,
-                _ => unreachable!(),
-            }
-        }),
-        ("Bright FG", "te-fgb", &editor.fg_bright, |m| {
-            match &mut m.settings_mode {
-                crate::model::SettingsMode::Open(ui) => {
-                    &mut ui.theme_editor.as_mut().unwrap().fg_bright
-                }
-                _ => unreachable!(),
-            }
-        }),
-        ("Muted", "te-muted", &editor.muted, |m| {
-            match &mut m.settings_mode {
-                crate::model::SettingsMode::Open(ui) => {
-                    &mut ui.theme_editor.as_mut().unwrap().muted
-                }
-                _ => unreachable!(),
-            }
-        }),
-        ("Tab BG", "te-tab", &editor.tab_bg, |m| {
-            match &mut m.settings_mode {
-                crate::model::SettingsMode::Open(ui) => {
-                    &mut ui.theme_editor.as_mut().unwrap().tab_bg
-                }
-                _ => unreachable!(),
-            }
-        }),
+    ];
+    for (label, key, te, on_edit) in text_rows {
+        grid = grid.child(editor_text_row(label, key, te, p, on_edit));
+    }
+    let color_rows = [
+        ("Background", "te-bg", crate::model::ThemeColorField::Bg),
+        ("Foreground", "te-fg", crate::model::ThemeColorField::Fg),
+        (
+            "Bright FG",
+            "te-fgb",
+            crate::model::ThemeColorField::FgBright,
+        ),
+        ("Muted", "te-muted", crate::model::ThemeColorField::Muted),
+        ("Tab BG", "te-tab", crate::model::ThemeColorField::TabBg),
         (
             "Border",
             "te-border",
-            &editor.active_border,
-            |m| match &mut m.settings_mode {
-                crate::model::SettingsMode::Open(ui) => {
-                    &mut ui.theme_editor.as_mut().unwrap().active_border
-                }
-                _ => unreachable!(),
-            },
+            crate::model::ThemeColorField::ActiveBorder,
         ),
-        ("Accent", "te-accent", &editor.accent, |m| {
-            match &mut m.settings_mode {
-                crate::model::SettingsMode::Open(ui) => {
-                    &mut ui.theme_editor.as_mut().unwrap().accent
-                }
-                _ => unreachable!(),
-            }
-        }),
+        ("Accent", "te-accent", crate::model::ThemeColorField::Accent),
     ];
-    for (label, key, te, on_edit) in rows {
-        grid = grid.child(editor_row(label, key, te, p, on_edit));
+    for (label, key, field) in color_rows {
+        grid = grid.child(editor_color_row(label, key, field, editor, p));
     }
+    let picker = if let Some(field) = editor.picking {
+        let rgb = crate::model::parse_hex(&editor.field_edit(field).text).unwrap_or(0);
+        let hsv = color_picker::Hsv::from_rgb_u32(rgb);
+        theme_color_picker_panel(field, hsv, p)
+    } else {
+        col().w_full()
+    };
     col()
         .w_full()
         .grow(1.0)
@@ -407,7 +379,8 @@ fn theme_editor_view(model: &Model) -> El {
                     stick_bottom: false,
                 })
                 .gap(6.0)
-                .child(grid),
+                .child(grid)
+                .child(picker),
         )
         .child(
             row()
@@ -423,24 +396,217 @@ fn theme_editor_view(model: &Model) -> El {
         )
 }
 
-fn editor_row(
+fn theme_color_picker_panel(
+    field: crate::model::ThemeColorField,
+    hsv: color_picker::Hsv,
+    p: &Palette,
+) -> El {
+    let rgb = hsv.to_rgb_u32();
+    col()
+        .w_full()
+        .gap(6.0)
+        .pt(8.0)
+        .pb(4.0)
+        .child(
+            row()
+                .w_full()
+                .gap(8.0)
+                .items_center()
+                .child(text("Color picker").color(theme::linear(p.muted)))
+                .child(el().grow(1.0))
+                .child(
+                    el().w(24.0)
+                        .h(24.0)
+                        .radius(4.0)
+                        .fill(color_picker::linear_rgb(rgb))
+                        .border(1.0, theme::linear(p.active_border)),
+                )
+                .child(text(color_picker::hex6(rgb)).color(text_color(p))),
+        )
+        .child(color_picker::channel_slider::<Model, _>(
+            &format!("cp-{field:?}-h"),
+            color_picker::Channel::Hue,
+            hsv,
+            move |model: &mut Model, hsv| {
+                let rgb = hsv.to_rgb_u32();
+                if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                    if let Some(editor) = ui.theme_editor.as_mut() {
+                        editor.set_field_hex(field, rgb);
+                    }
+                }
+                // preview will run on next interaction? call helper-like inline
+                if let crate::model::SettingsMode::Open(ui) = &model.settings_mode {
+                    if let Some(editor) = ui.theme_editor.as_ref() {
+                        let fallback = model
+                            .config
+                            .custom_themes
+                            .get(&editor.original_name)
+                            .cloned()
+                            .unwrap_or_else(|| {
+                                crate::settings::CustomTheme::from_palette(&model.palette)
+                            });
+                        model.palette = editor.preview_palette(&fallback);
+                        model.grid_draw.invalidate_theme();
+                    }
+                }
+            },
+        ))
+        .child(color_picker::channel_slider::<Model, _>(
+            &format!("cp-{field:?}-s"),
+            color_picker::Channel::Saturation,
+            hsv,
+            move |model: &mut Model, hsv| {
+                let rgb = hsv.to_rgb_u32();
+                if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                    if let Some(editor) = ui.theme_editor.as_mut() {
+                        editor.set_field_hex(field, rgb);
+                    }
+                }
+                if let crate::model::SettingsMode::Open(ui) = &model.settings_mode {
+                    if let Some(editor) = ui.theme_editor.as_ref() {
+                        let fallback = model
+                            .config
+                            .custom_themes
+                            .get(&editor.original_name)
+                            .cloned()
+                            .unwrap_or_else(|| {
+                                crate::settings::CustomTheme::from_palette(&model.palette)
+                            });
+                        model.palette = editor.preview_palette(&fallback);
+                        model.grid_draw.invalidate_theme();
+                    }
+                }
+            },
+        ))
+        .child(color_picker::channel_slider::<Model, _>(
+            &format!("cp-{field:?}-v"),
+            color_picker::Channel::Value,
+            hsv,
+            move |model: &mut Model, hsv| {
+                let rgb = hsv.to_rgb_u32();
+                if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                    if let Some(editor) = ui.theme_editor.as_mut() {
+                        editor.set_field_hex(field, rgb);
+                    }
+                }
+                if let crate::model::SettingsMode::Open(ui) = &model.settings_mode {
+                    if let Some(editor) = ui.theme_editor.as_ref() {
+                        let fallback = model
+                            .config
+                            .custom_themes
+                            .get(&editor.original_name)
+                            .cloned()
+                            .unwrap_or_else(|| {
+                                crate::settings::CustomTheme::from_palette(&model.palette)
+                            });
+                        model.palette = editor.preview_palette(&fallback);
+                        model.grid_draw.invalidate_theme();
+                    }
+                }
+            },
+        ))
+}
+
+fn editor_text_row(
     label: &str,
     key: &'static str,
     edit: &rune::TextEdit,
     p: &Palette,
     on_edit: fn(&mut Model) -> &mut rune::TextEdit,
 ) -> El {
+    let input = text_input(edit, TextStyle::new(13.0, 400.0))
+        .key(key)
+        .single_line()
+        .grow(1.0)
+        .h(30.0)
+        .pl(10.0)
+        .pr(10.0)
+        .pt(7.0)
+        .pb(7.0)
+        .radius(6.0)
+        .items_center()
+        .fill(crate::theme::linear(p.tab_bg))
+        .border(1.0, crate::theme::linear(p.active_border))
+        .color(text_color(p))
+        .on_edit(on_edit)
+        .on_input_change(|model: &mut Model, tx: &mut rune::Tx| {
+            crate::app::preview_theme_edit(model, tx);
+        });
+    row()
+        .w_full()
+        .h(32.0)
+        .gap(10.0)
+        .items_center()
+        .child(
+            el().w(88.0)
+                .h(32.0)
+                .items_center()
+                .child(text(label).color(theme::linear(p.muted))),
+        )
+        .child(input)
+}
+
+fn editor_color_row(
+    label: &str,
+    key: &'static str,
+    field: crate::model::ThemeColorField,
+    editor: &crate::model::ThemeEditor,
+    p: &Palette,
+) -> El {
+    let edit = editor.field_edit(field);
     let swatch = crate::model::parse_hex(&edit.text);
+    let selected = editor.picking == Some(field);
     let mut input_row = row().grow(1.0).min_w(0.0).h(32.0).gap(8.0).items_center();
     if let Some(color) = swatch {
         input_row = input_row.child(
-            el().w(20.0)
+            el().key(format!("{key}-swatch"))
+                .w(20.0)
                 .h(20.0)
                 .radius(4.0)
                 .fill(crate::theme::linear(color))
-                .border(1.0, crate::theme::linear(p.active_border)),
+                .border(
+                    if selected { 2.0 } else { 1.0 },
+                    crate::theme::linear(if selected { p.accent } else { p.active_border }),
+                )
+                .on_press(move |model: &mut Model| {
+                    crate::app::select_theme_color_field(model, field);
+                }),
         );
     }
+    let on_edit: fn(&mut Model) -> &mut rune::TextEdit = match field {
+        crate::model::ThemeColorField::Bg => |m| match &mut m.settings_mode {
+            crate::model::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().bg,
+            _ => unreachable!(),
+        },
+        crate::model::ThemeColorField::Fg => |m| match &mut m.settings_mode {
+            crate::model::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().fg,
+            _ => unreachable!(),
+        },
+        crate::model::ThemeColorField::FgBright => |m| match &mut m.settings_mode {
+            crate::model::SettingsMode::Open(ui) => {
+                &mut ui.theme_editor.as_mut().unwrap().fg_bright
+            }
+            _ => unreachable!(),
+        },
+        crate::model::ThemeColorField::Muted => |m| match &mut m.settings_mode {
+            crate::model::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().muted,
+            _ => unreachable!(),
+        },
+        crate::model::ThemeColorField::TabBg => |m| match &mut m.settings_mode {
+            crate::model::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().tab_bg,
+            _ => unreachable!(),
+        },
+        crate::model::ThemeColorField::ActiveBorder => |m| match &mut m.settings_mode {
+            crate::model::SettingsMode::Open(ui) => {
+                &mut ui.theme_editor.as_mut().unwrap().active_border
+            }
+            _ => unreachable!(),
+        },
+        crate::model::ThemeColorField::Accent => |m| match &mut m.settings_mode {
+            crate::model::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().accent,
+            _ => unreachable!(),
+        },
+    };
     input_row = input_row.child(
         text_input(edit, TextStyle::new(13.0, 400.0))
             .key(key)
@@ -835,6 +1001,36 @@ fn profile_editor_view(model: &Model) -> El {
     for (label, key, te, on_edit) in rows {
         grid = grid.child(profile_editor_row(label, key, te, p, on_edit));
     }
+    let current_family = editor.font_family.text.trim().to_owned();
+    let catalog = font_picker::FontCatalog::builtin();
+    let font_picker = col()
+        .w_full()
+        .gap(6.0)
+        .pt(6.0)
+        .child(text("Font family").color(theme::linear(p.muted)))
+        .child(font_picker::preview(if current_family.is_empty() {
+            "Cascadia Code NF"
+        } else {
+            &current_family
+        }))
+        .child(
+            el().w_full()
+                .h(140.0)
+                .radius(6.0)
+                .border(1.0, theme::linear(p.active_border))
+                .fill(theme::linear(p.bg))
+                .child(font_picker::family_list::<Model, _>(
+                    &catalog.families,
+                    &current_family,
+                    |model: &mut Model, family: &str| {
+                        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                            if let Some(editor) = ui.profile_editor.as_mut() {
+                                editor.font_family = rune::TextEdit::new(family);
+                            }
+                        }
+                    },
+                )),
+        );
     col()
         .w_full()
         .grow(1.0)
@@ -855,7 +1051,8 @@ fn profile_editor_view(model: &Model) -> El {
                     stick_bottom: false,
                 })
                 .gap(6.0)
-                .child(grid),
+                .child(grid)
+                .child(font_picker),
         )
         .child(
             row()

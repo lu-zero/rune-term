@@ -46,6 +46,17 @@ impl SettingsMode {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ThemeColorField {
+    Bg,
+    Fg,
+    FgBright,
+    Muted,
+    TabBg,
+    ActiveBorder,
+    Accent,
+}
+
 #[derive(Clone, Debug)]
 pub struct ThemeEditor {
     pub original_name: String,
@@ -61,6 +72,7 @@ pub struct ThemeEditor {
     pub accent: TextEdit,
     pub ansi16: Vec<[u8; 3]>,
     pub created_at: u64,
+    pub picking: Option<ThemeColorField>,
 }
 
 #[derive(Clone, Debug)]
@@ -302,7 +314,36 @@ impl ThemeEditor {
                 a
             },
             created_at: theme.created_at,
+            picking: None,
         }
+    }
+
+    pub fn field_edit(&self, field: ThemeColorField) -> &TextEdit {
+        match field {
+            ThemeColorField::Bg => &self.bg,
+            ThemeColorField::Fg => &self.fg,
+            ThemeColorField::FgBright => &self.fg_bright,
+            ThemeColorField::Muted => &self.muted,
+            ThemeColorField::TabBg => &self.tab_bg,
+            ThemeColorField::ActiveBorder => &self.active_border,
+            ThemeColorField::Accent => &self.accent,
+        }
+    }
+
+    pub fn field_edit_mut(&mut self, field: ThemeColorField) -> &mut TextEdit {
+        match field {
+            ThemeColorField::Bg => &mut self.bg,
+            ThemeColorField::Fg => &mut self.fg,
+            ThemeColorField::FgBright => &mut self.fg_bright,
+            ThemeColorField::Muted => &mut self.muted,
+            ThemeColorField::TabBg => &mut self.tab_bg,
+            ThemeColorField::ActiveBorder => &mut self.active_border,
+            ThemeColorField::Accent => &mut self.accent,
+        }
+    }
+
+    pub fn set_field_hex(&mut self, field: ThemeColorField, rgb: u32) {
+        *self.field_edit_mut(field) = TextEdit::new(hex6(rgb));
     }
 
     pub fn to_custom(&self) -> Option<(String, crate::settings::CustomTheme)> {

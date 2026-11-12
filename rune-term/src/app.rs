@@ -250,6 +250,18 @@ pub fn preview_theme_edit(model: &mut Model, _tx: &mut Tx) {
     model.grid_draw.invalidate_theme();
 }
 
+pub fn select_theme_color_field(model: &mut Model, field: crate::model::ThemeColorField) {
+    if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+        if let Some(editor) = ui.theme_editor.as_mut() {
+            editor.picking = if editor.picking == Some(field) {
+                None
+            } else {
+                Some(field)
+            };
+        }
+    }
+}
+
 pub fn save_theme_edit(model: &mut Model, _tx: &mut Tx) {
     let editor = match &mut model.settings_mode {
         crate::model::SettingsMode::Open(ui) => {
