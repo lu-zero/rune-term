@@ -21,6 +21,10 @@ pub struct ConfigFile {
     pub settings: Settings,
     pub profiles: BTreeMap<String, Profile>,
     pub custom_themes: BTreeMap<String, CustomTheme>,
+    /// Set when the config file could not be read or parsed. The app runs on
+    /// defaults, but saving would overwrite the file, so saves are refused.
+    #[serde(skip)]
+    load_error: Option<String>,
 }
 
 impl Default for ConfigFile {
@@ -32,6 +36,7 @@ impl Default for ConfigFile {
             settings: Settings::default(),
             profiles,
             custom_themes: BTreeMap::new(),
+            load_error: None,
         }
     }
 }
@@ -177,7 +182,10 @@ impl ConfigFile {
             Err(err) if err.kind() == io::ErrorKind::NotFound => Self::default(),
             Err(err) => {
                 eprintln!("rune-term: failed to load {}: {err}", path.display());
-                Self::default()
+                Self {
+                    load_error: Some(err.to_string()),
+                    ..Self::default()
+                }
             }
         }
     }
@@ -346,6 +354,12 @@ impl ConfigFile {
     }
 
     pub fn save(&self) -> io::Result<()> {
+        if let Some(err) = &self.load_error {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("config was not loaded: {err}"),
+            ));
+        }
         let path = config_path();
         if let Some(dir) = path.parent() {
             fs::create_dir_all(dir)?;
@@ -516,5 +530,15 @@ args = ["-l"]
         assert!(cfg.validate_backend(DEFAULT_PROFILE).is_ok());
         cfg.ensure_profile("Remote").backend = "ssh".to_owned();
         assert!(cfg.validate_backend("Remote").is_err());
+    }
+
+    #[test]
+    fn an_unreadable_config_is_not_overwritten() {
+        let cfg = ConfigFile {
+            load_error: Some("bad".to_owned()),
+            ..ConfigFile::default()
+        };
+        let err = cfg.save().expect_err("must not overwrite");
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
     }
 }
