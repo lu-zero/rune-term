@@ -215,7 +215,8 @@ fn font_settings(model: &Model, p: &Palette) -> El {
 
     let family_entry = {
         let family_label = family.clone();
-        let mut e = row()
+        let before = family.clone();
+        row()
             .key("font-family-entry")
             .grow(1.0)
             .h(36.0)
@@ -227,9 +228,14 @@ fn font_settings(model: &Model, p: &Palette) -> El {
             .fill(theme::linear(p.bg))
             .border(1.0, theme::linear(p.active_border))
             .hover(hover_overlay(p))
-            .on_press_tx(|model: &mut Model, _tx| {
+            .on_press_tx(move |model: &mut Model, _tx| {
                 if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
-                    ui.font_family_picker_open = !ui.font_family_picker_open;
+                    if ui.font_family_picker_open {
+                        ui.font_family_picker_open = false;
+                    } else {
+                        ui.font_family_before_pick = Some(before.clone());
+                        ui.font_family_picker_open = true;
+                    }
                 }
             })
             .child(
@@ -237,9 +243,7 @@ fn font_settings(model: &Model, p: &Palette) -> El {
                     .color(text_color(p))
                     .truncate(),
             )
-            .child(text(if picker_open { "▴" } else { "▾" }).color(theme::linear(p.muted)));
-        let _ = &mut e;
-        e
+            .child(text(if picker_open { "▴" } else { "▾" }).color(theme::linear(p.muted)))
     };
 
     let mut card_content = col()
@@ -269,22 +273,72 @@ fn font_settings(model: &Model, p: &Palette) -> El {
 
     if picker_open {
         let catalog = font_picker::FontCatalog::system();
+        let can_revert = matches!(
+            &model.settings_mode,
+            crate::model::SettingsMode::Open(ui)
+                if ui.font_family_before_pick.as_deref().is_some_and(|b| b != family)
+        );
         card_content = card_content.child(
-            el().w_full()
-                .h(220.0)
-                .radius(6.0)
-                .border(1.0, theme::linear(p.active_border))
-                .fill(theme::linear(p.bg))
-                .child(font_picker::family_list::<Model, _>(
-                    &catalog.families,
-                    &family,
-                    |model: &mut Model, selected: &str| {
-                        crate::app::apply_font_family(model, &mut rune::Tx::default(), selected);
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
-                            ui.font_family_picker_open = false;
-                        }
-                    },
-                )),
+            col()
+                .w_full()
+                .gap(6.0)
+                .child(
+                    row()
+                        .w_full()
+                        .gap(8.0)
+                        .items_center()
+                        .child(text("Pick a font (↑/↓ to navigate)").color(theme::linear(p.muted)))
+                        .child(el().grow(1.0))
+                        .child(if can_revert {
+                            settings_chip("Revert", "font-family-revert", p, |model, _tx| {
+                                let prev = match &model.settings_mode {
+                                    crate::model::SettingsMode::Open(ui) => {
+                                        ui.font_family_before_pick.clone()
+                                    }
+                                    _ => None,
+                                };
+                                if let Some(prev) = prev {
+                                    crate::app::apply_font_family(
+                                        model,
+                                        &mut rune::Tx::default(),
+                                        &prev,
+                                    );
+                                }
+                                if let crate::model::SettingsMode::Open(ui) =
+                                    &mut model.settings_mode
+                                {
+                                    ui.font_family_picker_open = false;
+                                    ui.font_family_before_pick = None;
+                                }
+                            })
+                        } else {
+                            el()
+                        }),
+                )
+                .child(
+                    el().w_full()
+                        .h(220.0)
+                        .radius(6.0)
+                        .border(1.0, theme::linear(p.active_border))
+                        .fill(theme::linear(p.bg))
+                        .child(font_picker::family_list::<Model, _>(
+                            &catalog.families,
+                            &family,
+                            |model: &mut Model, selected: &str| {
+                                crate::app::apply_font_family(
+                                    model,
+                                    &mut rune::Tx::default(),
+                                    selected,
+                                );
+                                if let crate::model::SettingsMode::Open(ui) =
+                                    &mut model.settings_mode
+                                {
+                                    ui.font_family_picker_open = false;
+                                    ui.font_family_before_pick = None;
+                                }
+                            },
+                        )),
+                ),
         );
     }
 
@@ -967,7 +1021,7 @@ fn profile_editor_view(model: &Model) -> El {
         &str,
         &rune::TextEdit,
         fn(&mut Model) -> &mut rune::TextEdit,
-    ); 8] = [
+    ); 7] = [
         ("Name", "pe-name", &editor.name, |m| {
             match &mut m.settings_mode {
                 crate::model::SettingsMode::Open(ui) => {
@@ -976,17 +1030,6 @@ fn profile_editor_view(model: &Model) -> El {
                 _ => unreachable!(),
             }
         }),
-        (
-            "Font family",
-            "pe-font-family",
-            &editor.font_family,
-            |m| match &mut m.settings_mode {
-                crate::model::SettingsMode::Open(ui) => {
-                    &mut ui.profile_editor.as_mut().unwrap().font_family
-                }
-                _ => unreachable!(),
-            },
-        ),
         (
             "Font size",
             "pe-font-size",

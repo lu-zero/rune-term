@@ -29,6 +29,7 @@ pub struct SettingsUi {
     pub theme_editor: Option<ThemeEditor>,
     pub profile_editor: Option<ProfileEditor>,
     pub font_family_picker_open: bool,
+    pub font_family_before_pick: Option<String>,
 }
 
 #[derive(Clone, Debug)]

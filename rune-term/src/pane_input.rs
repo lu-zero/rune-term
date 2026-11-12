@@ -531,6 +531,7 @@ fn deliver(
                     theme_editor: None,
                     profile_editor: None,
                     font_family_picker_open: false,
+                    font_family_before_pick: None,
                 }));
             return true;
         }
