@@ -100,65 +100,86 @@ fn family_for(name: &str) -> rune::tok::Family {
     }
 }
 
-/// Render a keyboard-navigable list of font choices where each row previews
-/// its font.
+/// Render a list of font choices where each row previews its font.
 ///
-/// `on_pick` is invoked with the chosen family name.
-pub fn family_list<S, Pick>(families: &[String], selected: &str, on_pick: Pick) -> El
+/// `active` is the highlighted item. Click or Enter confirms (`on_pick`),
+/// arrow keys move the highlight (`on_active`).
+pub fn family_list<S, Pick, Active>(
+    families: &[String],
+    active: &str,
+    on_pick: Pick,
+    on_active: Active,
+) -> El
 where
     S: 'static,
     Pick: Fn(&mut S, &str) + 'static + Clone,
+    Active: Fn(&mut S, &str) + 'static + Clone,
 {
-    let mut list = col().w_full().gap(2.0);
+    let mut items = col().w_full().gap(2.0);
     for family in families {
         let family_name = family.clone();
-        let active = family == selected;
+        let is_active = family == active;
         let pick = on_pick.clone();
+        let activate = on_active.clone();
         let label = family.clone();
         let style =
-            TextStyle::new(14.0, if active { 500.0 } else { 400.0 }).family(family_for(&label));
-        list = list.child(
-            el().key(format!("font-item-{}", label.replace(' ', "_")))
-                .w_full()
-                .h(32.0)
-                .items_center()
-                .pl(10.0)
-                .pr(10.0)
-                .radius(4.0)
-                .fill(if active {
-                    Color {
-                        r: 0.2,
-                        g: 0.35,
-                        b: 0.55,
-                        a: 1.0,
-                    }
-                } else {
-                    Color::TRANSPARENT
-                })
-                .hover(if active {
-                    Color::TRANSPARENT
-                } else {
-                    Color {
-                        r: 1.0,
-                        g: 1.0,
-                        b: 1.0,
-                        a: 0.06,
-                    }
-                })
-                .on_press(move |s: &mut S| pick(s, &family_name))
-                .child(
-                    text(format!("{label}  —  AaBbCc 0123 λ"))
-                        .font(style)
-                        .color(Color::WHITE)
-                        .truncate(),
-                ),
-        );
+            TextStyle::new(14.0, if is_active { 500.0 } else { 400.0 }).family(family_for(&label));
+        let row = el()
+            .key(format!("font-item-{}", label.replace(' ', "_")))
+            .role("option")
+            .w_full()
+            .h(32.0)
+            .items_center()
+            .pl(10.0)
+            .pr(10.0)
+            .radius(4.0)
+            .fill(if is_active {
+                Color {
+                    r: 0.2,
+                    g: 0.35,
+                    b: 0.55,
+                    a: 1.0,
+                }
+            } else {
+                Color::TRANSPARENT
+            })
+            .hover(if is_active {
+                Color {
+                    r: 0.2,
+                    g: 0.35,
+                    b: 0.55,
+                    a: 1.0,
+                }
+            } else {
+                Color {
+                    r: 1.0,
+                    g: 1.0,
+                    b: 1.0,
+                    a: 0.06,
+                }
+            })
+            .on_hover(move |s: &mut S| activate(s, &family_name))
+            .on_press({
+                let pick = pick.clone();
+                let label = label.clone();
+                move |s: &mut S| pick(s, &label)
+            })
+            .child(
+                text(format!("{label}  —  AaBbCc 0123 λ"))
+                    .font(style)
+                    .color(Color::WHITE)
+                    .truncate(),
+            );
+        items = items.child(row);
     }
+
     let families_nav = families.to_vec();
-    let selected_nav = selected.to_owned();
+    let active_nav = active.to_owned();
     let on_pick_nav = on_pick;
+    let on_active_nav = on_active;
     col()
         .key("font-list")
+        .role("listbox")
         .w_full()
         .min_h(0.0)
         .grow(1.0)
@@ -169,26 +190,48 @@ where
             }
             let current = families_nav
                 .iter()
-                .position(|f| f == &selected_nav)
+                .position(|f| f == &active_nav)
                 .unwrap_or(0);
-            let next = match ev.key {
-                Key::Down => (current + 1).min(families_nav.len() - 1),
-                Key::Up => current.saturating_sub(1),
-                Key::Home => 0,
-                Key::End => families_nav.len() - 1,
-                Key::PageDown => (current + 10).min(families_nav.len() - 1),
-                Key::PageUp => current.saturating_sub(10),
-                _ => return false,
-            };
-            if next != current || !families_nav.iter().any(|f| f == &selected_nav) {
-                on_pick_nav(s, &families_nav[next]);
+            match ev.key {
+                Key::Down => {
+                    let next = (current + 1).min(families_nav.len() - 1);
+                    on_active_nav(s, &families_nav[next]);
+                    true
+                }
+                Key::Up => {
+                    let next = current.saturating_sub(1);
+                    on_active_nav(s, &families_nav[next]);
+                    true
+                }
+                Key::Home => {
+                    on_active_nav(s, &families_nav[0]);
+                    true
+                }
+                Key::End => {
+                    on_active_nav(s, &families_nav[families_nav.len() - 1]);
+                    true
+                }
+                Key::PageDown => {
+                    let next = (current + 10).min(families_nav.len() - 1);
+                    on_active_nav(s, &families_nav[next]);
+                    true
+                }
+                Key::PageUp => {
+                    let next = current.saturating_sub(10);
+                    on_active_nav(s, &families_nav[next]);
+                    true
+                }
+                Key::Enter => {
+                    on_pick_nav(s, &families_nav[current]);
+                    true
+                }
+                _ => false,
             }
-            true
         })
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
-        .child(list)
+        .child(items)
 }
 
 /// A compact preview row showing sample text in the given style label context.

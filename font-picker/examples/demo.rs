@@ -7,6 +7,7 @@ const TITLEBAR_H: f32 = 38.0;
 struct State {
     catalog: FontCatalog,
     selected: String,
+    active: String,
 }
 
 fn view(s: &State, cx: &mut Cx<State>) -> El {
@@ -49,7 +50,7 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
         .pl(20.0)
         .pr(20.0)
         .child(
-            text("↑/↓, PgUp/PgDn, Home/End to navigate (click list to focus)")
+            text("↑/↓, PgUp/PgDn, Home/End to navigate, Enter/click to select")
                 .font(rune::tok::type_::LABEL)
                 .color(Color {
                     r: 0.65,
@@ -64,10 +65,14 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                 .min_h(120.0)
                 .radius(6.0)
                 .border(1.0, Color::WHITE.alpha(0.2))
-                .child(family_list::<State, _>(
+                .child(family_list::<State, _, _>(
                     &s.catalog.families,
-                    &s.selected,
-                    |s: &mut State, family: &str| s.selected = family.to_owned(),
+                    &s.active,
+                    |s: &mut State, family: &str| {
+                        s.selected = family.to_owned();
+                        s.active = family.to_owned();
+                    },
+                    |s: &mut State, family: &str| s.active = family.to_owned(),
                 )),
         )
         .child(text(format!("Selected: {}", s.selected)).color(Color::WHITE));
@@ -98,7 +103,11 @@ fn init() -> State {
             .cloned()
             .unwrap_or_else(|| "System Mono (platform)".to_owned())
     };
-    State { catalog, selected }
+    State {
+        catalog,
+        active: selected.clone(),
+        selected,
+    }
 }
 
 fn main() {

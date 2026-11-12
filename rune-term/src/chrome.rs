@@ -456,7 +456,7 @@ fn font_settings(model: &Model, p: &Palette) -> El {
                         .radius(6.0)
                         .border(1.0, theme::linear(p.active_border))
                         .fill(theme::linear(p.bg))
-                        .child(font_picker::family_list::<Model, _>(
+                        .child(font_picker::family_list::<Model, _, _>(
                             &filtered,
                             &selected_for_list,
                             |model: &mut Model, selected: &str| {
@@ -472,6 +472,17 @@ fn font_settings(model: &Model, p: &Palette) -> El {
                                     ui.font_family_before_pick = None;
                                     ui.font_search = rune::TextEdit::new("");
                                     ui.font_picker_active = 0;
+                                }
+                            },
+                            |model: &mut Model, family: &str| {
+                                if let crate::model::SettingsMode::Open(ui) =
+                                    &mut model.settings_mode
+                                {
+                                    let filtered = font_picker::FontCatalog::system()
+                                        .filter(&ui.font_search.text);
+                                    if let Some(i) = filtered.iter().position(|f| f == family) {
+                                        ui.font_picker_active = i;
+                                    }
                                 }
                             },
                         )),
@@ -1399,7 +1410,7 @@ fn profile_editor_view(model: &Model) -> El {
                     .radius(6.0)
                     .border(1.0, theme::linear(p.active_border))
                     .fill(theme::linear(p.bg))
-                    .child(font_picker::family_list::<Model, _>(
+                    .child(font_picker::family_list::<Model, _, _>(
                         &filtered,
                         &selected_for_list,
                         |model: &mut Model, family: &str| {
@@ -1409,6 +1420,17 @@ fn profile_editor_view(model: &Model) -> El {
                                     editor.font_picker_open = false;
                                     editor.font_search = rune::TextEdit::new("");
                                     editor.font_picker_active = 0;
+                                }
+                            }
+                        },
+                        |model: &mut Model, family: &str| {
+                            if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                                if let Some(editor) = ui.profile_editor.as_mut() {
+                                    let filtered = font_picker::FontCatalog::system()
+                                        .filter(&editor.font_search.text);
+                                    if let Some(i) = filtered.iter().position(|f| f == family) {
+                                        editor.font_picker_active = i;
+                                    }
                                 }
                             }
                         },
