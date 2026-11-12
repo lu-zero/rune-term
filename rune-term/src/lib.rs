@@ -4,6 +4,7 @@
 mod app;
 mod chrome;
 mod chrome_view;
+pub mod cli;
 mod delegate;
 mod grid_pass;
 mod grid_source;
@@ -24,7 +25,7 @@ mod surfaces;
 mod tabs;
 pub mod theme;
 
-pub use app::{app, run};
+pub use app::{app, run, run_with_rune_args};
 pub use chrome::{slot, tab};
 pub use delegate::{harness, queue_inject, Harness};
 pub use metrics::cell_points;

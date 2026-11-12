@@ -22,6 +22,12 @@ pub fn run() {
     app().run();
 }
 
+/// Run with explicit arguments forwarded to Rune's tooling layer, so Rune does
+/// not parse the process argv.
+pub fn run_with_rune_args(args: impl IntoIterator<Item = String>) {
+    app().args(args).run();
+}
+
 pub fn app() -> App<Model> {
     let mut settings = MenuItem::new("Settings…", |model: &mut Model, _tx: &mut Tx| {
         model.settings_mode =

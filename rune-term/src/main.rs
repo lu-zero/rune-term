@@ -1,3 +1,3 @@
 fn main() {
-    rune_term::run();
+    rune_term::cli::RuneTerm::run();
 }
