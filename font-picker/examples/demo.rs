@@ -1,5 +1,5 @@
-use font_picker::{family_list, preview, FontCatalog};
-use rune::{col, el, row, text, App, AppSpec, Color, Cx, El, Titlebar};
+use font_picker::{family_list, FontCatalog};
+use rune::{col, el, row, text, App, AppSpec, Color, Cx, El, TextStyle, Titlebar};
 
 const TITLEBAR_H: f32 = 38.0;
 
@@ -7,6 +7,25 @@ const TITLEBAR_H: f32 = 38.0;
 struct State {
     catalog: FontCatalog,
     selected: String,
+}
+
+fn font_preview(family: &str) -> El {
+    let family_static: &'static str = Box::leak(family.to_owned().into_boxed_str());
+    let style = TextStyle::new(16.0, 400.0).family(rune::tok::Family::Named(family_static));
+    col()
+        .w_full()
+        .gap(4.0)
+        .child(text(family).font(rune::tok::type_::LABEL).color(Color {
+            r: 0.75,
+            g: 0.75,
+            b: 0.78,
+            a: 1.0,
+        }))
+        .child(
+            text("The quick brown fox jumps over 0123456789 — λ")
+                .font(style)
+                .color(Color::WHITE),
+        )
 }
 
 fn view(s: &State, cx: &mut Cx<State>) -> El {
@@ -48,7 +67,7 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
         .pb(20.0)
         .pl(20.0)
         .pr(20.0)
-        .child(preview(&s.selected))
+        .child(font_preview(&s.selected))
         .child(
             el().w_full()
                 .h(220.0)
@@ -81,7 +100,7 @@ fn main() {
         (420.0, 380.0),
         || State {
             catalog: FontCatalog::builtin(),
-            selected: "Cascadia Code NF".to_owned(),
+            selected: "Menlo".to_owned(),
         },
         view,
     ))
