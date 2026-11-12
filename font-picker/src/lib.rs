@@ -4,7 +4,7 @@
 //! this crate focuses on selecting a font family name from available choices
 //! (and can later be extended with system font enumeration).
 
-use rune::{col, el, row, text, Color, El, ScrollSpec};
+use rune::{col, el, text, Color, El, Key, KeyEvent, ScrollSpec, TextStyle, Tx};
 
 /// A simple in-memory font source.
 #[derive(Clone, Debug, Default)]
@@ -42,10 +42,22 @@ impl FontCatalog {
     }
 }
 
-/// Render a simple vertical list of font choices.
+fn family_for(name: &str) -> rune::tok::Family {
+    match name {
+        "System Mono (platform)" => rune::tok::Family::SystemMono,
+        "Mono (app slot)" => rune::tok::Family::Mono,
+        "Sans (app slot)" => rune::tok::Family::Sans,
+        _ => {
+            let name: &'static str = Box::leak(name.to_owned().into_boxed_str());
+            rune::tok::Family::Named(name)
+        }
+    }
+}
+
+/// Render a keyboard-navigable list of font choices where each row previews
+/// its font.
 ///
-/// `on_pick` is invoked with the chosen family name. Styling is intentionally
-/// minimal so callers can embed it in their own settings chrome.
+/// `on_pick` is invoked with the chosen family name.
 pub fn family_list<S, Pick>(families: &[String], selected: &str, on_pick: Pick) -> El
 where
     S: 'static,
@@ -57,12 +69,15 @@ where
         let active = family == selected;
         let pick = on_pick.clone();
         let label = family.clone();
+        let style =
+            TextStyle::new(14.0, if active { 500.0 } else { 400.0 }).family(family_for(&label));
         list = list.child(
-            el().w_full()
-                .h(28.0)
+            el().key(format!("font-item-{}", label.replace(' ', "_")))
+                .w_full()
+                .h(32.0)
                 .items_center()
-                .pl(8.0)
-                .pr(8.0)
+                .pl(10.0)
+                .pr(10.0)
                 .radius(4.0)
                 .fill(if active {
                     Color {
@@ -74,14 +89,56 @@ where
                 } else {
                     Color::TRANSPARENT
                 })
+                .hover(if active {
+                    Color::TRANSPARENT
+                } else {
+                    Color {
+                        r: 1.0,
+                        g: 1.0,
+                        b: 1.0,
+                        a: 0.06,
+                    }
+                })
                 .on_press(move |s: &mut S| pick(s, &family_name))
-                .child(text(label).color(Color::WHITE)),
+                .child(
+                    text(format!("{label}  —  AaBbCc 0123 λ"))
+                        .font(style)
+                        .color(Color::WHITE)
+                        .truncate(),
+                ),
         );
     }
+    let families_nav = families.to_vec();
+    let selected_nav = selected.to_owned();
+    let on_pick_nav = on_pick;
     col()
+        .key("font-list")
         .w_full()
         .min_h(0.0)
         .grow(1.0)
+        .focusable(true)
+        .on_key(move |s: &mut S, ev: &KeyEvent, _tx: &mut Tx| {
+            if families_nav.is_empty() {
+                return false;
+            }
+            let current = families_nav
+                .iter()
+                .position(|f| f == &selected_nav)
+                .unwrap_or(0);
+            let next = match ev.key {
+                Key::Down => (current + 1).min(families_nav.len() - 1),
+                Key::Up => current.saturating_sub(1),
+                Key::Home => 0,
+                Key::End => families_nav.len() - 1,
+                Key::PageDown => (current + 10).min(families_nav.len() - 1),
+                Key::PageUp => current.saturating_sub(10),
+                _ => return false,
+            };
+            if next != current || !families_nav.iter().any(|f| f == &selected_nav) {
+                on_pick_nav(s, &families_nav[next]);
+            }
+            true
+        })
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
@@ -90,9 +147,8 @@ where
 
 /// A compact preview row showing sample text in the given style label context.
 pub fn preview(family: &str) -> El {
-    row()
-        .w_full()
-        .h(32.0)
-        .items_center()
-        .child(text(format!("{family} — AaBbCc 0123 λ")).color(Color::WHITE))
+    let style = TextStyle::new(14.0, 400.0).family(family_for(family));
+    text(format!("{family} — AaBbCc 0123 λ"))
+        .font(style)
+        .color(Color::WHITE)
 }

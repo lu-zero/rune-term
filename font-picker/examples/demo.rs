@@ -1,5 +1,5 @@
 use font_picker::{family_list, FontCatalog};
-use rune::{col, el, row, text, App, AppSpec, Color, Cx, El, TextStyle, Titlebar};
+use rune::{col, el, row, text, App, AppSpec, Color, Cx, El, Titlebar};
 
 const TITLEBAR_H: f32 = 38.0;
 
@@ -7,64 +7,6 @@ const TITLEBAR_H: f32 = 38.0;
 struct State {
     catalog: FontCatalog,
     selected: String,
-}
-
-fn font_family_for(name: &str) -> rune::tok::Family {
-    match name {
-        "System Mono (platform)" => rune::tok::Family::SystemMono,
-        "Mono (app slot)" => rune::tok::Family::Mono,
-        "Sans (app slot)" => rune::tok::Family::Sans,
-        _ => {
-            let family_static: &'static str = Box::leak(name.to_owned().into_boxed_str());
-            rune::tok::Family::Named(family_static)
-        }
-    }
-}
-
-fn font_preview(family: &str) -> El {
-    let style = TextStyle::new(16.0, 400.0).family(font_family_for(family));
-    col()
-        .w_full()
-        .gap(4.0)
-        .child(text(family).font(rune::tok::type_::LABEL).color(Color {
-            r: 0.75,
-            g: 0.75,
-            b: 0.78,
-            a: 1.0,
-        }))
-        .child(
-            text("The quick brown fox jumps over 0123456789 — λ")
-                .font(style)
-                .color(Color::WHITE),
-        )
-}
-
-fn system_catalog() -> FontCatalog {
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        use fontique::{Collection, CollectionOptions};
-        let mut collection = Collection::new(CollectionOptions {
-            shared: false,
-            system_fonts: true,
-        });
-        let mut families: Vec<String> = collection.family_names().map(str::to_owned).collect();
-        families.sort();
-        families.dedup();
-        if !families.is_empty() {
-            let mut all = vec![
-                "System Mono (platform)".to_owned(),
-                "Mono (app slot)".to_owned(),
-                "Sans (app slot)".to_owned(),
-            ];
-            all.extend(families);
-            return FontCatalog::new(all);
-        }
-    }
-    let mut catalog = FontCatalog::builtin();
-    catalog
-        .families
-        .insert(0, "System Mono (platform)".to_owned());
-    catalog
 }
 
 fn view(s: &State, cx: &mut Cx<State>) -> El {
@@ -106,7 +48,16 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
         .pb(20.0)
         .pl(20.0)
         .pr(20.0)
-        .child(font_preview(&s.selected))
+        .child(
+            text("↑/↓, PgUp/PgDn, Home/End to navigate (click list to focus)")
+                .font(rune::tok::type_::LABEL)
+                .color(Color {
+                    r: 0.65,
+                    g: 0.65,
+                    b: 0.68,
+                    a: 1.0,
+                }),
+        )
         .child(
             el().w_full()
                 .grow(1.0)
@@ -132,6 +83,34 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
         })
         .child(header)
         .child(content)
+}
+
+fn system_catalog() -> FontCatalog {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use fontique::{Collection, CollectionOptions};
+        let mut collection = Collection::new(CollectionOptions {
+            shared: false,
+            system_fonts: true,
+        });
+        let mut families: Vec<String> = collection.family_names().map(str::to_owned).collect();
+        families.sort();
+        families.dedup();
+        if !families.is_empty() {
+            let mut all = vec![
+                "System Mono (platform)".to_owned(),
+                "Mono (app slot)".to_owned(),
+                "Sans (app slot)".to_owned(),
+            ];
+            all.extend(families);
+            return FontCatalog::new(all);
+        }
+    }
+    let mut catalog = FontCatalog::builtin();
+    catalog
+        .families
+        .insert(0, "System Mono (platform)".to_owned());
+    catalog
 }
 
 fn init() -> State {

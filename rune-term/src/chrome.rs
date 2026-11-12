@@ -1008,14 +1008,9 @@ fn profile_editor_view(model: &Model) -> El {
         .gap(6.0)
         .pt(6.0)
         .child(text("Font family").color(theme::linear(p.muted)))
-        .child(font_picker::preview(if current_family.is_empty() {
-            "Cascadia Code NF"
-        } else {
-            &current_family
-        }))
         .child(
             el().w_full()
-                .h(140.0)
+                .h(180.0)
                 .radius(6.0)
                 .border(1.0, theme::linear(p.active_border))
                 .fill(theme::linear(p.bg))
