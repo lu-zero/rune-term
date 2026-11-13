@@ -17,13 +17,25 @@ use crate::resize::{self, ResizeEffect};
 use crate::scrollback::{self, Bars};
 
 pub fn run() {
-    app().run();
+    with_settings_window(app()).run();
 }
 
 /// Run with explicit arguments forwarded to Rune's tooling layer, so Rune does
 /// not parse the process argv.
 pub fn run_with_rune_args(args: impl IntoIterator<Item = String>) {
-    app().args(args).run();
+    with_settings_window(app().args(args)).run();
+}
+
+/// Adds the settings window. It is the terminal's to open, and it holds the
+/// terminal's handle so an applied change reaches the running grid.
+fn with_settings_window(mut app: App<Model>) -> App<Model> {
+    let terminal = app.handle();
+    let (settings, _window) = app.window(crate::settings_ui::window(terminal));
+    app.init(move || {
+        let mut model = model::init();
+        model.settings = Some(settings.clone());
+        model
+    })
 }
 
 pub fn app() -> App<Model> {

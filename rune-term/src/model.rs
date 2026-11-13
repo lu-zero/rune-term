@@ -1,12 +1,14 @@
 use std::sync::Arc;
 
 use librio::Engine;
+use rune::AppHandle;
 
 use crate::chrome::{Leaf, LeafId, Node, Tab, LEAF, PANE_MARK};
 use crate::delegate::{self, Shared};
 use crate::metrics;
 use crate::search::SearchUi;
 use crate::settings::ConfigFile;
+use crate::settings_ui::SettingsModel;
 use crate::theme::Palette;
 
 pub struct Model {
@@ -21,6 +23,8 @@ pub struct Model {
     pub palette: Arc<Palette>,
     pub search: SearchUi,
     pub pending_link_open: Option<String>,
+    /// The settings window. It is the terminal's to open.
+    pub settings: Option<AppHandle<SettingsModel>>,
     pub(crate) shared: Arc<Shared>,
     pub(crate) pending_inject: Option<Vec<u8>>,
     pub(crate) _ipc: Option<crate::ipc::Server>,
@@ -59,6 +63,7 @@ pub fn init() -> Model {
         palette,
         search: SearchUi::default(),
         pending_link_open: None,
+        settings: None,
         shared: std::sync::Arc::clone(&shared),
         pending_inject,
         _ipc: Some(crate::ipc::start(shared)),

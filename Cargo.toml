@@ -19,10 +19,12 @@ publish = false
 
 [workspace.dependencies]
 rune = { git = "https://github.com/anomalyco/rune", branch = "dev" }
+rune-kit = { git = "https://github.com/anomalyco/rune", branch = "dev", default-features = false }
 librio = { git = "https://github.com/raphamorim/rio", branch = "main", default-features = false }
 
 [patch."https://github.com/anomalyco/rune"]
 rune = { path = "../rune/crates/rune" }
+rune-kit = { path = "../rune/crates/rune-kit" }
 
 [patch."https://github.com/raphamorim/rio"]
 librio = { git = "https://github.com/lu-zero/rio", branch = "librio-update-rearm-reflow" }

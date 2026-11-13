@@ -18,9 +18,11 @@ path = "src/main.rs"
 rune-term-core = { path = "../rune-term-core", default-features = false }
 term-control = { path = "../term-control" }
 rune.workspace = true
+rune-kit.workspace = true
 librio.workspace = true
 term-grid = { path = "../term-grid" }
 term-input = { path = "../term-input" }
+color-picker = { path = "../color-picker" }
 wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"

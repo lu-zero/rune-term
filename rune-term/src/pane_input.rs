@@ -314,6 +314,10 @@ fn handle_app_chord(
         crate::search::open(model);
         return true;
     }
+    if code == term_input::PhysicalKeyCode::Comma {
+        crate::settings_ui::open(model);
+        return true;
+    }
     if code == term_input::PhysicalKeyCode::KeyV {
         tx.request_paste();
         return true;
@@ -426,6 +430,19 @@ mod tests {
             rune::Mods::default()
         ));
         assert_eq!(model.shared.take_output(), [0x03]);
+    }
+
+    #[test]
+    fn the_settings_chord_writes_nothing_to_the_shell() {
+        let mut model = host();
+        assert!(press(
+            &mut model,
+            Code::Comma,
+            copy_mods(),
+            None,
+            rune::Mods::default()
+        ));
+        assert!(model.shared.take_output().is_empty());
     }
 
     fn leaf_surface(model: &Model, index: usize) -> librio::SurfaceId {

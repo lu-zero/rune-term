@@ -1,0 +1,463 @@
+//! The themes tab: the editor for the selected theme and the operations on it.
+//! A built-in theme is read-only; a custom one can be renamed, recolored and
+//! removed.
+
+use std::sync::Arc;
+
+use rune::{col, el, row, text, El, ScrollSpec, TextEdit};
+use rune_kit::{Button, ButtonVariant, ControlSize, Field, Kit, TextInput};
+
+use super::SettingsModel;
+use crate::settings::{ConfigFile, CustomTheme};
+use crate::theme::{self, Palette};
+
+/// A color a theme carries.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Slot {
+    Bg,
+    Fg,
+    FgBright,
+    Muted,
+    TabBg,
+    ActiveBorder,
+    Accent,
+}
+
+impl Slot {
+    pub const ALL: [Slot; 7] = [
+        Slot::Bg,
+        Slot::Fg,
+        Slot::FgBright,
+        Slot::Muted,
+        Slot::TabBg,
+        Slot::ActiveBorder,
+        Slot::Accent,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Slot::Bg => "Background",
+            Slot::Fg => "Foreground",
+            Slot::FgBright => "Bright foreground",
+            Slot::Muted => "Muted",
+            Slot::TabBg => "Tabs",
+            Slot::ActiveBorder => "Border",
+            Slot::Accent => "Accent",
+        }
+    }
+}
+
+/// The colors a theme carries.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Colors {
+    pub bg: u32,
+    pub fg: u32,
+    pub fg_bright: u32,
+    pub muted: u32,
+    pub tab_bg: u32,
+    pub active_border: u32,
+    pub accent: u32,
+}
+
+impl Colors {
+    pub fn from_theme(theme: &CustomTheme) -> Self {
+        Self {
+            bg: theme.bg,
+            fg: theme.fg,
+            fg_bright: theme.fg_bright,
+            muted: theme.muted,
+            tab_bg: theme.tab_bg,
+            active_border: theme.active_border,
+            accent: theme.accent,
+        }
+    }
+
+    pub fn from_palette(palette: &Palette) -> Self {
+        Self {
+            bg: palette.bg,
+            fg: palette.fg,
+            fg_bright: palette.fg_bright,
+            muted: palette.muted,
+            tab_bg: palette.tab_bg,
+            active_border: palette.active_border,
+            accent: palette.accent,
+        }
+    }
+
+    pub fn into_theme(self, mut theme: CustomTheme) -> CustomTheme {
+        theme.bg = self.bg;
+        theme.fg = self.fg;
+        theme.fg_bright = self.fg_bright;
+        theme.muted = self.muted;
+        theme.tab_bg = self.tab_bg;
+        theme.active_border = self.active_border;
+        theme.accent = self.accent;
+        theme
+    }
+
+    pub fn get(&self, slot: Slot) -> u32 {
+        match slot {
+            Slot::Bg => self.bg,
+            Slot::Fg => self.fg,
+            Slot::FgBright => self.fg_bright,
+            Slot::Muted => self.muted,
+            Slot::TabBg => self.tab_bg,
+            Slot::ActiveBorder => self.active_border,
+            Slot::Accent => self.accent,
+        }
+    }
+
+    pub fn set(&mut self, slot: Slot, value: u32) {
+        match slot {
+            Slot::Bg => self.bg = value,
+            Slot::Fg => self.fg = value,
+            Slot::FgBright => self.fg_bright = value,
+            Slot::Muted => self.muted = value,
+            Slot::TabBg => self.tab_bg = value,
+            Slot::ActiveBorder => self.active_border = value,
+            Slot::Accent => self.accent = value,
+        }
+    }
+}
+
+/// The theme being edited.
+pub struct ThemeDraft {
+    /// The name the theme has in the config, before this edit.
+    pub original: String,
+    pub name: TextEdit,
+    pub author: TextEdit,
+    pub url: TextEdit,
+    pub colors: Colors,
+    /// The color the editor is changing.
+    pub slot: Slot,
+}
+
+impl ThemeDraft {
+    /// The draft for the theme the list has selected.
+    pub fn from_selected(model: &SettingsModel) -> Self {
+        let names = names(&model.config);
+        match names.get(model.selected) {
+            Some(name) => Self::from_colors(name, &model.config),
+            None => Self::empty(),
+        }
+    }
+
+    pub fn from_colors(name: &str, config: &ConfigFile) -> Self {
+        let custom = config.custom_themes.get(name);
+        let colors = match custom {
+            Some(custom) => Colors::from_theme(custom),
+            None => Colors::from_palette(
+                &theme::resolve_builtin(name).unwrap_or_else(theme::default_palette),
+            ),
+        };
+        Self {
+            original: name.to_owned(),
+            name: TextEdit::new(name),
+            author: TextEdit::new(custom.map(|t| t.author.clone()).unwrap_or_default()),
+            url: TextEdit::new(custom.map(|t| t.url.clone()).unwrap_or_default()),
+            colors,
+            slot: Slot::Bg,
+        }
+    }
+
+    fn empty() -> Self {
+        Self {
+            original: String::new(),
+            name: TextEdit::new(""),
+            author: TextEdit::new(""),
+            url: TextEdit::new(""),
+            colors: Colors::default(),
+            slot: Slot::Bg,
+        }
+    }
+}
+
+/// Every theme, the built-in ones first.
+pub fn names(config: &ConfigFile) -> Vec<String> {
+    let mut names: Vec<String> = theme::builtins().iter().map(|p| p.name.clone()).collect();
+    names.extend(config.custom_themes.keys().cloned());
+    names
+}
+
+/// The palette a theme name resolves to.
+pub fn palette(config: &ConfigFile, name: &str) -> Arc<Palette> {
+    match config.custom_themes.get(name) {
+        Some(custom) => custom.to_arc_palette(name),
+        None => theme::resolve_builtin(name).unwrap_or_else(theme::default_palette),
+    }
+}
+
+/// Whether the theme is one the user made.
+pub fn is_custom(config: &ConfigFile, name: &str) -> bool {
+    config.custom_themes.contains_key(name)
+}
+
+pub fn editor(kit: &Kit, model: &SettingsModel) -> El {
+    let draft = &model.theme;
+    let custom = is_custom(&model.config, &draft.original);
+    let applied = model.config.settings.theme == draft.original;
+    let mut body = col()
+        .w_full()
+        .h_full()
+        .grow(1.0)
+        .min_h(0.0)
+        .px(20.0)
+        .py(16.0)
+        .gap(14.0)
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        })
+        .child(
+            row()
+                .w_full()
+                .gap(10.0)
+                .center_y()
+                .child(
+                    text(draft.original.clone())
+                        .font(kit.ty.ui_medium)
+                        .color(kit.c.text_base),
+                )
+                .child(el().grow(1.0))
+                .child(if applied {
+                    text("in use").font(kit.ty.small).color(kit.c.text_muted)
+                } else {
+                    el().w(0.0).h(0.0)
+                }),
+        )
+        .child(actions(kit, custom, applied))
+        .child(swatches(kit, model));
+    if custom {
+        body = body
+            .child(
+                Field::new()
+                    .label("Name")
+                    .control(
+                        TextInput::new(&draft.name)
+                            .placeholder("Theme name")
+                            .width(None)
+                            .on_edit(|m: &mut SettingsModel| &mut m.theme.name)
+                            .build(kit),
+                    )
+                    .build(kit),
+            )
+            .child(
+                row()
+                    .w_full()
+                    .gap(12.0)
+                    .child(
+                        Field::new()
+                            .label("Author")
+                            .control(
+                                TextInput::new(&draft.author)
+                                    .placeholder("Who made it")
+                                    .width(None)
+                                    .on_edit(|m: &mut SettingsModel| &mut m.theme.author)
+                                    .build(kit),
+                            )
+                            .build(kit)
+                            .grow(1.0)
+                            .min_w(0.0),
+                    )
+                    .child(
+                        Field::new()
+                            .label("Source")
+                            .control(
+                                TextInput::new(&draft.url)
+                                    .placeholder("https://")
+                                    .width(None)
+                                    .on_edit(|m: &mut SettingsModel| &mut m.theme.url)
+                                    .build(kit),
+                            )
+                            .build(kit)
+                            .grow(1.0)
+                            .min_w(0.0),
+                    ),
+            )
+            .child(color_editor(kit, model));
+    } else {
+        body = body.child(
+            text("A built-in theme is read-only. Duplicate it to change it.")
+                .font(kit.ty.small)
+                .color(kit.c.text_muted),
+        );
+    }
+    body
+}
+
+/// The theme's colors, each one a target for the editor.
+fn swatches(kit: &Kit, model: &SettingsModel) -> El {
+    let mut row = row().w_full().gap(10.0).flex_wrap();
+    for slot in Slot::ALL {
+        let selected = model.theme.slot == slot;
+        let color = model.theme.colors.get(slot);
+        row = row.child(
+            el().key(format!("slot-{}", slot.label()))
+                .w(30.0)
+                .h(30.0)
+                .radius(6.0)
+                .fill(theme::linear(color))
+                .border(
+                    if selected { 2.0 } else { 1.0 },
+                    if selected {
+                        kit.c.text_accent
+                    } else {
+                        kit.c.border_muted
+                    },
+                )
+                .on_press(move |m: &mut SettingsModel| {
+                    m.theme.slot = slot;
+                }),
+        );
+    }
+    row
+}
+
+/// The editor for the color the swatches have selected.
+fn color_editor(kit: &Kit, model: &SettingsModel) -> El {
+    let slot = model.theme.slot;
+    let color = model.theme.colors.get(slot);
+    let hsv = color_picker::Hsv::from_rgb_u32(color);
+    let style = color_picker::Style {
+        track: kit.c.surface_raised,
+        track_border: kit.c.border_muted,
+        thumb: kit.c.white,
+        thumb_border: kit.c.border_strong,
+        label: kit.c.text_muted,
+        text: kit.c.text_base,
+    };
+    col()
+        .w_full()
+        .gap(8.0)
+        .child(
+            text(slot.label())
+                .font(kit.ty.small_medium)
+                .color(kit.c.text_muted),
+        )
+        .child(color_picker::hsv_editor::<SettingsModel, _>(
+            "theme-color",
+            hsv,
+            |m: &mut SettingsModel, hsv: color_picker::Hsv| {
+                m.theme.colors.set(m.theme.slot, hsv.to_rgb_u32());
+            },
+            style,
+        ))
+}
+
+fn actions(kit: &Kit, custom: bool, applied: bool) -> El {
+    row()
+        .w_full()
+        .gap(8.0)
+        .flex_wrap()
+        .child(
+            Button::new("Apply")
+                .variant(ButtonVariant::Contrast)
+                .control_size(ControlSize::Small)
+                .disabled(applied)
+                .on_press(apply_theme)
+                .build(kit)
+                .key("theme-apply"),
+        )
+        // The row keeps its shape whatever the theme is, so a button that
+        // appears does not shift the ones after it.
+        .child(
+            Button::new("Save")
+                .variant(ButtonVariant::Neutral)
+                .control_size(ControlSize::Small)
+                .disabled(!custom)
+                .on_press(save_theme)
+                .build(kit)
+                .key("theme-save"),
+        )
+        .child(
+            Button::new("Duplicate")
+                .variant(ButtonVariant::Ghost)
+                .control_size(ControlSize::Small)
+                .on_press(duplicate_theme)
+                .build(kit)
+                .key("theme-duplicate"),
+        )
+        .child(
+            Button::new("Delete")
+                .variant(ButtonVariant::Ghost)
+                .control_size(ControlSize::Small)
+                .disabled(!custom)
+                .on_press(delete_theme)
+                .build(kit)
+                .key("theme-delete"),
+        )
+}
+
+/// Makes the theme the one the terminal uses.
+pub fn apply_theme(model: &mut SettingsModel) {
+    let name = model.theme.original.clone();
+    if name.is_empty() {
+        return;
+    }
+    model.config.set_theme(name);
+    super::save_and_apply(model);
+}
+
+/// Copies the theme into a custom one and selects it.
+pub fn duplicate_theme(model: &mut SettingsModel) {
+    let name = model.theme.original.clone();
+    if name.is_empty() {
+        return;
+    }
+    let copy = model.config.copy_theme(&name);
+    select_by_name(model, &copy);
+    super::save_and_apply(model);
+}
+
+/// Writes the draft into the config, renaming the theme when its name changed.
+pub fn save_theme(model: &mut SettingsModel) {
+    let original = model.theme.original.clone();
+    if original.is_empty() {
+        return;
+    }
+    let name = model.theme.name.text.trim().to_owned();
+    if name.is_empty() {
+        model.status = Some("A theme needs a name".to_owned());
+        return;
+    }
+    let Some(mut theme) = model.config.custom_themes.get(&original).cloned() else {
+        model.status = Some("Only a custom theme can be changed".to_owned());
+        return;
+    };
+    if name != original && !model.config.rename_theme(&original, &name) {
+        model.status = Some(format!("A theme named '{name}' already exists"));
+        return;
+    }
+    theme.author = model.theme.author.text.trim().to_owned();
+    theme.url = model.theme.url.text.trim().to_owned();
+    let theme = model.theme.colors.into_theme(theme);
+    model.config.set_custom_theme(&name, theme);
+    model.theme.original = name.clone();
+    model.theme.name = TextEdit::new(name.clone());
+    select_by_name(model, &name);
+    super::save_and_apply(model);
+}
+
+/// Removes the custom theme.
+pub fn delete_theme(model: &mut SettingsModel) {
+    let name = model.theme.original.clone();
+    if name.is_empty() {
+        return;
+    }
+    if !model.config.remove_theme(&name) {
+        model.status = Some("A built-in theme cannot be removed".to_owned());
+        return;
+    }
+    model.selected = model
+        .selected
+        .min(names(&model.config).len().saturating_sub(1));
+    model.theme = ThemeDraft::from_selected(model);
+    super::save_and_apply(model);
+}
+
+/// The list is sorted, so a name moves the row it sits on.
+fn select_by_name(model: &mut SettingsModel, name: &str) {
+    if let Some(index) = names(&model.config).iter().position(|key| key == name) {
+        model.selected = index;
+    }
+    model.theme = ThemeDraft::from_selected(model);
+}

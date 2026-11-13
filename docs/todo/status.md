@@ -60,11 +60,14 @@ The numbers are that plan's.
 - [~] **16. Settings.** Config loads from and saves to TOML
       (`rune-term.toml`, XDG/platform path); unreadable/unparseable config is
       not overwritten. Defaults/profile font size and theme are applied on init
-      and Cascadia Code NF metrics scale with font size. The previous in-app
-      settings UI has been removed pending rework; manual TOML editing is the
-      configuration path for now. Named profile UI/switching, live in-app
-      editing (including font/theme/family/profile flows), font family wired to
-      atlas, and broader settings polish remain. Design:
+      and Cascadia Code NF metrics scale with font size. A settings window
+      (Cmd+,) opens on its own, built with rune-kit and drawn in the terminal's
+      own palette. It has a profiles list and a themes list, each with the
+      usual create, rename, edit, duplicate, delete and apply; the config is
+      written back and the change is pushed into the running terminal, where a
+      font size change keeps the grid's cell count and snaps the window. The
+      font family is stored but not yet applied to the atlas, and per-tab
+      setting application remains. Design:
       [`settings-profiles.md`](./settings-profiles.md). Follow-on:
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
 - [x] **17. Box-drawing and braille sprites.** Box drawing, block elements
@@ -118,11 +121,11 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       `local`), `shell` (program/args), and `cwd` wired into local
       `SurfaceDesc` creation. Tabs record a profile; `open_with_profile`
       (and pane context menu entries) creates a tab for a selected profile,
-      falling back to the default for unknown names. Settings includes a
-      Profiles tab to view profiles, set the default, duplicate, create, and
-      delete (persisted). Per-tab/per-pane setting application (font/theme are
-      currently model-global), richer profile editing, and full creation-time
-      backend semantics remain. Design:
+      falling back to the default for unknown names. The settings window's
+      profiles tab views profiles, sets the default, renames, duplicates,
+      creates, edits and deletes them, all persisted. Per-tab/per-pane setting
+      application (font/theme are currently model-global) and full
+      creation-time backend semantics remain. Design:
       [`settings-profiles.md`](./settings-profiles.md),
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
 - [ ] **21. IPC and automation.** Owner-scoped local control plane
