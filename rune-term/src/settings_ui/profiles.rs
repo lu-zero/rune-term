@@ -206,7 +206,7 @@ pub fn editor(kit: &Kit, model: &SettingsModel, overlays: &mut Vec<El>) -> El {
                 .label("Working directory")
                 .control(
                     TextInput::new(&draft.cwd)
-                        .placeholder("/path/to/dir")
+                        .placeholder("Use current directory")
                         .width(None)
                         .on_edit(|m: &mut SettingsModel| &mut m.profile.cwd)
                         .build(kit),
