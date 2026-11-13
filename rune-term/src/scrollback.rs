@@ -261,7 +261,6 @@ mod viewport {
         bytes.extend_from_slice(b"BOTLINE\r\n");
         model
             .terminal
-            .surfaces
             .primary_mut()
             .unwrap()
             .surface

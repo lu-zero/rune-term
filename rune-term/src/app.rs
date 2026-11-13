@@ -181,13 +181,8 @@ impl Compositor<Model> for GridCompositor {
         self.ensure(f.device, f.queue, f.format, f.device_key());
         let srgb_blend = f.srgb_blend();
         let color = chrome::slot_premul(f.rt.state.palette.bg, srgb_blend);
-        let blinking =
-            f.rt.state
-                .terminal
-                .surfaces
-                .primary()
-                .is_some_and(|host| host.blink);
-        let cursor_on = f.rt.state.terminal.blink_phase_on || !blinking;
+        let blinking = f.rt.state.terminal.primary().is_some_and(|host| host.blink);
+        let cursor_on = f.rt.state.terminal.blink_phase_on() || !blinking;
         let pane = pane_instance(&f.rt.instances);
         if let Some((rect, scale)) = pane {
             if scale.is_finite() && scale > 0.0 {

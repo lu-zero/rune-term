@@ -399,10 +399,7 @@ mod tests {
         open(&mut model);
         let s0 = surface_of(&model.tabs[0]).unwrap();
         model.active = 0;
-        model
-            .terminal
-            .surfaces
-            .show(surface_of(&model.tabs[1]).unwrap());
+        model.terminal.show(surface_of(&model.tabs[1]).unwrap());
         assert_ne!(shown(&model), s0);
         show_active(&mut model);
         assert_eq!(shown(&model), s0);

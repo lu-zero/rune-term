@@ -189,7 +189,6 @@ fn context_action(model: &mut Model, mark: u32, id: &str, tx: &mut Tx) {
         "copy" => {
             let Some(text) = model
                 .terminal
-                .surfaces
                 .by_mark_mut(mark)
                 .and_then(|host| host.surface.selection_text())
                 .filter(|text| !text.is_empty())
@@ -233,7 +232,6 @@ pub fn on_key(model: &mut Model, event: &KeyEvent, tx: &mut Tx) -> bool {
         .unwrap_or_else(|| core_input::logical_code(&event.key));
     let mark = model
         .terminal
-        .surfaces
         .primary()
         .map(|host| host.mark)
         .unwrap_or(crate::chrome::PANE_MARK);
@@ -809,13 +807,7 @@ mod tests {
             &mut Tx::default()
         ));
         assert_eq!(model.terminal.primary().unwrap().wheel_remainder, 0.0);
-        assert!(model
-            .terminal
-            .surfaces
-            .primary()
-            .unwrap()
-            .pointer_button
-            .is_none());
+        assert!(model.terminal.primary().unwrap().pointer_button.is_none());
     }
 
     #[test]
@@ -854,7 +846,6 @@ mod tests {
     ) {
         let mark = model
             .terminal
-            .surfaces
             .primary()
             .map(|host| host.mark)
             .unwrap_or(crate::chrome::PANE_MARK);
@@ -882,7 +873,6 @@ mod tests {
         sized(model);
         model
             .terminal
-            .surfaces
             .primary_mut()
             .unwrap()
             .surface
@@ -899,7 +889,6 @@ mod tests {
         select_hello(&mut model);
         let text = model
             .terminal
-            .surfaces
             .primary()
             .unwrap()
             .surface
@@ -916,7 +905,6 @@ mod tests {
         sized(&mut model);
         model
             .terminal
-            .surfaces
             .primary_mut()
             .unwrap()
             .surface
@@ -939,7 +927,6 @@ mod tests {
         );
         let text = model
             .terminal
-            .surfaces
             .primary()
             .unwrap()
             .surface
@@ -955,7 +942,6 @@ mod tests {
         sized(&mut model);
         model
             .terminal
-            .surfaces
             .primary_mut()
             .unwrap()
             .surface
@@ -978,7 +964,6 @@ mod tests {
         );
         let text = model
             .terminal
-            .surfaces
             .primary()
             .unwrap()
             .surface
@@ -993,7 +978,6 @@ mod tests {
         sized(&mut model);
         model
             .terminal
-            .surfaces
             .primary_mut()
             .unwrap()
             .surface
@@ -1016,7 +1000,6 @@ mod tests {
         );
         let text = model
             .terminal
-            .surfaces
             .primary()
             .unwrap()
             .surface
@@ -1031,7 +1014,6 @@ mod tests {
         sized(&mut model);
         model
             .terminal
-            .surfaces
             .primary_mut()
             .unwrap()
             .surface
@@ -1054,7 +1036,6 @@ mod tests {
         );
         assert!(model
             .terminal
-            .surfaces
             .primary()
             .unwrap()
             .surface
@@ -1069,7 +1050,6 @@ mod tests {
         sized(&mut model);
         model
             .terminal
-            .surfaces
             .primary_mut()
             .unwrap()
             .surface
@@ -1092,7 +1072,6 @@ mod tests {
         );
         let text = model
             .terminal
-            .surfaces
             .primary()
             .unwrap()
             .surface
@@ -1128,7 +1107,6 @@ mod tests {
         );
         assert!(model
             .terminal
-            .surfaces
             .primary()
             .unwrap()
             .surface
@@ -1151,22 +1129,14 @@ mod tests {
         point.x = 1.0;
         point.y = 1.0;
         on_pointer_move_mark(&mut model, mark, point, 1.0, &mut Tx::default());
-        let probe = model
-            .terminal
-            .surfaces
-            .primary()
-            .and_then(|h| h.hover_probe.clone());
+        let probe = model.terminal.primary().and_then(|h| h.hover_probe.clone());
         assert!(probe.is_some());
         let mut point = PointerEvent::default();
         point.x = 2.0;
         point.y = 2.0;
         on_pointer_move_mark(&mut model, mark, point, 1.0, &mut Tx::default());
         assert_eq!(
-            model
-                .terminal
-                .surfaces
-                .primary()
-                .and_then(|h| h.hover_probe.clone()),
+            model.terminal.primary().and_then(|h| h.hover_probe.clone()),
             probe
         );
     }
@@ -1201,7 +1171,6 @@ mod tests {
         assert!(model.shared.take_output().is_empty());
         let text = model
             .terminal
-            .surfaces
             .primary()
             .unwrap()
             .surface
@@ -1298,7 +1267,6 @@ mod tests {
         assert!(model.shared.take_output().is_empty());
         assert!(model
             .terminal
-            .surfaces
             .primary()
             .unwrap()
             .surface
@@ -1312,7 +1280,6 @@ mod tests {
         sized(&mut model);
         model
             .terminal
-            .surfaces
             .primary_mut()
             .unwrap()
             .surface
@@ -1340,7 +1307,6 @@ mod tests {
         sized(&mut model);
         model
             .terminal
-            .surfaces
             .primary_mut()
             .unwrap()
             .surface
@@ -1359,19 +1325,12 @@ mod tests {
         );
         assert!(model
             .terminal
-            .surfaces
             .primary()
             .unwrap()
             .surface
             .selection_text()
             .is_none());
-        assert!(model
-            .terminal
-            .surfaces
-            .primary()
-            .unwrap()
-            .pointer_button
-            .is_none());
+        assert!(model.terminal.primary().unwrap().pointer_button.is_none());
     }
 
     #[test]
@@ -1380,7 +1339,6 @@ mod tests {
         sized(&mut model);
         model
             .terminal
-            .surfaces
             .primary_mut()
             .unwrap()
             .surface
@@ -1419,7 +1377,6 @@ mod tests {
         );
         let text = model
             .terminal
-            .surfaces
             .primary()
             .unwrap()
             .surface

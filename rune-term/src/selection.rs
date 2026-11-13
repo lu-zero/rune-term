@@ -11,7 +11,6 @@ use crate::model::Model;
 pub fn copy(model: &Model, tx: &mut Tx) {
     let Some(text) = model
         .terminal
-        .surfaces
         .primary()
         .and_then(|host| host.surface.selection_text())
         .filter(|text| !text.is_empty())

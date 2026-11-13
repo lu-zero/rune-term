@@ -108,7 +108,7 @@ fn leaf_mark(node: &Node, id: LeafId) -> Option<u32> {
 
 fn single(model: &Model, scale: f32) -> El {
     let hover_active = model.terminal.primary().is_some_and(|host| {
-        host.hover_link.is_some() && crate::hyperlink::open_mods_rune(model.terminal.held_mods)
+        host.hover_link.is_some() && crate::hyperlink::open_mods_rune(model.terminal.held_mods())
     });
     let mut pane = effect(PANE_MARK)
         .key("pane")
@@ -124,7 +124,6 @@ fn single(model: &Model, scale: f32) -> El {
     }
     let cell_px = model
         .terminal
-        .surfaces
         .primary()
         .map(|host| host.cell_px)
         .unwrap_or((0, 0));
@@ -135,7 +134,7 @@ fn single(model: &Model, scale: f32) -> El {
         .min_w(0.0)
         .child(ime::mount_caret(
             wire(pane, PANE_MARK, scale),
-            model.terminal.cursor_cell,
+            model.terminal.cursor_cell(),
             cell_px,
             scale,
         ))
@@ -193,7 +192,7 @@ fn leaf_el(leaf: &Leaf, model: &Model, scale: f32, cell: (f32, f32)) -> El {
     let id = leaf.id;
     let mark = leaf.mark;
     let hover_active = model.terminal.by_mark(mark).is_some_and(|host| {
-        host.hover_link.is_some() && crate::hyperlink::open_mods_rune(model.terminal.held_mods)
+        host.hover_link.is_some() && crate::hyperlink::open_mods_rune(model.terminal.held_mods())
     });
     let mut pane = effect(mark)
         .key(format!("pane-{mark}"))
@@ -217,13 +216,12 @@ fn leaf_el(leaf: &Leaf, model: &Model, scale: f32, cell: (f32, f32)) -> El {
         .get(model.active)
         .is_some_and(|tab| tab.focused == id);
     let cursor_cell = if focused {
-        model.terminal.cursor_cell
+        model.terminal.cursor_cell()
     } else {
         (0, 0)
     };
     let cell_px = model
         .terminal
-        .surfaces
         .get(surface)
         .map(|host| host.cell_px)
         .unwrap_or((0, 0));
@@ -607,14 +605,12 @@ mod tests {
         }
         assert!(model
             .terminal
-            .surfaces
             .get(left_surface)
             .unwrap()
             .frame_flag
             .load(Ordering::Acquire));
         assert!(!model
             .terminal
-            .surfaces
             .get(right_surface)
             .unwrap()
             .frame_flag

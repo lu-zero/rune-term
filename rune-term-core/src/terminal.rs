@@ -21,12 +21,12 @@ pub struct RenderReport {
 
 #[derive(Default)]
 pub struct State {
-    pub surfaces: Surfaces,
-    pub preedit: Option<Preedit>,
-    pub cursor_cell: (u16, u16),
-    pub blink_phase_on: bool,
-    pub held_mods: Mods,
-    pub grid_draw: GridDrawStamp,
+    surfaces: Surfaces,
+    preedit: Option<Preedit>,
+    cursor_cell: (u16, u16),
+    blink_phase_on: bool,
+    held_mods: Mods,
+    grid_draw: GridDrawStamp,
 }
 
 impl State {
@@ -123,6 +123,22 @@ impl State {
         let changed = self.held_mods != mods;
         self.held_mods = mods;
         changed
+    }
+
+    pub fn held_mods(&self) -> Mods {
+        self.held_mods
+    }
+
+    pub fn cursor_cell(&self) -> (u16, u16) {
+        self.cursor_cell
+    }
+
+    pub fn blink_phase_on(&self) -> bool {
+        self.blink_phase_on
+    }
+
+    pub fn preedit(&self) -> Option<&Preedit> {
+        self.preedit.as_ref()
     }
 
     pub fn any_hover_link(&mut self) -> bool {
