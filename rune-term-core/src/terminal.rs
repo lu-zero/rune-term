@@ -215,4 +215,24 @@ impl State {
         }
         report
     }
+
+    pub fn set_blink_phase(&mut self, on: bool) {
+        self.blink_phase_on = on;
+    }
+
+    pub fn host_for_pane(&self, pane: u32, shown_pane: u32) -> Option<&HostSurface> {
+        if pane == shown_pane {
+            self.primary()
+        } else {
+            self.by_mark(pane)
+        }
+    }
+
+    pub fn host_for_pane_mut(&mut self, pane: u32, shown_pane: u32) -> Option<&mut HostSurface> {
+        if pane == shown_pane {
+            self.primary_mut()
+        } else {
+            self.by_mark_mut(pane)
+        }
+    }
 }

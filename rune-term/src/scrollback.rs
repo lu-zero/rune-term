@@ -34,19 +34,11 @@ fn pane_of(mark: u32) -> u32 {
 }
 
 fn host_ref(model: &Model, pane: u32) -> Option<&HostSurface> {
-    if pane == SHOWN_PANE {
-        model.terminal.primary()
-    } else {
-        model.terminal.by_mark(pane)
-    }
+    model.terminal.host_for_pane(pane, SHOWN_PANE)
 }
 
 fn host_mut(model: &mut Model, pane: u32) -> Option<&mut HostSurface> {
-    if pane == SHOWN_PANE {
-        model.terminal.primary_mut()
-    } else {
-        model.terminal.by_mark_mut(pane)
-    }
+    model.terminal.host_for_pane_mut(pane, SHOWN_PANE)
 }
 
 /// Wheel and programmatic scroll keep the bar visible briefly.
