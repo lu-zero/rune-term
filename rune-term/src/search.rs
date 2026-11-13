@@ -11,25 +11,25 @@ use crate::scrollback;
 use crate::theme::{self, Palette};
 
 pub fn shown(model: &Model) -> String {
-    if model.search_open && model.query.focused {
-        model.query.text.clone()
+    if model.search.open && model.search.query.focused {
+        model.search.query.text.clone()
     } else {
         String::new()
     }
 }
 
 pub fn open(model: &mut Model) {
-    model.search_open = true;
-    model.query.focused = true;
+    model.search.open = true;
+    model.search.query.focused = true;
 }
 
 pub fn close(model: &mut Model) {
-    model.search_open = false;
-    model.query.focused = false;
+    model.search.open = false;
+    model.search.query.focused = false;
 }
 
 pub fn toggle(model: &mut Model) {
-    if model.search_open {
+    if model.search.open {
         close(model);
     } else {
         open(model);
@@ -54,8 +54,8 @@ pub fn is_chord(key: &Key, mods: Mods) -> bool {
 /// The field is out of flow, so opening it does not resize the grid.
 pub fn mount(model: &Model, pane: El) -> El {
     let mut stack = col().w_full().grow(1.0).min_h(0.0).min_w(0.0).child(pane);
-    if model.search_open && model.query.focused {
-        stack = stack.child(field(&model.query, model.palette.clone()));
+    if model.search.open && model.search.query.focused {
+        stack = stack.child(field(&model.search.query, model.palette.clone()));
     }
     stack
 }
@@ -69,7 +69,7 @@ fn field(query: &TextEdit, palette: Arc<Palette>) -> El {
         .pin(None, Some(8.0), Some(8.0 + scrollback::WIDTH), None)
         .fill(theme::linear(palette.tab_bg))
         .color(theme::linear(palette.fg))
-        .on_edit(|model: &mut Model| &mut model.query)
+        .on_edit(|model: &mut Model| &mut model.search.query)
 }
 
 #[cfg(all(test, not(feature = "pty")))]
@@ -121,8 +121,8 @@ mod tests {
             &event,
             &mut Tx::default()
         ));
-        assert!(model.search_open);
-        assert!(model.query.focused);
+        assert!(model.search.open);
+        assert!(model.search.query.focused);
         assert!(model.shared.take_output().is_empty());
     }
 
@@ -224,7 +224,7 @@ mod tests {
             mods: Mods::default(),
         });
         rt.frame(0.0);
-        assert_eq!(rt.state.query.text, "b");
+        assert_eq!(rt.state.search.query.text, "b");
         assert!(rt.state.shared.take_output().is_empty());
     }
 

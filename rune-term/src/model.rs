@@ -89,6 +89,21 @@ pub struct ProfileEditor {
     pub font_picker_active: usize,
 }
 
+#[derive(Clone, Debug)]
+pub struct SearchUi {
+    pub open: bool,
+    pub query: TextEdit,
+}
+
+impl Default for SearchUi {
+    fn default() -> Self {
+        Self {
+            open: false,
+            query: TextEdit::new(""),
+        }
+    }
+}
+
 pub struct Model {
     pub engine: Engine,
     pub tabs: Vec<Tab>,
@@ -99,9 +114,7 @@ pub struct Model {
     pub config: ConfigFile,
     pub font_size: f32,
     pub palette: Arc<Palette>,
-    /// The search field is up. It takes focus while `query.focused` is set.
-    pub search_open: bool,
-    pub query: TextEdit,
+    pub search: SearchUi,
     pub(crate) shared: Arc<Shared>,
     pub(crate) pending_inject: Option<Vec<u8>>,
     pub(crate) pending_link_open: Option<String>,
@@ -140,8 +153,7 @@ pub fn init() -> Model {
         config,
         font_size,
         palette,
-        search_open: false,
-        query: TextEdit::new(""),
+        search: SearchUi::default(),
         shared: std::sync::Arc::clone(&shared),
         pending_inject,
         pending_link_open: None,
