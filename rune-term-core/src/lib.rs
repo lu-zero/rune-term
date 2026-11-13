@@ -10,4 +10,5 @@ pub mod scrollback;
 pub mod search;
 pub mod selection;
 pub mod surfaces;
+pub mod terminal_input;
 pub mod theme;

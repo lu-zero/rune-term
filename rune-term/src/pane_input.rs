@@ -1,12 +1,12 @@
 //! The focused pane maps physical keys, the wheel, and the pointer onto the shell.
 //! App chords return false, except copy, paste, search, and tabs, which this shell handles.
+//! Terminal delivery primitives live in `rune_term_core::terminal_input`.
 
 use std::time::Duration;
 
-use librio::Modifiers;
-use rune::{Drag, Key, KeyEvent, Phase, PhysicalInput, PointerEvent, Tx, WheelEvent};
-
+use rune::{Drag, Key, KeyEvent, PhysicalInput, PointerEvent, Tx, WheelEvent};
 use rune_term_core::input as core_input;
+use rune_term_core::terminal_input as core_terminal;
 
 use crate::model::Model;
 use crate::surfaces::HostSurface;
@@ -38,11 +38,7 @@ pub fn on_physical_mark(model: &mut Model, mark: u32, event: &PhysicalInput, tx:
         ),
         PhysicalInput::FocusLost => {
             if let Some(host) = target_host(model, mark) {
-                host.wheel_remainder = 0.0;
-                host.pointer_button = None;
-                host.selecting = false;
-                host.hover_link = None;
-                host.hover_probe = None;
+                core_terminal::focus_lost(host);
             }
             false
         }
@@ -62,38 +58,32 @@ pub fn on_wheel_mark(
     let Some(host) = model.surfaces.by_mark_mut(mark) else {
         return false;
     };
-    let pitch_y = core_input::drawn_pitch(host.cell_px.1, scale);
-    if !(pitch_y.is_finite() && pitch_y > 0.0) {
-        tx.live_only();
-        return true;
-    }
-    let points = if event.dy != 0.0 {
-        event.dy
-    } else if !cfg!(target_os = "macos") && event.mods.shift && event.dx != 0.0 {
-        event.dx
-    } else {
-        0.0
-    };
-    host.wheel_remainder += points / pitch_y;
-    let lines = host.wheel_remainder.trunc() as i32;
-    host.wheel_remainder -= lines as f32;
+    let (lines, consumed) = core_terminal::wheel(
+        host,
+        event.x,
+        event.y,
+        event.dx,
+        event.dy,
+        event.mods.shift,
+        scale,
+        core_input::modifiers(event.mods),
+    );
     if lines != 0 {
-        let (col, row) = core_input::cell_for_wheel(host, event.x, event.y, scale);
-        let mods = core_input::modifiers(event.mods);
-        host.surface.scroll_wheel(lines, col, row, mods);
         crate::scrollback::note_activity(host, tx);
     }
     tx.live_only();
-    true
+    consumed
 }
 
 pub fn on_drag_mark(model: &mut Model, mark: u32, drag: &mut Drag, scale: f32, tx: &mut Tx) {
     let Some(button) = core_input::button_code(tx.button()) else {
         return;
     };
-    gesture(
-        model,
-        mark,
+    let Some(host) = model.surfaces.by_mark_mut(mark) else {
+        return;
+    };
+    let action = core_terminal::gesture(
+        host,
         drag.phase,
         drag.x,
         drag.y,
@@ -101,144 +91,20 @@ pub fn on_drag_mark(model: &mut Model, mark: u32, drag: &mut Drag, scale: f32, t
         button,
         core_input::modifiers(tx.mods()),
         scale,
-        tx,
+        true,
     );
-}
-
-enum LinkAction {
-    None,
-    Opened,
-    Confirm(String),
-}
-
-fn try_open_link_at(model: &mut Model, mark: u32, x: f32, y: f32, scale: f32) -> LinkAction {
-    let Some(host) = model.surfaces.by_mark_mut(mark) else {
-        return LinkAction::None;
-    };
-    let cell = core_input::cell_under(host, x, y, scale);
-    let Some(link) = cell
-        .and_then(|(col, row)| crate::hyperlink::resolve(host, usize::from(row), usize::from(col)))
-    else {
-        return LinkAction::None;
-    };
-    host.surface.selection_clear();
-    host.pointer_button = None;
-    host.selecting = false;
-    host.hover_link = None;
-    host.hover_probe = None;
-    if crate::hyperlink::open_decision(&link.uri) == crate::hyperlink::OpenDecision::WarnAndOpen {
-        LinkAction::Confirm(link.uri)
-    } else {
-        let _ = crate::hyperlink::open_uri(&link.uri);
-        LinkAction::Opened
-    }
-}
-
-fn begin_local_selection(
-    host: &mut HostSurface,
-    cell: Option<(u16, u16)>,
-    x: f32,
-    _y: f32,
-    clicks: u32,
-    scale: f32,
-) -> bool {
-    let Some((col, row)) = cell else {
-        return false;
-    };
-    host.surface.selection_begin(
-        i32::from(row),
-        usize::from(col),
-        crate::selection::kind(clicks),
-        core_input::side_at(x, col, core_input::drawn_pitch(host.cell_px.0, scale)),
-    );
-    true
-}
-
-fn update_local_selection(
-    host: &mut HostSurface,
-    cell: Option<(u16, u16)>,
-    x: f32,
-    _y: f32,
-    scale: f32,
-) {
-    let Some((col, row)) = cell else {
-        return;
-    };
-    host.surface.selection_update(
-        i32::from(row),
-        usize::from(col),
-        core_input::side_at(x, col, core_input::drawn_pitch(host.cell_px.0, scale)),
-    );
-}
-
-/// The program takes a click when `mouse_button` returns true. Otherwise the
-/// left button starts a local selection. Shift makes that return false.
-#[allow(clippy::too_many_arguments)]
-fn gesture(
-    model: &mut Model,
-    mark: u32,
-    phase: Phase,
-    x: f32,
-    y: f32,
-    clicks: u32,
-    button: u8,
-    mods: Modifiers,
-    scale: f32,
-    tx: &mut Tx,
-) {
-    if phase == Phase::Down && button == 0 && crate::hyperlink::open_mods(mods) {
-        match try_open_link_at(model, mark, x, y, scale) {
-            LinkAction::Opened => {
-                tx.wake_after(Duration::ZERO);
-                return;
-            }
-            LinkAction::Confirm(uri) => {
-                model.pending_link_open = Some(uri);
-                tx.wake_after(Duration::ZERO);
-                return;
-            }
-            LinkAction::None => {}
+    match action {
+        core_terminal::LinkAction::Opened => {
+            tx.wake_after(Duration::ZERO);
+        }
+        core_terminal::LinkAction::Confirm(uri) => {
+            model.pending_link_open = Some(uri);
+            tx.wake_after(Duration::ZERO);
+        }
+        core_terminal::LinkAction::None => {
+            tx.live_only();
         }
     }
-    let Some(host) = model.surfaces.by_mark_mut(mark) else {
-        return;
-    };
-    let cell = core_input::cell_under(host, x, y, scale);
-    match phase {
-        Phase::Down => {
-            host.pointer_button = Some(button);
-            let taken = match cell {
-                Some((col, row)) => host.surface.mouse_button(col, row, button, true, mods),
-                None => false,
-            };
-            if button == 0 && !taken {
-                host.selecting = begin_local_selection(host, cell, x, y, clicks, scale);
-            } else {
-                if taken {
-                    host.surface.selection_clear();
-                }
-                host.selecting = false;
-            }
-        }
-        Phase::Move => {
-            if host.selecting {
-                update_local_selection(host, cell, x, y, scale);
-            } else if let (Some(held), Some((col, row))) = (host.pointer_button, cell) {
-                host.surface.mouse_motion(col, row, held, mods);
-            }
-        }
-        Phase::Up => {
-            let selecting = host.selecting;
-            host.pointer_button = None;
-            host.selecting = false;
-            if selecting {
-                update_local_selection(host, cell, x, y, scale);
-            } else if let Some((col, row)) = cell {
-                host.surface.mouse_button(col, row, button, false, mods);
-            }
-        }
-    }
-    tx.live_only();
 }
 
 /// Bare motion is button 3. A drag already reported the held button.
@@ -252,37 +118,15 @@ pub fn on_pointer_move_mark(
     let Some(host) = model.surfaces.by_mark_mut(mark) else {
         return;
     };
-    if host.pointer_button.is_none() {
-        let mods = core_input::modifiers(tx.mods());
-        let cell = core_input::cell_under(host, point.x, point.y, scale);
-        let hover = match cell {
-            Some((col, row)) => {
-                let (line, column) = (usize::from(row), usize::from(col));
-                if host.hover_probe.as_ref().map(|(l, c, _)| (*l, *c)) == Some((line, column)) {
-                    host.hover_probe
-                        .as_ref()
-                        .and_then(|(_, _, link)| link.clone())
-                } else {
-                    let link = crate::hyperlink::resolve(host, line, column);
-                    host.hover_probe = Some((line, column, link.clone()));
-                    link
-                }
-            }
-            None => {
-                host.hover_probe = None;
-                None
-            }
-        };
-        let changed = host.hover_link != hover;
-        if changed {
-            host.hover_link = hover;
-        }
-        if let Some((col, row)) = cell {
-            host.surface.mouse_motion(col, row, 3, mods);
-        }
-        if changed {
-            tx.wake_after(Duration::ZERO);
-        }
+    let outcome = core_terminal::pointer_move(
+        host,
+        point.x,
+        point.y,
+        scale,
+        core_input::modifiers(tx.mods()),
+    );
+    if outcome.changed_hover {
+        tx.wake_after(Duration::ZERO);
     }
 }
 
@@ -297,14 +141,7 @@ pub fn on_secondary_mark(
         return;
     };
     let mods = core_input::modifiers(tx.mods());
-    let mouse_reporting = host.surface.mode_bits() & 1 != 0;
-    if mouse_reporting && !mods.contains(Modifiers::SHIFT) {
-        let Some((col, row)) = core_input::cell_under(host, point.x, point.y, scale) else {
-            return;
-        };
-        // Rune delivers the secondary button only on release.
-        host.surface.mouse_button(col, row, 2, true, mods);
-        host.surface.mouse_button(col, row, 2, false, mods);
+    if core_terminal::secondary_press(host, point.x, point.y, scale, mods) {
         tx.live_only();
         return;
     }
@@ -347,12 +184,12 @@ pub fn on_secondary_mark(
     );
 }
 
-fn context_action(model: &mut Model, _mark: u32, id: &str, tx: &mut Tx) {
+fn context_action(model: &mut Model, mark: u32, id: &str, tx: &mut Tx) {
     match id {
         "copy" => {
             let Some(text) = model
                 .surfaces
-                .by_mark_mut(_mark)
+                .by_mark_mut(mark)
                 .and_then(|host| host.surface.selection_text())
                 .filter(|text| !text.is_empty())
             else {
@@ -436,80 +273,86 @@ fn deliver(
     tx: &mut Tx,
 ) -> bool {
     if term_input::is_app_chord(code, mods) {
-        // A Ctrl+Tab release is not a tab character. Other chord releases are ignored.
-        if !pressed {
-            return code == term_input::PhysicalKeyCode::Tab;
-        }
-        if code == term_input::PhysicalKeyCode::KeyC {
-            crate::selection::copy(model, tx);
-            return true;
-        }
-        if code == term_input::PhysicalKeyCode::KeyF {
-            crate::search::open(model);
-            return true;
-        }
-        if code == term_input::PhysicalKeyCode::Comma {
-            model.settings_mode =
-                crate::model::SettingsMode::Open(Box::new(crate::model::SettingsUi {
-                    tab: crate::model::SettingsTab::Font,
-                    theme_editor: None,
-                    profile_editor: None,
-                    font_family_picker_open: false,
-                    font_family_before_pick: None,
-                    font_search: rune::TextEdit::new(""),
-                    font_picker_active: 0,
-                }));
-            return true;
-        }
-        if code == term_input::PhysicalKeyCode::KeyV {
-            tx.request_paste();
-            return true;
-        }
-        if code == term_input::PhysicalKeyCode::KeyT {
-            crate::tabs::open(model);
-            crate::tabs::reveal(model, tx);
-            return true;
-        }
-        if code == term_input::PhysicalKeyCode::KeyW {
-            crate::tabs::close_active(model, tx);
-            crate::tabs::reveal(model, tx);
-            return true;
-        }
-        if let Some(digit) = core_input::tab_digit(code) {
-            crate::tabs::select_digit(model, digit);
-            crate::tabs::reveal(model, tx);
-            return true;
-        }
-        if code == term_input::PhysicalKeyCode::Tab {
-            let delta = if mods.shift { -1 } else { 1 };
-            crate::tabs::cycle(model, delta);
-            crate::tabs::reveal(model, tx);
-            return true;
-        }
-        return false;
+        return handle_app_chord(model, code, mods, pressed, tx);
     }
     if let Some(sign) = term_input::scroll_chord(code, mods) {
         if pressed {
             if let Some(host) = target_host(model, mark) {
-                host.surface
-                    .scroll(sign.saturating_mul(i32::from(host.rows)));
+                core_terminal::scroll_by_lines(host, sign.saturating_mul(i32::from(host.rows)));
             }
             tx.live_only();
         }
         return true;
     }
     let mapped = term_input::map_key(code, mods, pressed, repeat, text, consumed);
-    if mapped.key.is_none() && mapped.text.is_none() {
-        return false;
-    }
     let Some(host) = target_host(model, mark) else {
         return false;
     };
-    let wrote = host.surface.key(&mapped);
+    let wrote = core_terminal::deliver_mapped_key(host, &mapped);
     if wrote {
         tx.wake_after(Duration::ZERO);
     }
     wrote
+}
+
+fn handle_app_chord(
+    model: &mut Model,
+    code: term_input::PhysicalKeyCode,
+    mods: term_input::Mods,
+    pressed: bool,
+    tx: &mut Tx,
+) -> bool {
+    // A Ctrl+Tab release is not a tab character. Other chord releases are ignored.
+    if !pressed {
+        return code == term_input::PhysicalKeyCode::Tab;
+    }
+    if code == term_input::PhysicalKeyCode::KeyC {
+        crate::selection::copy(model, tx);
+        return true;
+    }
+    if code == term_input::PhysicalKeyCode::KeyF {
+        crate::search::open(model);
+        return true;
+    }
+    if code == term_input::PhysicalKeyCode::Comma {
+        model.settings_mode =
+            crate::model::SettingsMode::Open(Box::new(crate::model::SettingsUi {
+                tab: crate::model::SettingsTab::Font,
+                theme_editor: None,
+                profile_editor: None,
+                font_family_picker_open: false,
+                font_family_before_pick: None,
+                font_search: rune::TextEdit::new(""),
+                font_picker_active: 0,
+            }));
+        return true;
+    }
+    if code == term_input::PhysicalKeyCode::KeyV {
+        tx.request_paste();
+        return true;
+    }
+    if code == term_input::PhysicalKeyCode::KeyT {
+        crate::tabs::open(model);
+        crate::tabs::reveal(model, tx);
+        return true;
+    }
+    if code == term_input::PhysicalKeyCode::KeyW {
+        crate::tabs::close_active(model, tx);
+        crate::tabs::reveal(model, tx);
+        return true;
+    }
+    if let Some(digit) = core_input::tab_digit(code) {
+        crate::tabs::select_digit(model, digit);
+        crate::tabs::reveal(model, tx);
+        return true;
+    }
+    if code == term_input::PhysicalKeyCode::Tab {
+        let delta = if mods.shift { -1 } else { 1 };
+        crate::tabs::cycle(model, delta);
+        crate::tabs::reveal(model, tx);
+        return true;
+    }
+    false
 }
 
 #[cfg(all(test, not(feature = "pty")))]
@@ -517,7 +360,7 @@ mod tests {
     use super::*;
     use crate::delegate;
     use crate::model;
-    use rune::{Env, PhysicalKeyCode as Code, Runtime, Shell};
+    use rune::{Env, Phase, PhysicalKeyCode as Code, Runtime, Shell};
 
     fn host() -> Model {
         let mut model = model::init();
@@ -1006,18 +849,24 @@ mod tests {
             .primary()
             .map(|host| host.mark)
             .unwrap_or(crate::chrome::PANE_MARK);
-        gesture(
-            model,
-            mark,
-            phase,
-            x,
-            y,
-            clicks,
-            0,
-            mods,
-            1.0,
-            &mut Tx::default(),
-        );
+        let mut tx = Tx::default();
+        if let Some(host) = model.surfaces.by_mark_mut(mark) {
+            let action = rune_term_core::terminal_input::gesture(
+                host, phase, x, y, clicks, 0, mods, 1.0, true,
+            );
+            match action {
+                rune_term_core::terminal_input::LinkAction::Opened => {
+                    tx.wake_after(Duration::ZERO);
+                }
+                rune_term_core::terminal_input::LinkAction::Confirm(uri) => {
+                    model.pending_link_open = Some(uri);
+                    tx.wake_after(Duration::ZERO);
+                }
+                rune_term_core::terminal_input::LinkAction::None => {
+                    tx.live_only();
+                }
+            }
+        }
     }
 
     fn select_hello(model: &mut Model) {

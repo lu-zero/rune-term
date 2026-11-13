@@ -134,8 +134,17 @@ pub fn open_uri_with(uri: &str, confirm_risky: impl FnOnce(&str) -> bool) -> boo
 
 /// Resolve a link under a viewport cell. OSC 8 takes precedence.
 pub fn resolve(host: &HostSurface, line: usize, col: usize) -> Option<HoverLink> {
-    if let Some(uri) = host.render.link_at(line, col) {
-        let (start, end) = host.render.link_run(line, col).unwrap_or((col, col));
+    resolve_surface(&host.surface, &host.render, line, col)
+}
+
+pub fn resolve_surface(
+    surface: &librio::Surface,
+    render: &librio::RenderState,
+    line: usize,
+    col: usize,
+) -> Option<HoverLink> {
+    if let Some(uri) = render.link_at(line, col) {
+        let (start, end) = render.link_run(line, col).unwrap_or((col, col));
         return Some(HoverLink {
             line,
             start,
@@ -143,9 +152,7 @@ pub fn resolve(host: &HostSurface, line: usize, col: usize) -> Option<HoverLink>
             uri: uri.to_string(),
         });
     }
-    let (uri, start, end) = host
-        .surface
-        .url_at(u16::try_from(line).ok()?, u16::try_from(col).ok()?)?;
+    let (uri, start, end) = surface.url_at(u16::try_from(line).ok()?, u16::try_from(col).ok()?)?;
     Some(HoverLink {
         line,
         start: usize::from(start),

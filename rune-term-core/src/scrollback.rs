@@ -21,6 +21,15 @@ impl Default for ScrollbarState {
     }
 }
 
+impl ScrollbarState {
+    pub fn note_activity(&mut self) {
+        self.active_until = f64::INFINITY;
+        self.opacity = 1.0;
+        self.fade_start = 0.0;
+        self.fade_from = 1.0;
+    }
+}
+
 pub struct Thumb {
     pub top: f32,
     pub height: f32,
