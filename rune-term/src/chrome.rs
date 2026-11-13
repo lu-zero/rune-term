@@ -1162,6 +1162,262 @@ fn profile_editor_view(model: &Model) -> El {
         },
         _ => return col(),
     };
+    if editor.font_picker_open {
+        let current_family = editor.font_family.text.trim().to_owned();
+        let catalog = font_picker::FontCatalog::system();
+        let filtered = catalog.filter(&editor.font_search.text);
+        let active = if filtered.is_empty() {
+            0
+        } else {
+            editor
+                .font_picker_active
+                .min(filtered.len().saturating_sub(1))
+        };
+        let selected_for_list = filtered
+            .get(active)
+            .cloned()
+            .unwrap_or_else(|| current_family.clone());
+        let search = text_input(&editor.font_search, TextStyle::new(13.0, 400.0))
+            .key("pe-font-family-search")
+            .single_line()
+            .w_full()
+            .h(30.0)
+            .pl(10.0)
+            .pr(10.0)
+            .pt(7.0)
+            .pb(7.0)
+            .radius(6.0)
+            .items_center()
+            .fill(theme::linear(p.tab_bg))
+            .border(1.0, theme::linear(p.active_border))
+            .color(text_color(p))
+            .on_edit(|model: &mut Model| match &mut model.settings_mode {
+                crate::model::SettingsMode::Open(ui) => {
+                    let editor = ui.profile_editor.as_mut().unwrap();
+                    editor.font_picker_active = 0;
+                    &mut editor.font_search
+                }
+                _ => unreachable!(),
+            })
+            .on_input_key(|model: &mut Model, ev: &KeyEvent, _tx: &mut Tx| {
+                let families = match &model.settings_mode {
+                    crate::model::SettingsMode::Open(ui) => {
+                        let editor = ui.profile_editor.as_ref().unwrap();
+                        font_picker::FontCatalog::system().filter(&editor.font_search.text)
+                    }
+                    _ => return false,
+                };
+                if families.is_empty() {
+                    if matches!(ev.key, Key::Escape) {
+                        let prev = match &model.settings_mode {
+                            crate::model::SettingsMode::Open(ui) => ui
+                                .profile_editor
+                                .as_ref()
+                                .and_then(|e| e.font_family_before_pick.clone()),
+                            _ => None,
+                        };
+                        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                            if let Some(editor) = ui.profile_editor.as_mut() {
+                                if let Some(prev) = prev {
+                                    editor.font_family = rune::TextEdit::new(prev);
+                                }
+                                editor.font_picker_open = false;
+                                editor.font_family_before_pick = None;
+                                editor.font_search = rune::TextEdit::new("");
+                                editor.font_picker_active = 0;
+                            }
+                        }
+                        return true;
+                    }
+                    return false;
+                }
+                let current = match &model.settings_mode {
+                    crate::model::SettingsMode::Open(ui) => ui
+                        .profile_editor
+                        .as_ref()
+                        .unwrap()
+                        .font_picker_active
+                        .min(families.len() - 1),
+                    _ => 0,
+                };
+                match ev.key {
+                    Key::Down => {
+                        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                            ui.profile_editor.as_mut().unwrap().font_picker_active =
+                                (current + 1).min(families.len() - 1);
+                        }
+                        true
+                    }
+                    Key::Up => {
+                        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                            ui.profile_editor.as_mut().unwrap().font_picker_active =
+                                current.saturating_sub(1);
+                        }
+                        true
+                    }
+                    Key::PageDown => {
+                        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                            ui.profile_editor.as_mut().unwrap().font_picker_active =
+                                (current + 10).min(families.len() - 1);
+                        }
+                        true
+                    }
+                    Key::PageUp => {
+                        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                            ui.profile_editor.as_mut().unwrap().font_picker_active =
+                                current.saturating_sub(10);
+                        }
+                        true
+                    }
+                    Key::Home => {
+                        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                            ui.profile_editor.as_mut().unwrap().font_picker_active = 0;
+                        }
+                        true
+                    }
+                    Key::End => {
+                        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                            ui.profile_editor.as_mut().unwrap().font_picker_active =
+                                families.len() - 1;
+                        }
+                        true
+                    }
+                    Key::Enter => {
+                        let chosen = families[current].clone();
+                        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                            if let Some(editor) = ui.profile_editor.as_mut() {
+                                editor.font_family = rune::TextEdit::new(chosen);
+                                editor.font_picker_open = false;
+                                editor.font_family_before_pick = None;
+                                editor.font_search = rune::TextEdit::new("");
+                                editor.font_picker_active = 0;
+                            }
+                        }
+                        true
+                    }
+                    Key::Escape => {
+                        let prev = match &model.settings_mode {
+                            crate::model::SettingsMode::Open(ui) => ui
+                                .profile_editor
+                                .as_ref()
+                                .and_then(|e| e.font_family_before_pick.clone()),
+                            _ => None,
+                        };
+                        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                            if let Some(editor) = ui.profile_editor.as_mut() {
+                                if let Some(prev) = prev {
+                                    editor.font_family = rune::TextEdit::new(prev);
+                                }
+                                editor.font_picker_open = false;
+                                editor.font_family_before_pick = None;
+                                editor.font_search = rune::TextEdit::new("");
+                                editor.font_picker_active = 0;
+                            }
+                        }
+                        true
+                    }
+                    _ => false,
+                }
+            });
+
+        return col()
+            .w_full()
+            .grow(1.0)
+            .gap(10.0)
+            .child(
+                row()
+                    .w_full()
+                    .items_center()
+                    .justify_between()
+                    .child(
+                        text("Font family")
+                            .color(text_color(p))
+                            .font(TextStyle::new(15.0, 500.0)),
+                    )
+                    .child(
+                        text(&editor.original_name)
+                            .color(theme::linear(p.muted))
+                            .font(TextStyle::new(12.0, 400.0)),
+                    ),
+            )
+            .child(
+                col()
+                    .w_full()
+                    .gap(6.0)
+                    .child(
+                        text("Search")
+                            .color(theme::linear(p.muted))
+                            .font(TextStyle::new(12.0, 400.0)),
+                    )
+                    .child(search),
+            )
+            .child(
+                el().w_full()
+                    .grow(1.0)
+                    .min_h(0.0)
+                    .radius(6.0)
+                    .border(1.0, theme::linear(p.active_border))
+                    .fill(theme::linear(p.bg))
+                    .child(font_picker::family_list::<Model, _, _>(
+                        &filtered,
+                        &selected_for_list,
+                        |model: &mut Model, family: &str| {
+                            if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                                if let Some(editor) = ui.profile_editor.as_mut() {
+                                    editor.font_family = rune::TextEdit::new(family);
+                                    editor.font_picker_open = false;
+                                    editor.font_family_before_pick = None;
+                                    editor.font_search = rune::TextEdit::new("");
+                                    editor.font_picker_active = 0;
+                                }
+                            }
+                        },
+                        |model: &mut Model, family: &str| {
+                            if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                                if let Some(editor) = ui.profile_editor.as_mut() {
+                                    let filtered = font_picker::FontCatalog::system()
+                                        .filter(&editor.font_search.text);
+                                    if let Some(i) = filtered.iter().position(|f| f == family) {
+                                        editor.font_picker_active = i;
+                                    }
+                                }
+                            }
+                        },
+                    )),
+            )
+            .child(
+                row()
+                    .w_full()
+                    .gap(8.0)
+                    .justify_center()
+                    .child(settings_chip(
+                        "Cancel",
+                        "pe-font-cancel",
+                        p,
+                        |model, _tx| {
+                            let prev = match &model.settings_mode {
+                                crate::model::SettingsMode::Open(ui) => ui
+                                    .profile_editor
+                                    .as_ref()
+                                    .and_then(|e| e.font_family_before_pick.clone()),
+                                _ => None,
+                            };
+                            if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                                if let Some(editor) = ui.profile_editor.as_mut() {
+                                    if let Some(prev) = prev {
+                                        editor.font_family = rune::TextEdit::new(prev);
+                                    }
+                                    editor.font_picker_open = false;
+                                    editor.font_family_before_pick = None;
+                                    editor.font_search = rune::TextEdit::new("");
+                                    editor.font_picker_active = 0;
+                                }
+                            }
+                        },
+                    )),
+            );
+    }
+
     let mut grid = col().w_full().gap(6.0);
     #[allow(clippy::type_complexity)]
     let rows: [(
@@ -1243,200 +1499,52 @@ fn profile_editor_view(model: &Model) -> El {
     let family_label = if current_family.is_empty() {
         "Cascadia Code NF".to_owned()
     } else {
-        current_family.clone()
+        current_family
     };
-    let picker_open = editor.font_picker_open;
-    let font_entry = row()
-        .key("pe-font-family-entry")
+    let font_row = row()
+        .key("pe-font-family-open")
         .w_full()
-        .h(36.0)
+        .h(32.0)
+        .gap(10.0)
         .items_center()
-        .justify_between()
-        .pl(10.0)
-        .pr(10.0)
-        .radius(6.0)
-        .fill(theme::linear(p.tab_bg))
-        .border(1.0, theme::linear(p.active_border))
-        .hover(hover_overlay(p))
-        .on_press_tx(|model: &mut Model, _tx| {
-            if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
-                if let Some(editor) = ui.profile_editor.as_mut() {
-                    if editor.font_picker_open {
-                        editor.font_picker_open = false;
-                        editor.font_search = rune::TextEdit::new("");
-                        editor.font_picker_active = 0;
-                    } else {
-                        editor.font_picker_open = true;
-                        editor.font_search = rune::TextEdit::new("");
-                        editor.font_picker_active = 0;
+        .child(
+            el().w(96.0)
+                .h(32.0)
+                .items_center()
+                .child(text("Font family").color(theme::linear(p.muted))),
+        )
+        .child(
+            row()
+                .key("pe-font-family-button")
+                .grow(1.0)
+                .h(30.0)
+                .pl(10.0)
+                .pr(10.0)
+                .radius(6.0)
+                .items_center()
+                .justify_between()
+                .fill(theme::linear(p.tab_bg))
+                .border(1.0, theme::linear(p.active_border))
+                .hover(hover_overlay(p))
+                .on_press_tx(|model: &mut Model, _tx| {
+                    if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+                        if let Some(editor) = ui.profile_editor.as_mut() {
+                            editor.font_family_before_pick = Some(editor.font_family.text.clone());
+                            editor.font_picker_open = true;
+                            editor.font_search = rune::TextEdit::new("");
+                            editor.font_picker_active = 0;
+                        }
                     }
-                }
-            }
-        })
-        .child(text(family_label).color(text_color(p)).truncate())
-        .child(text(if picker_open { "▴" } else { "▾" }).color(theme::linear(p.muted)));
+                })
+                .child(text(family_label).color(text_color(p)).truncate())
+                .child(
+                    text("Choose…")
+                        .color(theme::linear(p.muted))
+                        .font(TextStyle::new(12.0, 400.0)),
+                ),
+        );
+    grid = grid.child(font_row);
 
-    let mut font_picker = col()
-        .w_full()
-        .gap(6.0)
-        .pt(6.0)
-        .child(text("Font family").color(theme::linear(p.muted)))
-        .child(font_entry);
-    if picker_open {
-        let catalog = font_picker::FontCatalog::system();
-        let filtered = catalog.filter(&editor.font_search.text);
-        let active = editor
-            .font_picker_active
-            .min(filtered.len().saturating_sub(1));
-        let selected_for_list = filtered
-            .get(active)
-            .cloned()
-            .unwrap_or_else(|| current_family.clone());
-        let search = text_input(&editor.font_search, TextStyle::new(13.0, 400.0))
-            .key("pe-font-family-search")
-            .single_line()
-            .w_full()
-            .h(30.0)
-            .pl(10.0)
-            .pr(10.0)
-            .pt(7.0)
-            .pb(7.0)
-            .radius(6.0)
-            .items_center()
-            .fill(theme::linear(p.tab_bg))
-            .border(1.0, theme::linear(p.active_border))
-            .color(text_color(p))
-            .on_edit(|model: &mut Model| match &mut model.settings_mode {
-                crate::model::SettingsMode::Open(ui) => {
-                    let editor = ui.profile_editor.as_mut().unwrap();
-                    editor.font_picker_active = 0;
-                    &mut editor.font_search
-                }
-                _ => unreachable!(),
-            })
-            .on_input_key(|model: &mut Model, ev: &KeyEvent, _tx: &mut Tx| {
-                let families = match &model.settings_mode {
-                    crate::model::SettingsMode::Open(ui) => {
-                        let editor = ui.profile_editor.as_ref().unwrap();
-                        font_picker::FontCatalog::system().filter(&editor.font_search.text)
-                    }
-                    _ => return false,
-                };
-                if families.is_empty() {
-                    return matches!(ev.key, Key::Escape);
-                }
-                let current = match &model.settings_mode {
-                    crate::model::SettingsMode::Open(ui) => ui
-                        .profile_editor
-                        .as_ref()
-                        .unwrap()
-                        .font_picker_active
-                        .min(families.len() - 1),
-                    _ => 0,
-                };
-                match ev.key {
-                    Key::Down => {
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
-                            ui.profile_editor.as_mut().unwrap().font_picker_active =
-                                (current + 1).min(families.len() - 1);
-                        }
-                        true
-                    }
-                    Key::Up => {
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
-                            ui.profile_editor.as_mut().unwrap().font_picker_active =
-                                current.saturating_sub(1);
-                        }
-                        true
-                    }
-                    Key::PageDown => {
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
-                            ui.profile_editor.as_mut().unwrap().font_picker_active =
-                                (current + 10).min(families.len() - 1);
-                        }
-                        true
-                    }
-                    Key::PageUp => {
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
-                            ui.profile_editor.as_mut().unwrap().font_picker_active =
-                                current.saturating_sub(10);
-                        }
-                        true
-                    }
-                    Key::Home => {
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
-                            ui.profile_editor.as_mut().unwrap().font_picker_active = 0;
-                        }
-                        true
-                    }
-                    Key::End => {
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
-                            ui.profile_editor.as_mut().unwrap().font_picker_active =
-                                families.len() - 1;
-                        }
-                        true
-                    }
-                    Key::Enter => {
-                        let chosen = families[current].clone();
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
-                            if let Some(editor) = ui.profile_editor.as_mut() {
-                                editor.font_family = rune::TextEdit::new(chosen);
-                                editor.font_picker_open = false;
-                                editor.font_search = rune::TextEdit::new("");
-                                editor.font_picker_active = 0;
-                            }
-                        }
-                        true
-                    }
-                    Key::Escape => {
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
-                            if let Some(editor) = ui.profile_editor.as_mut() {
-                                editor.font_picker_open = false;
-                                editor.font_search = rune::TextEdit::new("");
-                                editor.font_picker_active = 0;
-                            }
-                        }
-                        true
-                    }
-                    _ => false,
-                }
-            });
-        font_picker = font_picker
-            .child(text("Search fonts (Enter to pick, Esc to close)").color(theme::linear(p.muted)))
-            .child(search)
-            .child(
-                el().w_full()
-                    .h(180.0)
-                    .radius(6.0)
-                    .border(1.0, theme::linear(p.active_border))
-                    .fill(theme::linear(p.bg))
-                    .child(font_picker::family_list::<Model, _, _>(
-                        &filtered,
-                        &selected_for_list,
-                        |model: &mut Model, family: &str| {
-                            if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
-                                if let Some(editor) = ui.profile_editor.as_mut() {
-                                    editor.font_family = rune::TextEdit::new(family);
-                                    editor.font_picker_open = false;
-                                    editor.font_search = rune::TextEdit::new("");
-                                    editor.font_picker_active = 0;
-                                }
-                            }
-                        },
-                        |model: &mut Model, family: &str| {
-                            if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
-                                if let Some(editor) = ui.profile_editor.as_mut() {
-                                    let filtered = font_picker::FontCatalog::system()
-                                        .filter(&editor.font_search.text);
-                                    if let Some(i) = filtered.iter().position(|f| f == family) {
-                                        editor.font_picker_active = i;
-                                    }
-                                }
-                            }
-                        },
-                    )),
-            );
-    }
     col()
         .w_full()
         .grow(1.0)
@@ -1457,8 +1565,7 @@ fn profile_editor_view(model: &Model) -> El {
                     stick_bottom: false,
                 })
                 .gap(6.0)
-                .child(grid)
-                .child(font_picker),
+                .child(grid),
         )
         .child(
             row()

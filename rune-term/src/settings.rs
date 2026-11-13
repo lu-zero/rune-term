@@ -8,10 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::theme::{self, Palette};
 
+pub use rune_term_core::font::{clamp_font_size, DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE};
+
 pub const DEFAULT_PROFILE: &str = "Default";
-pub const DEFAULT_FONT_SIZE: f32 = 14.0;
-const MIN_FONT_SIZE: f32 = 6.0;
-const MAX_FONT_SIZE: f32 = 96.0;
 const CONFIG_NAME: &str = "rune-term.toml";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -387,13 +386,6 @@ impl ConfigFile {
         fs::rename(&tmp, path)?;
         Ok(())
     }
-}
-
-pub fn clamp_font_size(size: f32) -> f32 {
-    if !size.is_finite() {
-        return DEFAULT_FONT_SIZE;
-    }
-    size.clamp(MIN_FONT_SIZE, MAX_FONT_SIZE)
 }
 
 pub fn config_path() -> PathBuf {

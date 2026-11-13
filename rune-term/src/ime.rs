@@ -33,7 +33,7 @@ pub fn mount_caret(pane: El, cursor_cell: (u16, u16), cell_px: (u16, u16), scale
 
 pub fn on_ime(model: &mut Model, ime: &Ime, tx: &mut Tx) -> bool {
     match ime {
-        Ime::Preedit(text, cursor) => {
+        Ime::Preedit(text, cursor, _clauses) => {
             if text.is_empty() {
                 model.preedit = None;
             } else {
@@ -63,6 +63,7 @@ pub fn on_ime(model: &mut Model, ime: &Ime, tx: &mut Tx) -> bool {
             tx.wake_after(Duration::ZERO);
             true
         }
+        Ime::Select(_) => false,
         Ime::Enabled | Ime::Disabled => {
             if matches!(ime, Ime::Disabled) {
                 model.preedit = None;

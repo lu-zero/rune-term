@@ -346,7 +346,7 @@ fn drop_closed(model: &mut Model, id: SurfaceId, tx: &mut Tx) -> bool {
         return false;
     }
     drop_leaf(model, id);
-    if model.surfaces.len() == 0 {
+    if model.surfaces.is_empty() {
         tx.close_window();
     } else {
         crate::tabs::show_active(model);

@@ -91,6 +91,7 @@ pub struct ProfileEditor {
     pub shell_args: TextEdit,
     pub cwd: TextEdit,
     pub font_picker_open: bool,
+    pub font_family_before_pick: Option<String>,
     pub font_search: TextEdit,
     pub font_picker_active: usize,
 }
@@ -219,6 +220,7 @@ impl ProfileEditor {
             shell_args: TextEdit::new(shell_args),
             cwd: TextEdit::new(profile.cwd.clone().unwrap_or_default()),
             font_picker_open: false,
+            font_family_before_pick: None,
             font_search: TextEdit::new(""),
             font_picker_active: 0,
         }
