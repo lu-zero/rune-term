@@ -91,4 +91,19 @@ impl State {
     pub fn invalidate_theme(&mut self) {
         self.grid_draw.invalidate_theme();
     }
+
+    pub fn clear_preedit(&mut self) {
+        self.preedit = None;
+    }
+
+    pub fn set_preedit(&mut self, text: String, cursor: Option<(usize, usize)>) {
+        crate::ime::set_preedit(&mut self.preedit, text, cursor);
+    }
+
+    /// Clears preedit and commits text to the primary surface, if any.
+    pub fn commit_preedit_text(&mut self, text: &str) -> bool {
+        self.preedit = None;
+        self.primary()
+            .is_some_and(|host| crate::ime::commit_text(&host.surface, text))
+    }
 }
