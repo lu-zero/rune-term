@@ -47,15 +47,7 @@ pub fn app() -> App<Model> {
         .compositor(GridCompositor::default())
         .on_ime(ime::on_ime)
         .on_modifiers(|model, mods, tx| {
-            let changed = model.terminal.held_mods != mods;
-            model.terminal.held_mods = mods;
-            if changed
-                && model
-                    .terminal
-                    .surfaces
-                    .iter_mut()
-                    .any(|host| host.hover_link.is_some())
-            {
+            if model.terminal.set_held_mods(mods) && model.terminal.any_hover_link() {
                 tx.wake_after(std::time::Duration::ZERO);
             }
         })

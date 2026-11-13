@@ -106,4 +106,16 @@ impl State {
         self.primary()
             .is_some_and(|host| crate::ime::commit_text(&host.surface, text))
     }
+
+    pub fn set_held_mods(&mut self, mods: Mods) -> bool {
+        let changed = self.held_mods != mods;
+        self.held_mods = mods;
+        changed
+    }
+
+    pub fn any_hover_link(&mut self) -> bool {
+        self.surfaces
+            .iter_mut()
+            .any(|host| host.hover_link.is_some())
+    }
 }
