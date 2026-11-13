@@ -2,7 +2,7 @@
 
 use rune::compose::DeviceKey;
 use rune::render::{Instance, KIND_EFFECT};
-use rune::{App, AppSpec, Compositor, Frame, MenuItem, Titlebar, Tx};
+use rune::{App, AppSpec, Compositor, Frame, Titlebar, Tx};
 use term_grid::images::ImageBucket;
 use term_grid::{DrawSlot, GridRenderer, SolidSlot};
 
@@ -13,7 +13,7 @@ use crate::images::Images;
 use crate::ime;
 use crate::model::{self, Model};
 use crate::pane_input;
-use crate::resize::{self, ResizeEffect, ResizeRequest};
+use crate::resize::{self, ResizeEffect};
 use crate::scrollback::{self, Bars};
 
 pub fn run() {
@@ -27,22 +27,6 @@ pub fn run_with_rune_args(args: impl IntoIterator<Item = String>) {
 }
 
 pub fn app() -> App<Model> {
-    let mut settings = MenuItem::new("Settings…", |model: &mut Model, _tx: &mut Tx| {
-        model.ui.settings_mode =
-            crate::settings_ui::SettingsMode::Open(Box::new(crate::settings_ui::SettingsUi {
-                tab: crate::settings_ui::SettingsTab::Font,
-                theme_editor: None,
-                profile_editor: None,
-                font_family_picker_open: false,
-                font_family_before_pick: None,
-                font_search: rune::TextEdit::new(""),
-                font_picker_active: 0,
-            }));
-    });
-    #[cfg(target_os = "macos")]
-    if let Ok(sc) = "cmd+comma".parse::<rune::Shortcut>() {
-        settings = settings.key_equivalent(sc);
-    }
     App::new(spec())
         .compositor(GridCompositor::default())
         .on_ime(ime::on_ime)
@@ -52,7 +36,6 @@ pub fn app() -> App<Model> {
             }
         })
         .titlebar(Titlebar::new(chrome::TITLEBAR_H))
-        .menu_item(settings)
 }
 
 fn spec() -> AppSpec<Model> {
@@ -108,36 +91,6 @@ pub fn fit_layout(model: &mut Model, slot: (f32, f32), scale: f32) -> Option<Res
         scale,
         cell_points,
     ))
-}
-
-pub fn apply_font_size(model: &mut Model, tx: &mut Tx, size: f32) {
-    let size = crate::settings::clamp_font_size(size);
-    if (size - model.font_size).abs() < f32::EPSILON {
-        return;
-    }
-    model.font_size = size;
-    model.config.set_font_size(size);
-    model.cell_points = crate::metrics::cell_points_for(size);
-    let scale = if model.scale.is_finite() && model.scale > 0.0 {
-        model.scale
-    } else {
-        1.0
-    };
-    let Some(host) = model.terminal.primary() else {
-        let _ = model.config.save();
-        return;
-    };
-    let effect = resize::apply(ResizeRequest::Font {
-        chrome_points: (0.0, crate::chrome::TITLEBAR_H),
-        cols: host.cols.max(1),
-        rows: host.rows.max(1),
-        cell_points: model.cell_points,
-        scale,
-    });
-    perform_resize(tx, host, effect);
-    if let Err(err) = model.config.save() {
-        eprintln!("rune-term: failed to save settings: {err}");
-    }
 }
 
 #[derive(Default)]

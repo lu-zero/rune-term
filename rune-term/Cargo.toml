@@ -21,8 +21,6 @@ rune.workspace = true
 librio.workspace = true
 term-grid = { path = "../term-grid" }
 term-input = { path = "../term-input" }
-color-picker = { path = "../color-picker" }
-font-picker = { path = "../font-picker" }
 wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"

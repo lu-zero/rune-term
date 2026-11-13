@@ -98,7 +98,7 @@ pub fn on_drag_mark(model: &mut Model, mark: u32, drag: &mut Drag, scale: f32, t
             tx.wake_after(Duration::ZERO);
         }
         core_terminal::LinkAction::Confirm(uri) => {
-            model.ui.pending_link_open = Some(uri);
+            model.pending_link_open = Some(uri);
             tx.wake_after(Duration::ZERO);
         }
         core_terminal::LinkAction::None => {
@@ -312,19 +312,6 @@ fn handle_app_chord(
     }
     if code == term_input::PhysicalKeyCode::KeyF {
         crate::search::open(model);
-        return true;
-    }
-    if code == term_input::PhysicalKeyCode::Comma {
-        model.ui.settings_mode =
-            crate::settings_ui::SettingsMode::Open(Box::new(crate::settings_ui::SettingsUi {
-                tab: crate::settings_ui::SettingsTab::Font,
-                theme_editor: None,
-                profile_editor: None,
-                font_family_picker_open: false,
-                font_family_before_pick: None,
-                font_search: rune::TextEdit::new(""),
-                font_picker_active: 0,
-            }));
         return true;
     }
     if code == term_input::PhysicalKeyCode::KeyV {
@@ -859,7 +846,7 @@ mod tests {
                     tx.wake_after(Duration::ZERO);
                 }
                 rune_term_core::terminal_input::LinkAction::Confirm(uri) => {
-                    model.ui.pending_link_open = Some(uri);
+                    model.pending_link_open = Some(uri);
                     tx.wake_after(Duration::ZERO);
                 }
                 rune_term_core::terminal_input::LinkAction::None => {
@@ -1262,7 +1249,7 @@ mod tests {
             librio::Modifiers::CTRL
         };
         gesture_at(&mut model, Phase::Down, 1.0, 1.0, 1, mods);
-        assert_eq!(model.ui.pending_link_open.as_deref(), Some("file:///tmp/x"));
+        assert_eq!(model.pending_link_open.as_deref(), Some("file:///tmp/x"));
         assert!(crate::hyperlink::take_captured_opens().is_empty());
         assert!(model.shared.take_output().is_empty());
         assert!(model

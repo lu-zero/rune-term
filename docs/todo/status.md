@@ -57,14 +57,14 @@ The numbers are that plan's.
       uploaded/cached by image stamp, and drawn in z-buckets (under-text and
       over-text) around the grid pass. Headless `graphics` test injects a small
       kitty image and verifies pixels. Sixel/iTerm2 remain item 18.
-- [~] **16. Settings.** Cmd+, or the app menu **Settings…** opens an
-      interactive settings modal (Rune widgets): font size stepper/presets apply
-      live via `ResizeRequest::Font`, and built-in theme selection applies live
-      to chrome, grid colors, selection/search/scrollbar, and saves to TOML
-      config (`rune-term.toml`, XDG/platform path). Loads defaults/profile font
-      size and theme on init; Cascadia Code NF metrics scale with font size.
-      Named profile UI/switching, font family wired to atlas, and broader
-      settings polish remain. Design:
+- [~] **16. Settings.** Config loads from and saves to TOML
+      (`rune-term.toml`, XDG/platform path); unreadable/unparseable config is
+      not overwritten. Defaults/profile font size and theme are applied on init
+      and Cascadia Code NF metrics scale with font size. The previous in-app
+      settings UI has been removed pending rework; manual TOML editing is the
+      configuration path for now. Named profile UI/switching, live in-app
+      editing (including font/theme/family/profile flows), font family wired to
+      atlas, and broader settings polish remain. Design:
       [`settings-profiles.md`](./settings-profiles.md). Follow-on:
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
 - [x] **17. Box-drawing and braille sprites.** Box drawing, block elements

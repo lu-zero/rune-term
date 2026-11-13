@@ -5,8 +5,8 @@ use librio::Engine;
 use crate::chrome::{Leaf, LeafId, Node, Tab, LEAF, PANE_MARK};
 use crate::delegate::{self, Shared};
 use crate::metrics;
+use crate::search::SearchUi;
 use crate::settings::ConfigFile;
-use crate::settings_ui::UiState;
 use crate::theme::Palette;
 
 pub struct Model {
@@ -19,7 +19,8 @@ pub struct Model {
     pub config: ConfigFile,
     pub font_size: f32,
     pub palette: Arc<Palette>,
-    pub ui: UiState,
+    pub search: SearchUi,
+    pub pending_link_open: Option<String>,
     pub(crate) shared: Arc<Shared>,
     pub(crate) pending_inject: Option<Vec<u8>>,
     pub(crate) _ipc: Option<crate::ipc::Server>,
@@ -56,7 +57,8 @@ pub fn init() -> Model {
         config,
         font_size,
         palette,
-        ui: UiState::default(),
+        search: SearchUi::default(),
+        pending_link_open: None,
         shared: std::sync::Arc::clone(&shared),
         pending_inject,
         _ipc: Some(crate::ipc::start(shared)),
