@@ -463,7 +463,7 @@ mod tests {
         ));
         assert!(model.shared.take_output().is_empty());
         assert_eq!(model.tabs.len(), 2);
-        assert_eq!(model.terminal.surfaces.len(), 2);
+        assert_eq!(model.terminal.len(), 2);
         assert_eq!(model.active, 1);
         let second = model.terminal.primary().unwrap().surface.id();
         assert_ne!(first, second);
@@ -597,7 +597,7 @@ mod tests {
         ));
         assert!(model.shared.take_output().is_empty());
         assert_eq!(model.tabs.len(), 1);
-        assert_eq!(model.terminal.surfaces.len(), 1);
+        assert_eq!(model.terminal.len(), 1);
         assert_eq!(model.active, 0);
         assert_eq!(model.terminal.primary().unwrap().surface.id(), first);
     }
@@ -622,7 +622,7 @@ mod tests {
             assert!(on_physical(model, &event, tx));
         });
         assert!(rt.state.tabs.is_empty());
-        assert_eq!(rt.state.terminal.surfaces.len(), 0);
+        assert_eq!(rt.state.terminal.len(), 0);
         assert_eq!(rt.shell_request, Some(Shell::Close));
     }
 

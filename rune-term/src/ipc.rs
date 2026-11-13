@@ -334,7 +334,7 @@ fn collect_panes_inner(
     match node {
         crate::chrome::Node::Leaf(leaf) => {
             let (cols, rows, backend, session) =
-                if let Some(host) = model.terminal.surfaces.get(leaf.surface) {
+                if let Some(host) = model.terminal.get(leaf.surface) {
                     (host.cols, host.rows, "local".to_owned(), None)
                 } else {
                     (leaf.cols, leaf.rows, "local".to_owned(), None)

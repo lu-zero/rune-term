@@ -48,7 +48,7 @@ pub fn open_with_profile(model: &mut Model, profile: &str) -> bool {
     if let Some(leaf) = find_leaf_mut(&mut model.tabs[model.active].root, id) {
         leaf.surface = surface;
     }
-    model.terminal.surfaces.show(surface);
+    model.terminal.show(surface);
     true
 }
 
@@ -106,7 +106,7 @@ pub fn close(model: &mut Model, index: usize, tx: &mut Tx) {
     let ids = surfaces_of(&tab.root);
     for id in ids {
         model.shared.remove_flag(id);
-        model.terminal.surfaces.remove(id);
+        model.terminal.remove(id);
     }
     model.tabs.remove(index);
     if model.tabs.is_empty() {
@@ -139,7 +139,7 @@ pub fn show_active(model: &mut Model) {
     let Some(id) = model.tabs.get(model.active).and_then(surface_of) else {
         return;
     };
-    model.terminal.surfaces.show(id);
+    model.terminal.show(id);
 }
 
 pub(crate) fn apply_active_profile(model: &mut Model) {
@@ -297,7 +297,7 @@ mod tests {
         let second = shown(&model);
         assert_ne!(second, first);
         assert_eq!(active_surface(&model), second);
-        assert_eq!(model.terminal.surfaces.len(), 2);
+        assert_eq!(model.terminal.len(), 2);
     }
 
     #[test]

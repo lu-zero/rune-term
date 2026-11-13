@@ -52,6 +52,38 @@ impl State {
         self.surfaces.shown_id()
     }
 
+    pub fn show(&mut self, id: SurfaceId) {
+        self.surfaces.show(id);
+    }
+
+    pub fn insert(&mut self, host: HostSurface) {
+        self.surfaces.insert(host);
+    }
+
+    pub fn remove(&mut self, id: SurfaceId) -> Option<HostSurface> {
+        self.surfaces.remove(id)
+    }
+
+    pub fn get(&self, id: SurfaceId) -> Option<&HostSurface> {
+        self.surfaces.get(id)
+    }
+
+    pub fn get_mut(&mut self, id: SurfaceId) -> Option<&mut HostSurface> {
+        self.surfaces.get_mut(id)
+    }
+
+    pub fn len(&self) -> usize {
+        self.surfaces.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.surfaces.is_empty()
+    }
+
+    pub fn focus(&self, mark: u32) -> bool {
+        self.surfaces.focus(mark)
+    }
+
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut HostSurface> {
         self.surfaces.iter_mut()
     }

@@ -280,7 +280,7 @@ pub(crate) fn open_host(
     let id = surface.id();
     model.shared.insert_flag(id, Arc::clone(&flag));
     let render = RenderState::new(&surface);
-    model.terminal.surfaces.insert(HostSurface {
+    model.terminal.insert(HostSurface {
         surface,
         render,
         mark,
@@ -342,11 +342,11 @@ fn apply(model: &mut Model, event: HostEvent, tx: &mut Tx) -> bool {
 /// The shell exited. Drop its leaf. The window closes with the last surface.
 fn drop_closed(model: &mut Model, id: SurfaceId, tx: &mut Tx) -> bool {
     model.shared.remove_flag(id);
-    if model.terminal.surfaces.remove(id).is_none() {
+    if model.terminal.remove(id).is_none() {
         return false;
     }
     drop_leaf(model, id);
-    if model.terminal.surfaces.is_empty() {
+    if model.terminal.is_empty() {
         tx.close_window();
     } else {
         crate::tabs::show_active(model);
@@ -381,7 +381,7 @@ fn drop_leaf(model: &mut Model, surface: SurfaceId) {
 fn apply_action(model: &mut Model, id: SurfaceId, action: Action) -> bool {
     match action {
         Action::SetTitle { title, .. } => {
-            let changed = match model.terminal.surfaces.get_mut(id) {
+            let changed = match model.terminal.get_mut(id) {
                 Some(host) if host.title != title => {
                     host.title = title.clone();
                     true
@@ -395,7 +395,7 @@ fn apply_action(model: &mut Model, id: SurfaceId, action: Action) -> bool {
             changed
         }
         Action::RingBell => {
-            let Some(host) = model.terminal.surfaces.get_mut(id) else {
+            let Some(host) = model.terminal.get_mut(id) else {
                 return false;
             };
             if host.bell {
@@ -405,14 +405,14 @@ fn apply_action(model: &mut Model, id: SurfaceId, action: Action) -> bool {
             true
         }
         Action::CursorBlinkingChange => {
-            let Some(host) = model.terminal.surfaces.get_mut(id) else {
+            let Some(host) = model.terminal.get_mut(id) else {
                 return false;
             };
             host.blink = !host.blink;
             true
         }
         Action::Progress { state, value } => {
-            let Some(host) = model.terminal.surfaces.get_mut(id) else {
+            let Some(host) = model.terminal.get_mut(id) else {
                 return false;
             };
             let next = Some(Progress { state, value });
@@ -508,7 +508,7 @@ mod tests {
         model.shared.delegate().close_surface(right);
         let rt = latch(model, true);
         assert!(rt.shell_request.is_none());
-        assert_eq!(rt.state.terminal.surfaces.len(), 1);
+        assert_eq!(rt.state.terminal.len(), 1);
         assert_eq!(rt.state.terminal.primary().unwrap().surface.id(), left);
         assert!(matches!(rt.state.tabs[0].root, Node::Leaf(_)));
         assert_eq!(rt.state.tabs[0].focused, crate::chrome::LEAF);
@@ -520,7 +520,7 @@ mod tests {
         model.shared.delegate().close_surface(usize::MAX);
         let rt = latch(model, false);
         assert!(rt.shell_request.is_none());
-        assert_eq!(rt.state.terminal.surfaces.len(), 1);
+        assert_eq!(rt.state.terminal.len(), 1);
         assert_eq!(rt.state.tabs.len(), 1);
     }
 
@@ -550,7 +550,7 @@ mod tests {
         model.shared.delegate().close_surface(right_surface);
         let rt = latch(model, true);
         assert!(rt.shell_request.is_none());
-        assert_eq!(rt.state.terminal.surfaces.len(), 1);
+        assert_eq!(rt.state.terminal.len(), 1);
         assert_eq!(rt.state.terminal.shown_id(), Some(left_surface));
         match &rt.state.tabs[0].root {
             Node::Leaf(leaf) => {
@@ -573,7 +573,7 @@ mod tests {
         assert!(rt.shell_request.is_none());
         assert_eq!(rt.state.tabs.len(), 1);
         assert_eq!(rt.state.active, 0);
-        assert_eq!(rt.state.terminal.surfaces.len(), 1);
+        assert_eq!(rt.state.terminal.len(), 1);
         assert_eq!(rt.state.terminal.shown_id(), Some(active_surface));
         assert_eq!(
             crate::tabs::surface_of(&rt.state.tabs[0]),

@@ -92,7 +92,7 @@ pub fn focus_leaf(model: &mut Model, id: LeafId, tx: &mut Tx) -> bool {
         (moved, leaf_surface(&tab.root, id))
     };
     if let Some(surface) = surface.filter(|sid| *sid != 0) {
-        model.terminal.surfaces.show(surface);
+        model.terminal.show(surface);
     }
     tx.focus(format!("pane-{mark}"), false);
     moved
@@ -313,7 +313,7 @@ fn layout_leaf(
     tx: &mut Tx,
 ) {
     let cell_points = model.cell_points;
-    let Some(host) = model.terminal.surfaces.get_mut(surface) else {
+    let Some(host) = model.terminal.get_mut(surface) else {
         tx.live_only();
         return;
     };
@@ -345,7 +345,7 @@ fn adopt_host_size(model: &mut Model, id: LeafId) {
     else {
         return;
     };
-    let Some(host) = model.terminal.surfaces.get(surface) else {
+    let Some(host) = model.terminal.get(surface) else {
         return;
     };
     if host.cols == 0 || host.rows == 0 {
@@ -542,7 +542,7 @@ mod tests {
     #[test]
     fn a_split_keeps_one_cell_for_the_divider_and_isolates_damage() {
         let mut model = host();
-        assert_eq!(model.terminal.surfaces.len(), 1);
+        assert_eq!(model.terminal.len(), 1);
         let first = model.tabs[0].root.clone();
         let Node::Leaf(original) = first else {
             panic!("the first tab is one leaf");
@@ -550,7 +550,7 @@ mod tests {
         assert_ne!(original.surface, 0);
 
         assert!(split_focused(&mut model, Axis::Horizontal));
-        assert_eq!(model.terminal.surfaces.len(), 2);
+        assert_eq!(model.terminal.len(), 2);
         let (
             left_cols,
             right_cols,
@@ -601,7 +601,7 @@ mod tests {
         assert_eq!(model.tabs[0].focused, right_id);
         assert!(!focus_leaf(&mut model, right_id, &mut rune::Tx::default()));
         {
-            let host = model.terminal.surfaces.get_mut(left_surface).unwrap();
+            let host = model.terminal.get_mut(left_surface).unwrap();
             host.surface.inject_output(b"only-a\r\n");
             host.frame_flag.store(true, Ordering::Release);
         }

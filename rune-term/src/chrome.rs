@@ -1842,7 +1842,7 @@ fn tab_caption(model: &Model, index: usize) -> String {
         return "rune-term".to_string();
     };
     let bell = crate::tabs::surface_of(tab)
-        .and_then(|id| model.terminal.surfaces.get(id))
+        .and_then(|id| model.terminal.get(id))
         .is_some_and(|host| host.bell);
     if bell {
         format!("{} •", tab.title)
