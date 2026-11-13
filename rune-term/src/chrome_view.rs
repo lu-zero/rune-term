@@ -122,11 +122,7 @@ fn single(model: &Model, scale: f32) -> El {
     if hover_active {
         pane = pane.cursor(rune::Cursor::Pointer);
     }
-    let cell_px = model
-        .terminal
-        .primary()
-        .map(|host| host.cell_px)
-        .unwrap_or((0, 0));
+    let cell_px = model.terminal.primary_cell_px();
     col()
         .w_full()
         .grow(1.0)

@@ -228,6 +228,14 @@ impl State {
         }
     }
 
+    pub fn primary_cell_px(&self) -> (u16, u16) {
+        self.primary().map(|h| h.cell_px).unwrap_or((0, 0))
+    }
+
+    pub fn primary_mark(&self) -> Option<u32> {
+        self.primary().map(|h| h.mark)
+    }
+
     pub fn host_for_pane_mut(&mut self, pane: u32, shown_pane: u32) -> Option<&mut HostSurface> {
         if pane == shown_pane {
             self.primary_mut()
