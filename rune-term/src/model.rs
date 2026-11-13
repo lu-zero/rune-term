@@ -10,11 +10,7 @@ use crate::settings::ConfigFile;
 use crate::surfaces::Surfaces;
 use crate::theme::Palette;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Preedit {
-    pub text: String,
-    pub cursor: Option<(usize, usize)>,
-}
+pub use rune_term_core::ime::Preedit;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SettingsTab {
