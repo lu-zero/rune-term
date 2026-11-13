@@ -4,10 +4,9 @@
 use std::time::Duration;
 
 use librio::Modifiers;
-use rune::{
-    Drag, Key, KeyEvent, Mods, Phase, PhysicalInput, PhysicalKeyCode, PointerButton, PointerEvent,
-    Tx, WheelEvent,
-};
+use rune::{Drag, Key, KeyEvent, Phase, PhysicalInput, PointerEvent, Tx, WheelEvent};
+
+use rune_term_core::input as core_input;
 
 use crate::model::Model;
 use crate::surfaces::HostSurface;
@@ -29,12 +28,12 @@ pub fn on_physical_mark(model: &mut Model, mark: u32, event: &PhysicalInput, tx:
         } => deliver(
             model,
             mark,
-            code(*key),
-            mods_of(*mods),
+            core_input::code(*key),
+            core_input::mods_of(*mods),
             *pressed,
             *repeat,
             text.as_deref(),
-            mods_of(*consumed_mods),
+            core_input::mods_of(*consumed_mods),
             tx,
         ),
         PhysicalInput::FocusLost => {
@@ -63,7 +62,7 @@ pub fn on_wheel_mark(
     let Some(host) = model.surfaces.by_mark_mut(mark) else {
         return false;
     };
-    let pitch_y = drawn_pitch(host.cell_px.1, scale);
+    let pitch_y = core_input::drawn_pitch(host.cell_px.1, scale);
     if !(pitch_y.is_finite() && pitch_y > 0.0) {
         tx.live_only();
         return true;
@@ -79,8 +78,8 @@ pub fn on_wheel_mark(
     let lines = host.wheel_remainder.trunc() as i32;
     host.wheel_remainder -= lines as f32;
     if lines != 0 {
-        let (col, row) = cell_for_wheel(host, event.x, event.y, scale);
-        let mods = modifiers(event.mods);
+        let (col, row) = core_input::cell_for_wheel(host, event.x, event.y, scale);
+        let mods = core_input::modifiers(event.mods);
         host.surface.scroll_wheel(lines, col, row, mods);
         crate::scrollback::note_activity(host, tx);
     }
@@ -89,7 +88,7 @@ pub fn on_wheel_mark(
 }
 
 pub fn on_drag_mark(model: &mut Model, mark: u32, drag: &mut Drag, scale: f32, tx: &mut Tx) {
-    let Some(button) = button_code(tx.button()) else {
+    let Some(button) = core_input::button_code(tx.button()) else {
         return;
     };
     gesture(
@@ -100,7 +99,7 @@ pub fn on_drag_mark(model: &mut Model, mark: u32, drag: &mut Drag, scale: f32, t
         drag.y,
         drag.clicks,
         button,
-        modifiers(tx.mods()),
+        core_input::modifiers(tx.mods()),
         scale,
         tx,
     );
@@ -116,7 +115,7 @@ fn try_open_link_at(model: &mut Model, mark: u32, x: f32, y: f32, scale: f32) ->
     let Some(host) = model.surfaces.by_mark_mut(mark) else {
         return LinkAction::None;
     };
-    let cell = cell_under(host, x, y, scale);
+    let cell = core_input::cell_under(host, x, y, scale);
     let Some(link) = cell
         .and_then(|(col, row)| crate::hyperlink::resolve(host, usize::from(row), usize::from(col)))
     else {
@@ -150,7 +149,7 @@ fn begin_local_selection(
         i32::from(row),
         usize::from(col),
         crate::selection::kind(clicks),
-        side_at(x, col, drawn_pitch(host.cell_px.0, scale)),
+        core_input::side_at(x, col, core_input::drawn_pitch(host.cell_px.0, scale)),
     );
     true
 }
@@ -168,7 +167,7 @@ fn update_local_selection(
     host.surface.selection_update(
         i32::from(row),
         usize::from(col),
-        side_at(x, col, drawn_pitch(host.cell_px.0, scale)),
+        core_input::side_at(x, col, core_input::drawn_pitch(host.cell_px.0, scale)),
     );
 }
 
@@ -204,7 +203,7 @@ fn gesture(
     let Some(host) = model.surfaces.by_mark_mut(mark) else {
         return;
     };
-    let cell = cell_under(host, x, y, scale);
+    let cell = core_input::cell_under(host, x, y, scale);
     match phase {
         Phase::Down => {
             host.pointer_button = Some(button);
@@ -254,8 +253,8 @@ pub fn on_pointer_move_mark(
         return;
     };
     if host.pointer_button.is_none() {
-        let mods = modifiers(tx.mods());
-        let cell = cell_under(host, point.x, point.y, scale);
+        let mods = core_input::modifiers(tx.mods());
+        let cell = core_input::cell_under(host, point.x, point.y, scale);
         let hover = match cell {
             Some((col, row)) => {
                 let (line, column) = (usize::from(row), usize::from(col));
@@ -297,10 +296,10 @@ pub fn on_secondary_mark(
     let Some(host) = model.surfaces.by_mark_mut(mark) else {
         return;
     };
-    let mods = modifiers(tx.mods());
+    let mods = core_input::modifiers(tx.mods());
     let mouse_reporting = host.surface.mode_bits() & 1 != 0;
     if mouse_reporting && !mods.contains(Modifiers::SHIFT) {
-        let Some((col, row)) = cell_under(host, point.x, point.y, scale) else {
+        let Some((col, row)) = core_input::cell_under(host, point.x, point.y, scale) else {
             return;
         };
         // Rune delivers the secondary button only on release.
@@ -374,85 +373,6 @@ fn context_action(model: &mut Model, _mark: u32, id: &str, tx: &mut Tx) {
     }
 }
 
-fn cell_under(host: &HostSurface, x: f32, y: f32, scale: f32) -> Option<(u16, u16)> {
-    term_input::cell_at(
-        x,
-        y,
-        drawn_pitch(host.cell_px.0, scale),
-        drawn_pitch(host.cell_px.1, scale),
-        host.cols,
-        host.rows,
-        term_input::Pad::default(),
-    )
-}
-
-/// A miss still scrolls. The cell is the last one on that side, or 0 when
-/// the grid has no cells.
-fn cell_for_wheel(host: &HostSurface, x: f32, y: f32, scale: f32) -> (u16, u16) {
-    if let Some(cell) = cell_under(host, x, y, scale) {
-        return cell;
-    }
-    (
-        edge_cell(x, drawn_pitch(host.cell_px.0, scale), host.cols),
-        edge_cell(y, drawn_pitch(host.cell_px.1, scale), host.rows),
-    )
-}
-
-fn edge_cell(local: f32, pitch: f32, count: u16) -> u16 {
-    if count == 0 || pitch.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) || local < 0.0 {
-        0
-    } else {
-        count - 1
-    }
-}
-
-/// The first half of the cell is [`librio::Side::Left`]. A backwards drag
-/// can include column 0 because the side follows the pointer.
-fn side_at(x: f32, col: u16, pitch: f32) -> librio::Side {
-    if pitch.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
-        return librio::Side::Left;
-    }
-    let into = x - f32::from(col) * pitch;
-    if into >= pitch * 0.5 {
-        librio::Side::Right
-    } else {
-        librio::Side::Left
-    }
-}
-
-fn drawn_pitch(cell_px: u16, scale: f32) -> f32 {
-    if !(scale.is_finite() && scale > 0.0) {
-        return 0.0;
-    }
-    f32::from(cell_px) / scale
-}
-
-fn button_code(button: PointerButton) -> Option<u8> {
-    match button {
-        PointerButton::Primary => Some(0),
-        PointerButton::Middle => Some(1),
-        PointerButton::Secondary => Some(2),
-        _ => None,
-    }
-}
-
-fn modifiers(mods: Mods) -> Modifiers {
-    let mut out = Modifiers::empty();
-    if mods.shift {
-        out |= Modifiers::SHIFT;
-    }
-    if mods.ctrl {
-        out |= Modifiers::CTRL;
-    }
-    if mods.alt {
-        out |= Modifiers::ALT;
-    }
-    if mods.logo {
-        out |= Modifiers::SUPER;
-    }
-    out
-}
-
 /// Keys that arrive before a click focuses the pane. The window still fills
 /// `Tx::physical_key` and `Tx::key_base`. Once the pane is focused,
 /// `on_physical` is the only path, so this does not write the key twice.
@@ -471,8 +391,8 @@ pub fn on_key(model: &mut Model, event: &KeyEvent, tx: &mut Tx) -> bool {
     };
     let code = tx
         .physical_key()
-        .map(code)
-        .unwrap_or_else(|| logical_code(&event.key));
+        .map(core_input::code)
+        .unwrap_or_else(|| core_input::logical_code(&event.key));
     let mark = model
         .surfaces
         .primary()
@@ -482,11 +402,15 @@ pub fn on_key(model: &mut Model, event: &KeyEvent, tx: &mut Tx) -> bool {
         model,
         mark,
         code,
-        mods_of(event.mods),
+        core_input::mods_of(event.mods),
         true,
         tx.key_repeat(),
         text.as_deref(),
-        mods_of(consumed_logical(event.mods, text.as_deref(), tx.key_base())),
+        core_input::mods_of(core_input::consumed_logical(
+            event.mods,
+            text.as_deref(),
+            tx.key_base(),
+        )),
         tx,
     )
 }
@@ -551,7 +475,7 @@ fn deliver(
             crate::tabs::reveal(model, tx);
             return true;
         }
-        if let Some(digit) = tab_digit(code) {
+        if let Some(digit) = core_input::tab_digit(code) {
             crate::tabs::select_digit(model, digit);
             crate::tabs::reveal(model, tx);
             return true;
@@ -588,247 +512,6 @@ fn deliver(
     wrote
 }
 
-/// Same rules as the window's `consumed_mods`: alt and shift are spent when
-/// the platform text differs from the unmodified key. Ctrl stays, so
-/// `encode` can apply `ctrl_byte`. `logo` is never spent.
-fn consumed_logical(mods: Mods, text: Option<&str>, base: Option<char>) -> Mods {
-    let unmodified = base.map(|c| c.to_string());
-    let differs = match (text, unmodified.as_deref()) {
-        (Some(text), Some(base)) => text != base,
-        (Some(_), None) => true,
-        _ => false,
-    };
-    let mut consumed = Mods::default();
-    if cfg!(target_os = "windows") && mods.ctrl && mods.alt && text.is_some() {
-        consumed.ctrl = true;
-        consumed.alt = true;
-        return consumed;
-    }
-    if mods.alt && differs {
-        consumed.alt = true;
-    }
-    if mods.shift && !mods.ctrl && differs {
-        consumed.shift = true;
-    }
-    consumed
-}
-
-fn logical_code(key: &Key) -> term_input::PhysicalKeyCode {
-    use term_input::PhysicalKeyCode as C;
-    match key {
-        Key::Enter => C::Enter,
-        Key::Backspace => C::Backspace,
-        Key::Delete => C::Delete,
-        Key::Left => C::ArrowLeft,
-        Key::Right => C::ArrowRight,
-        Key::Up => C::ArrowUp,
-        Key::Down => C::ArrowDown,
-        Key::Home => C::Home,
-        Key::End => C::End,
-        Key::PageUp => C::PageUp,
-        Key::PageDown => C::PageDown,
-        Key::Insert => C::Insert,
-        Key::Escape => C::Escape,
-        Key::Tab => C::Tab,
-        Key::Command(c) => command_code(*c),
-        Key::Function(1) => C::F1,
-        Key::Function(2) => C::F2,
-        Key::Function(3) => C::F3,
-        Key::Function(4) => C::F4,
-        Key::Function(5) => C::F5,
-        Key::Function(6) => C::F6,
-        Key::Function(7) => C::F7,
-        Key::Function(8) => C::F8,
-        Key::Function(9) => C::F9,
-        Key::Function(10) => C::F10,
-        Key::Function(11) => C::F11,
-        Key::Function(12) => C::F12,
-        Key::Function(13) => C::F13,
-        Key::Function(14) => C::F14,
-        Key::Function(15) => C::F15,
-        Key::Function(16) => C::F16,
-        Key::Function(17) => C::F17,
-        Key::Function(18) => C::F18,
-        Key::Function(19) => C::F19,
-        Key::Function(20) => C::F20,
-        Key::Function(21) => C::F21,
-        Key::Function(22) => C::F22,
-        Key::Function(23) => C::F23,
-        Key::Function(24) => C::F24,
-        _ => C::Unknown,
-    }
-}
-
-/// `Key::Command` is the logical form of a platform chord. The window also
-/// sets `Tx::physical_key`; this covers the path that only has the logical key.
-fn command_code(c: char) -> term_input::PhysicalKeyCode {
-    use term_input::PhysicalKeyCode as C;
-    match c.to_ascii_lowercase() {
-        'a' => C::KeyA,
-        'c' => C::KeyC,
-        'f' => C::KeyF,
-        'n' => C::KeyN,
-        't' => C::KeyT,
-        'v' => C::KeyV,
-        'w' => C::KeyW,
-        '1' => C::Digit1,
-        '2' => C::Digit2,
-        '3' => C::Digit3,
-        '4' => C::Digit4,
-        '5' => C::Digit5,
-        '6' => C::Digit6,
-        '7' => C::Digit7,
-        '8' => C::Digit8,
-        '9' => C::Digit9,
-        _ => C::Unknown,
-    }
-}
-
-fn tab_digit(code: term_input::PhysicalKeyCode) -> Option<u8> {
-    use term_input::PhysicalKeyCode::*;
-    Some(match code {
-        Digit1 => 1,
-        Digit2 => 2,
-        Digit3 => 3,
-        Digit4 => 4,
-        Digit5 => 5,
-        Digit6 => 6,
-        Digit7 => 7,
-        Digit8 => 8,
-        Digit9 => 9,
-        _ => return None,
-    })
-}
-
-fn mods_of(mods: Mods) -> term_input::Mods {
-    term_input::Mods {
-        shift: mods.shift,
-        cmd: mods.cmd,
-        alt: mods.alt,
-        ctrl: mods.ctrl,
-        logo: mods.logo,
-    }
-}
-
-fn code(key: PhysicalKeyCode) -> term_input::PhysicalKeyCode {
-    use rune::PhysicalKeyCode as W;
-    use term_input::PhysicalKeyCode as C;
-    match key {
-        W::KeyA => C::KeyA,
-        W::KeyB => C::KeyB,
-        W::KeyC => C::KeyC,
-        W::KeyD => C::KeyD,
-        W::KeyE => C::KeyE,
-        W::KeyF => C::KeyF,
-        W::KeyG => C::KeyG,
-        W::KeyH => C::KeyH,
-        W::KeyI => C::KeyI,
-        W::KeyJ => C::KeyJ,
-        W::KeyK => C::KeyK,
-        W::KeyL => C::KeyL,
-        W::KeyM => C::KeyM,
-        W::KeyN => C::KeyN,
-        W::KeyO => C::KeyO,
-        W::KeyP => C::KeyP,
-        W::KeyQ => C::KeyQ,
-        W::KeyR => C::KeyR,
-        W::KeyS => C::KeyS,
-        W::KeyT => C::KeyT,
-        W::KeyU => C::KeyU,
-        W::KeyV => C::KeyV,
-        W::KeyW => C::KeyW,
-        W::KeyX => C::KeyX,
-        W::KeyY => C::KeyY,
-        W::KeyZ => C::KeyZ,
-        W::Digit0 => C::Digit0,
-        W::Digit1 => C::Digit1,
-        W::Digit2 => C::Digit2,
-        W::Digit3 => C::Digit3,
-        W::Digit4 => C::Digit4,
-        W::Digit5 => C::Digit5,
-        W::Digit6 => C::Digit6,
-        W::Digit7 => C::Digit7,
-        W::Digit8 => C::Digit8,
-        W::Digit9 => C::Digit9,
-        W::Minus => C::Minus,
-        W::Equal => C::Equal,
-        W::BracketLeft => C::BracketLeft,
-        W::BracketRight => C::BracketRight,
-        W::Quote => C::Quote,
-        W::Comma => C::Comma,
-        W::Period => C::Period,
-        W::Slash => C::Slash,
-        W::Backquote => C::Backquote,
-        W::Backslash => C::Backslash,
-        W::Semicolon => C::Semicolon,
-        W::Space => C::Space,
-        W::Enter => C::Enter,
-        W::Tab => C::Tab,
-        W::Backspace => C::Backspace,
-        W::Escape => C::Escape,
-        W::ArrowUp => C::ArrowUp,
-        W::ArrowDown => C::ArrowDown,
-        W::ArrowLeft => C::ArrowLeft,
-        W::ArrowRight => C::ArrowRight,
-        W::Home => C::Home,
-        W::End => C::End,
-        W::PageUp => C::PageUp,
-        W::PageDown => C::PageDown,
-        W::Insert => C::Insert,
-        W::Delete => C::Delete,
-        W::F1 => C::F1,
-        W::F2 => C::F2,
-        W::F3 => C::F3,
-        W::F4 => C::F4,
-        W::F5 => C::F5,
-        W::F6 => C::F6,
-        W::F7 => C::F7,
-        W::F8 => C::F8,
-        W::F9 => C::F9,
-        W::F10 => C::F10,
-        W::F11 => C::F11,
-        W::F12 => C::F12,
-        W::F13 => C::F13,
-        W::F14 => C::F14,
-        W::F15 => C::F15,
-        W::F16 => C::F16,
-        W::F17 => C::F17,
-        W::F18 => C::F18,
-        W::F19 => C::F19,
-        W::F20 => C::F20,
-        W::F21 => C::F21,
-        W::F22 => C::F22,
-        W::F23 => C::F23,
-        W::F24 => C::F24,
-        W::ShiftLeft => C::ShiftLeft,
-        W::ShiftRight => C::ShiftRight,
-        W::ControlLeft => C::ControlLeft,
-        W::ControlRight => C::ControlRight,
-        W::AltLeft => C::AltLeft,
-        W::AltRight => C::AltRight,
-        W::SuperLeft => C::SuperLeft,
-        W::SuperRight => C::SuperRight,
-        W::CapsLock => C::CapsLock,
-        W::Numpad0 => C::Numpad0,
-        W::Numpad1 => C::Numpad1,
-        W::Numpad2 => C::Numpad2,
-        W::Numpad3 => C::Numpad3,
-        W::Numpad4 => C::Numpad4,
-        W::Numpad5 => C::Numpad5,
-        W::Numpad6 => C::Numpad6,
-        W::Numpad7 => C::Numpad7,
-        W::Numpad8 => C::Numpad8,
-        W::Numpad9 => C::Numpad9,
-        W::NumpadDecimal => C::NumpadDecimal,
-        W::NumpadAdd => C::NumpadAdd,
-        W::NumpadSubtract => C::NumpadSubtract,
-        W::NumpadMultiply => C::NumpadMultiply,
-        W::NumpadDivide => C::NumpadDivide,
-        W::NumpadEnter => C::NumpadEnter,
-        _ => C::Unknown,
-    }
-}
-
 #[cfg(all(test, not(feature = "pty")))]
 mod tests {
     use super::*;
@@ -842,7 +525,13 @@ mod tests {
         model
     }
 
-    fn press(model: &mut Model, key: Code, mods: Mods, text: Option<&str>, consumed: Mods) -> bool {
+    fn press(
+        model: &mut Model,
+        key: Code,
+        mods: rune::Mods,
+        text: Option<&str>,
+        consumed: rune::Mods,
+    ) -> bool {
         let event = PhysicalInput::Key {
             key,
             mods,
@@ -860,9 +549,9 @@ mod tests {
         assert!(press(
             &mut model,
             Code::KeyA,
-            Mods::default(),
+            rune::Mods::default(),
             Some("a"),
-            Mods::default()
+            rune::Mods::default()
         ));
         assert_eq!(model.shared.take_output(), b"a");
     }
@@ -870,9 +559,9 @@ mod tests {
     #[test]
     fn consumed_alt_reaches_the_shell_as_text() {
         let mut model = host();
-        let alt = Mods {
+        let alt = rune::Mods {
             alt: true,
-            ..Mods::default()
+            ..rune::Mods::default()
         };
         assert!(press(&mut model, Code::KeyA, alt, Some("å"), alt));
         assert_eq!(model.shared.take_output(), "å".as_bytes());
@@ -884,9 +573,9 @@ mod tests {
         assert!(press(
             &mut model,
             Code::Numpad5,
-            Mods::default(),
+            rune::Mods::default(),
             Some("5"),
-            Mods::default()
+            rune::Mods::default()
         ));
         assert_eq!(model.shared.take_output(), b"5");
     }
@@ -894,17 +583,17 @@ mod tests {
     #[test]
     fn ctrl_c_reaches_the_shell() {
         let mut model = host();
-        let ctrl = Mods {
+        let ctrl = rune::Mods {
             ctrl: true,
             cmd: !cfg!(target_os = "macos"),
-            ..Mods::default()
+            ..rune::Mods::default()
         };
         assert!(press(
             &mut model,
             Code::KeyC,
             ctrl,
             Some("c"),
-            Mods::default()
+            rune::Mods::default()
         ));
         assert_eq!(model.shared.take_output(), [0x03]);
     }
@@ -925,7 +614,7 @@ mod tests {
             Code::KeyT,
             copy_mods(),
             None,
-            Mods::default()
+            rune::Mods::default()
         ));
         assert!(model.shared.take_output().is_empty());
         assert_eq!(model.tabs.len(), 2);
@@ -937,9 +626,9 @@ mod tests {
         assert!(press(
             &mut model,
             Code::KeyA,
-            Mods::default(),
+            rune::Mods::default(),
             Some("a"),
-            Mods::default()
+            rune::Mods::default()
         ));
         assert_eq!(model.shared.take_output(), b"a");
     }
@@ -947,12 +636,12 @@ mod tests {
     #[test]
     fn logo_and_cmd_open_a_tab_only_on_macos() {
         let mut model = host();
-        let cmd = Mods {
+        let cmd = rune::Mods {
             logo: true,
             cmd: true,
-            ..Mods::default()
+            ..rune::Mods::default()
         };
-        let took = press(&mut model, Code::KeyT, cmd, None, Mods::default());
+        let took = press(&mut model, Code::KeyT, cmd, None, rune::Mods::default());
         assert!(model.shared.take_output().is_empty());
         if cfg!(target_os = "macos") {
             assert!(took);
@@ -973,20 +662,26 @@ mod tests {
             Code::KeyT,
             copy_mods(),
             None,
-            Mods::default()
+            rune::Mods::default()
         ));
-        let cmd = Mods {
+        let cmd = rune::Mods {
             logo: true,
             cmd: true,
-            ..Mods::default()
+            ..rune::Mods::default()
         };
-        let took = press(&mut model, Code::Digit1, cmd, None, Mods::default());
+        let took = press(&mut model, Code::Digit1, cmd, None, rune::Mods::default());
         assert!(model.shared.take_output().is_empty());
         if cfg!(target_os = "macos") {
             assert!(took);
             assert_eq!(model.active, 0);
             assert_eq!(model.surfaces.primary().unwrap().surface.id(), first);
-            assert!(press(&mut model, Code::Digit9, cmd, None, Mods::default()));
+            assert!(press(
+                &mut model,
+                Code::Digit9,
+                cmd,
+                None,
+                rune::Mods::default()
+            ));
             assert_eq!(model.active, 0);
             assert!(model.shared.take_output().is_empty());
         } else {
@@ -1004,22 +699,34 @@ mod tests {
             Code::KeyT,
             copy_mods(),
             None,
-            Mods::default()
+            rune::Mods::default()
         ));
         let second = model.surfaces.primary().unwrap().surface.id();
-        let ctrl = Mods {
+        let ctrl = rune::Mods {
             ctrl: true,
-            ..Mods::default()
+            ..rune::Mods::default()
         };
-        assert!(press(&mut model, Code::Tab, ctrl, None, Mods::default()));
+        assert!(press(
+            &mut model,
+            Code::Tab,
+            ctrl,
+            None,
+            rune::Mods::default()
+        ));
         assert_eq!(model.active, 0);
         assert_eq!(model.surfaces.primary().unwrap().surface.id(), first);
-        let back = Mods {
+        let back = rune::Mods {
             ctrl: true,
             shift: true,
-            ..Mods::default()
+            ..rune::Mods::default()
         };
-        assert!(press(&mut model, Code::Tab, back, None, Mods::default()));
+        assert!(press(
+            &mut model,
+            Code::Tab,
+            back,
+            None,
+            rune::Mods::default()
+        ));
         assert_eq!(model.active, 1);
         assert_eq!(model.surfaces.primary().unwrap().surface.id(), second);
         assert!(model.shared.take_output().is_empty());
@@ -1034,14 +741,14 @@ mod tests {
             Code::KeyT,
             copy_mods(),
             None,
-            Mods::default()
+            rune::Mods::default()
         ));
         assert!(press(
             &mut model,
             Code::KeyW,
             copy_mods(),
             None,
-            Mods::default()
+            rune::Mods::default()
         ));
         assert!(model.shared.take_output().is_empty());
         assert_eq!(model.tabs.len(), 1);
@@ -1065,7 +772,7 @@ mod tests {
                 pressed: true,
                 repeat: false,
                 text: None,
-                consumed_mods: Mods::default(),
+                consumed_mods: rune::Mods::default(),
             };
             assert!(on_physical(model, &event, tx));
         });
@@ -1086,16 +793,16 @@ mod tests {
             }
             host.surface.inject_output(&bytes);
         }
-        let shift = Mods {
+        let shift = rune::Mods {
             shift: true,
-            ..Mods::default()
+            ..rune::Mods::default()
         };
         assert!(press(
             &mut model,
             Code::PageUp,
             shift,
             None,
-            Mods::default()
+            rune::Mods::default()
         ));
         assert!(model.shared.take_output().is_empty());
         let host = model.surfaces.primary_mut().unwrap();
@@ -1114,7 +821,7 @@ mod tests {
             &mut model,
             KeyEvent {
                 key: Key::Text("a".into()),
-                mods: Mods::default(),
+                mods: rune::Mods::default(),
             }
         ));
         assert_eq!(model.shared.take_output(), b"a");
@@ -1127,9 +834,9 @@ mod tests {
             &mut model,
             KeyEvent {
                 key: Key::Text("å".into()),
-                mods: Mods {
+                mods: rune::Mods {
                     alt: true,
-                    ..Mods::default()
+                    ..rune::Mods::default()
                 },
             }
         ));
@@ -1143,10 +850,10 @@ mod tests {
             &mut model,
             KeyEvent {
                 key: Key::Command('t'),
-                mods: Mods {
+                mods: rune::Mods {
                     logo: true,
                     cmd: true,
-                    ..Mods::default()
+                    ..rune::Mods::default()
                 },
             },
         );
@@ -1177,7 +884,7 @@ mod tests {
         host.surface.inject_output(&bytes);
     }
 
-    fn wheel(model: &mut Model, dx: f32, dy: f32, mods: Mods) -> bool {
+    fn wheel(model: &mut Model, dx: f32, dy: f32, mods: rune::Mods) -> bool {
         on_wheel_mark(
             model,
             crate::chrome::PANE_MARK,
@@ -1198,7 +905,7 @@ mod tests {
         let mut model = host();
         sized(&mut model);
         history(&mut model);
-        assert!(wheel(&mut model, 0.0, 2.0, Mods::default()));
+        assert!(wheel(&mut model, 0.0, 2.0, rune::Mods::default()));
         let remainder = model.surfaces.primary().unwrap().wheel_remainder;
         assert!((remainder - 0.1).abs() < 1e-5, "{remainder}");
         assert_eq!(offset(&mut model), 0);
@@ -1211,7 +918,7 @@ mod tests {
         sized(&mut model);
         history(&mut model);
         for _ in 0..5 {
-            assert!(wheel(&mut model, 0.0, 6.0, Mods::default()));
+            assert!(wheel(&mut model, 0.0, 6.0, rune::Mods::default()));
         }
         let remainder = model.surfaces.primary().unwrap().wheel_remainder;
         assert!((remainder - 0.5).abs() < 1e-4, "{remainder}");
@@ -1223,7 +930,7 @@ mod tests {
         let mut model = host();
         sized(&mut model);
         history(&mut model);
-        assert!(wheel(&mut model, 0.0, 20.0, Mods::default()));
+        assert!(wheel(&mut model, 0.0, 20.0, rune::Mods::default()));
         assert!(offset(&mut model) > 0);
     }
 
@@ -1232,9 +939,9 @@ mod tests {
         let mut model = host();
         sized(&mut model);
         history(&mut model);
-        let shift = Mods {
+        let shift = rune::Mods {
             shift: true,
-            ..Mods::default()
+            ..rune::Mods::default()
         };
         assert!(wheel(&mut model, 40.0, 0.0, shift));
         let moved = offset(&mut model);
@@ -1250,7 +957,7 @@ mod tests {
     fn focus_loss_drops_the_wheel_fraction() {
         let mut model = host();
         sized(&mut model);
-        assert!(wheel(&mut model, 0.0, 2.0, Mods::default()));
+        assert!(wheel(&mut model, 0.0, 2.0, rune::Mods::default()));
         assert!(!on_physical(
             &mut model,
             &PhysicalInput::FocusLost,
@@ -1273,11 +980,17 @@ mod tests {
         let scale = 2.0;
         for i in 0..78 {
             let center = (i as f32 + 0.5) * 7.5;
-            assert_eq!(cell_under(host, center, 0.0, scale), Some((i, 0)));
-            assert_eq!(cell_under(host, 0.0, center, scale), Some((0, i)));
+            assert_eq!(
+                core_input::cell_under(host, center, 0.0, scale),
+                Some((i, 0))
+            );
+            assert_eq!(
+                core_input::cell_under(host, 0.0, center, scale),
+                Some((0, i))
+            );
         }
-        assert_eq!(cell_under(host, 588.5, 0.0, scale), None);
-        assert_eq!(cell_under(host, 0.0, 588.5, scale), None);
+        assert_eq!(core_input::cell_under(host, 588.5, 0.0, scale), None);
+        assert_eq!(core_input::cell_under(host, 0.0, 588.5, scale), None);
     }
 
     fn gesture_at(
@@ -1579,18 +1292,18 @@ mod tests {
         );
     }
 
-    fn copy_mods() -> Mods {
+    fn copy_mods() -> rune::Mods {
         if cfg!(target_os = "macos") {
-            Mods {
+            rune::Mods {
                 logo: true,
                 cmd: true,
-                ..Mods::default()
+                ..rune::Mods::default()
             }
         } else {
-            Mods {
+            rune::Mods {
                 ctrl: true,
                 shift: true,
-                ..Mods::default()
+                ..rune::Mods::default()
             }
         }
     }
@@ -1604,7 +1317,7 @@ mod tests {
             Code::KeyC,
             copy_mods(),
             None,
-            Mods::default()
+            rune::Mods::default()
         ));
         assert!(model.shared.take_output().is_empty());
         let text = model
@@ -1646,7 +1359,7 @@ mod tests {
             pressed: true,
             repeat: false,
             text: None,
-            consumed_mods: Mods::default(),
+            consumed_mods: rune::Mods::default(),
         });
         rt.frame(0.0);
         rt.frame(0.0);

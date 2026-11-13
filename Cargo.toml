@@ -6,6 +6,7 @@ members = [
     "term-control",
     "color-picker",
     "font-picker",
+    "rune-term-core",
     "rune-term",
     "rune-term-ctl",
 ]
@@ -21,7 +22,10 @@ rune = { git = "https://github.com/anomalyco/rune", branch = "dev" }
 librio = { git = "https://github.com/raphamorim/rio", branch = "main", default-features = false }
 
 [patch."https://github.com/anomalyco/rune"]
-rune = { git = "https://github.com/lu-zero/rune", branch = "physical-key-text" }
+rune = { path = "../rune/crates/rune" }
 
 [patch."https://github.com/raphamorim/rio"]
 librio = { git = "https://github.com/lu-zero/rio", branch = "librio-update-rearm-reflow" }
+
+[patch.crates-io]
+winit = { path = "../rune/vendor/winit" }

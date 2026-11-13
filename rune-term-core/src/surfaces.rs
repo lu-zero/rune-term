@@ -1,10 +1,16 @@
-//! One `HostSurface`. Later panes are more entries in the same map.
+//! Terminal host surfaces.
 
 use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use librio::{RenderState, Surface, SurfaceId};
+
+use crate::hyperlink::HoverLink;
+use crate::scrollback::ScrollbarState;
+
+/// Default pane mark used when no shown/focused surface is selected.
+pub const DEFAULT_PANE_MARK: u32 = 1;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Progress {
@@ -30,15 +36,21 @@ pub struct HostSurface {
     pub pointer_button: Option<u8>,
     /// A local selection is tracking the pointer. The program did not take the press.
     pub selecting: bool,
-    pub scrollbar: crate::scrollback::ScrollbarState,
-    pub hover_link: Option<crate::hyperlink::HoverLink>,
-    pub(crate) hover_probe: Option<(usize, usize, Option<crate::hyperlink::HoverLink>)>,
+    pub scrollbar: ScrollbarState,
+    pub hover_link: Option<HoverLink>,
+    pub hover_probe: Option<(usize, usize, Option<HoverLink>)>,
 }
 
 pub struct Surfaces {
     inner: HashMap<SurfaceId, HostSurface>,
     /// The shell the pane follows. A new tab replaces it.
     shown: Option<SurfaceId>,
+}
+
+impl Default for Surfaces {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Surfaces {
@@ -95,6 +107,10 @@ impl Surfaces {
         self.inner.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut HostSurface> {
         self.inner.values_mut()
     }
@@ -114,28 +130,26 @@ impl Surfaces {
             .or_else(|| {
                 self.inner
                     .iter()
-                    .find(|(_, host)| host.mark == crate::chrome::PANE_MARK)
+                    .find(|(_, host)| host.mark == DEFAULT_PANE_MARK)
                     .map(|(id, _)| *id)
             })
             .or_else(|| self.inner.keys().next().copied())
     }
 
-    pub(crate) fn by_mark(&self, mark: u32) -> Option<&HostSurface> {
+    pub fn by_mark(&self, mark: u32) -> Option<&HostSurface> {
         self.inner.values().find(|host| host.mark == mark)
     }
 
-    pub(crate) fn by_mark_mut(&mut self, mark: u32) -> Option<&mut HostSurface> {
-        let id = self
-            .inner
-            .iter()
-            .find(|(_, host)| host.mark == mark)
-            .map(|(id, _)| *id)?;
-        self.inner.get_mut(&id)
+    pub fn by_mark_mut(&mut self, mark: u32) -> Option<&mut HostSurface> {
+        self.inner.values_mut().find(|host| host.mark == mark)
     }
-}
 
-impl Default for Surfaces {
-    fn default() -> Self {
-        Self::new()
+    pub fn focus(&self, mark: u32) -> bool {
+        if let Some(host) = self.by_mark(mark) {
+            host.surface.notify_focus(true);
+            true
+        } else {
+            false
+        }
     }
 }

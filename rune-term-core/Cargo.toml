@@ -1,0 +1,23 @@
+[package]
+name = "rune-term-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Terminal component for rune-term."
+
+[lib]
+name = "rune_term_core"
+path = "src/lib.rs"
+
+[dependencies]
+rune.workspace = true
+librio.workspace = true
+term-grid = { path = "../term-grid" }
+term-input = { path = "../term-input" }
+wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }
+
+[features]
+default = []
+pty = ["librio/pty", "librio/graphics"]
+graphics = ["librio/graphics"]
