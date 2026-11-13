@@ -315,7 +315,7 @@ pub fn poll(model: &mut Model, now: f64, tx: &mut Tx) -> bool {
         let _ = resp_tx.send(crate::ipc::handle_control_request(model, req));
     }
     if let Some(bytes) = model.pending_inject.take() {
-        if let Some(host) = model.terminal.surfaces.primary_mut() {
+        if let Some(host) = model.terminal.primary_mut() {
             host.surface.inject_output(&bytes);
             host.frame_flag.store(true, Ordering::Release);
         }
@@ -466,7 +466,7 @@ mod tests {
         let mut model = model::init();
         setup(&mut model, std::sync::Arc::new(|| {}));
         {
-            let host = model.terminal.surfaces.primary_mut().unwrap();
+            let host = model.terminal.primary_mut().unwrap();
             // "hello" in base64. The child asks the host to store it.
             host.surface.inject_output(b"\x1b]52;c;aGVsbG8=\x07");
         }
@@ -481,10 +481,10 @@ mod tests {
     #[test]
     fn the_last_shell_closes_the_window() {
         let model = host();
-        let id = model.terminal.surfaces.primary().unwrap().surface.id();
+        let id = model.terminal.primary().unwrap().surface.id();
         model.shared.delegate().close_surface(id);
         let rt = latch(model, true);
-        assert!(rt.state.terminal.surfaces.primary().is_none());
+        assert!(rt.state.terminal.primary().is_none());
         assert!(rt.state.tabs.is_empty());
         assert_eq!(rt.shell_request, Some(Shell::Close));
     }
@@ -503,16 +503,13 @@ mod tests {
             },
             other => panic!("expected a split, got {other:?}"),
         };
-        let left = model.terminal.surfaces.primary().unwrap().surface.id();
+        let left = model.terminal.primary().unwrap().surface.id();
         assert_ne!(left, right);
         model.shared.delegate().close_surface(right);
         let rt = latch(model, true);
         assert!(rt.shell_request.is_none());
         assert_eq!(rt.state.terminal.surfaces.len(), 1);
-        assert_eq!(
-            rt.state.terminal.surfaces.primary().unwrap().surface.id(),
-            left
-        );
+        assert_eq!(rt.state.terminal.primary().unwrap().surface.id(), left);
         assert!(matches!(rt.state.tabs[0].root, Node::Leaf(_)));
         assert_eq!(rt.state.tabs[0].focused, crate::chrome::LEAF);
     }
@@ -549,12 +546,12 @@ mod tests {
             right_id,
             &mut rune::Tx::default()
         ));
-        assert_eq!(model.terminal.surfaces.shown_id(), Some(right_surface));
+        assert_eq!(model.terminal.shown_id(), Some(right_surface));
         model.shared.delegate().close_surface(right_surface);
         let rt = latch(model, true);
         assert!(rt.shell_request.is_none());
         assert_eq!(rt.state.terminal.surfaces.len(), 1);
-        assert_eq!(rt.state.terminal.surfaces.shown_id(), Some(left_surface));
+        assert_eq!(rt.state.terminal.shown_id(), Some(left_surface));
         match &rt.state.tabs[0].root {
             Node::Leaf(leaf) => {
                 assert_eq!(leaf.surface, left_surface);
@@ -577,7 +574,7 @@ mod tests {
         assert_eq!(rt.state.tabs.len(), 1);
         assert_eq!(rt.state.active, 0);
         assert_eq!(rt.state.terminal.surfaces.len(), 1);
-        assert_eq!(rt.state.terminal.surfaces.shown_id(), Some(active_surface));
+        assert_eq!(rt.state.terminal.shown_id(), Some(active_surface));
         assert_eq!(
             crate::tabs::surface_of(&rt.state.tabs[0]),
             Some(active_surface)

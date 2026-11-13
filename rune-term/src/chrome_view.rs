@@ -107,7 +107,7 @@ fn leaf_mark(node: &Node, id: LeafId) -> Option<u32> {
 }
 
 fn single(model: &Model, scale: f32) -> El {
-    let hover_active = model.terminal.surfaces.primary().is_some_and(|host| {
+    let hover_active = model.terminal.primary().is_some_and(|host| {
         host.hover_link.is_some() && crate::hyperlink::open_mods_rune(model.terminal.held_mods)
     });
     let mut pane = effect(PANE_MARK)
@@ -192,7 +192,7 @@ fn leaf_el(leaf: &Leaf, model: &Model, scale: f32, cell: (f32, f32)) -> El {
     let surface = leaf.surface;
     let id = leaf.id;
     let mark = leaf.mark;
-    let hover_active = model.terminal.surfaces.by_mark(mark).is_some_and(|host| {
+    let hover_active = model.terminal.by_mark(mark).is_some_and(|host| {
         host.hover_link.is_some() && crate::hyperlink::open_mods_rune(model.terminal.held_mods)
     });
     let mut pane = effect(mark)

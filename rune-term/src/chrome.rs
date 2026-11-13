@@ -76,7 +76,7 @@ pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
 fn close_settings(model: &mut Model, tx: &mut rune::Tx) {
     model.settings_mode.close();
     model.palette = model.config.resolve_palette();
-    model.terminal.grid_draw.invalidate_theme();
+    model.terminal.invalidate_theme();
     crate::tabs::focus_active(model, tx);
 }
 
@@ -695,7 +695,7 @@ fn theme_color_picker_panel(
                                 crate::settings::CustomTheme::from_palette(&model.palette)
                             });
                         model.palette = editor.preview_palette(&fallback);
-                        model.terminal.grid_draw.invalidate_theme();
+                        model.terminal.invalidate_theme();
                     }
                 }
             },
@@ -722,7 +722,7 @@ fn theme_color_picker_panel(
                                 crate::settings::CustomTheme::from_palette(&model.palette)
                             });
                         model.palette = editor.preview_palette(&fallback);
-                        model.terminal.grid_draw.invalidate_theme();
+                        model.terminal.invalidate_theme();
                     }
                 }
             },
@@ -749,7 +749,7 @@ fn theme_color_picker_panel(
                                 crate::settings::CustomTheme::from_palette(&model.palette)
                             });
                         model.palette = editor.preview_palette(&fallback);
-                        model.terminal.grid_draw.invalidate_theme();
+                        model.terminal.invalidate_theme();
                     }
                 }
             },

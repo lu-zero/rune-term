@@ -32,7 +32,7 @@ pub fn on_ime(model: &mut Model, ime: &Ime, tx: &mut Tx) -> bool {
         }
         Ime::Commit(text) => {
             model.terminal.preedit = None;
-            if let Some(host) = model.terminal.surfaces.primary_mut() {
+            if let Some(host) = model.terminal.primary_mut() {
                 let _ = rune_term_core::ime::commit_text(&host.surface, text);
             }
             tx.wake_after(Duration::ZERO);

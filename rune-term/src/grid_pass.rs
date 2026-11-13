@@ -17,7 +17,7 @@ pub fn sync(
     queue: &wgpu::Queue,
 ) {
     let shown = search::shown(model);
-    let active = model.terminal.surfaces.shown_id();
+    let active = model.terminal.shown_id();
     let hover = model
         .terminal
         .surfaces
@@ -35,6 +35,7 @@ pub fn sync(
         || model.terminal.grid_draw.shown != active;
 
     let mut drew = false;
+    let mut cursor_cell = model.terminal.cursor_cell;
     let shared = Arc::clone(&model.shared);
     for host in model.terminal.surfaces.iter_mut() {
         let is_active = Some(host.surface.id()) == active;
@@ -55,12 +56,15 @@ pub fn sync(
                 shared.note_rearm();
             }
             if result.drew {
-                model.terminal.cursor_cell = result.cursor_cell;
+                cursor_cell = result.cursor_cell;
                 drew = true;
             }
         } else if core_render::rearm_background(host) {
             shared.note_rearm();
         }
+    }
+    if drew {
+        model.terminal.cursor_cell = cursor_cell;
     }
     if !drew {
         images.clear();

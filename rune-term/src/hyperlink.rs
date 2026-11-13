@@ -41,12 +41,12 @@ mod tests {
     fn osc8_link_resolves_from_render_state() {
         let mut model = host();
         {
-            let host = model.terminal.surfaces.primary_mut().unwrap();
+            let host = model.terminal.primary_mut().unwrap();
             host.surface
                 .inject_output(b"\x1b]8;;https://example.com\x07link\x1b]8;;\x07");
             host.render.update();
         }
-        let host = model.terminal.surfaces.primary().unwrap();
+        let host = model.terminal.primary().unwrap();
         let link = resolve(host, 0, 1).expect("osc8 link");
         assert_eq!(link.uri, "https://example.com");
         assert_eq!(link.start, 0);
@@ -57,12 +57,12 @@ mod tests {
     fn hover_tint_underlines_the_run() {
         let mut model = host();
         {
-            let host = model.terminal.surfaces.primary_mut().unwrap();
+            let host = model.terminal.primary_mut().unwrap();
             host.surface.inject_output(b"plain text");
             host.render.update();
         }
         let palette = model.palette;
-        let host = model.terminal.surfaces.primary_mut().unwrap();
+        let host = model.terminal.primary_mut().unwrap();
         let hover = HoverLink {
             line: 0,
             start: 0,
@@ -83,11 +83,11 @@ mod tests {
     fn implicit_url_resolves_when_no_osc8_link() {
         let mut model = host();
         {
-            let host = model.terminal.surfaces.primary_mut().unwrap();
+            let host = model.terminal.primary_mut().unwrap();
             host.surface.inject_output(b"go https://example.com ok");
             host.render.update();
         }
-        let host = model.terminal.surfaces.primary().unwrap();
+        let host = model.terminal.primary().unwrap();
         let link = resolve(host, 0, 5).expect("implicit url");
         assert!(link.uri.starts_with("https://example.com"), "{}", link.uri);
     }
@@ -96,11 +96,11 @@ mod tests {
     fn echo_output_url_is_detected() {
         let mut model = host();
         {
-            let host = model.terminal.surfaces.primary_mut().unwrap();
+            let host = model.terminal.primary_mut().unwrap();
             host.surface.inject_output(b"https://example.com\r\n");
             host.render.update();
         }
-        let host = model.terminal.surfaces.primary().unwrap();
+        let host = model.terminal.primary().unwrap();
         let link = resolve(host, 0, 0).expect("url from echo output");
         assert!(link.uri.starts_with("https://example.com"), "{}", link.uri);
         assert_eq!(link.start, 0);

@@ -130,7 +130,7 @@ mod tests {
     fn the_line_on_screen_is_tinted_and_the_one_above_is_not() {
         let mut model = host();
         {
-            let host = model.terminal.surfaces.primary_mut().unwrap();
+            let host = model.terminal.primary_mut().unwrap();
             let mut bytes = b"OLDNEEDLE\r\n".to_vec();
             for _ in 0..30 {
                 bytes.extend_from_slice(b"filler\r\n");
@@ -151,7 +151,7 @@ mod tests {
             }
         }
         let palette = model.palette.clone();
-        let host = model.terminal.surfaces.primary_mut().unwrap();
+        let host = model.terminal.primary_mut().unwrap();
         let hits = collect(&host.surface, &host.render, "NEEDLE");
         assert_eq!(hits.len(), 1, "{hits:?}");
         let row = hits[0].row;

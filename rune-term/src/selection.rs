@@ -26,7 +26,7 @@ pub fn on_paste(model: &mut Model, text: &str, tx: &mut Tx) {
     if text.is_empty() {
         return;
     }
-    if let Some(host) = model.terminal.surfaces.primary_mut() {
+    if let Some(host) = model.terminal.primary_mut() {
         host.surface.paste(text);
     }
     tx.live_only();
@@ -51,7 +51,7 @@ mod tests {
     fn a_selected_cell_takes_the_foreground_as_its_highlight() {
         let mut model = host();
         {
-            let host = model.terminal.surfaces.primary_mut().unwrap();
+            let host = model.terminal.primary_mut().unwrap();
             host.surface.inject_output(b"HELLO WORLD");
             host.surface
                 .selection_begin(0, 0, SelectionKind::Simple, Side::Left);
@@ -59,7 +59,7 @@ mod tests {
             host.render.update();
         }
         let palette = model.palette.clone();
-        let host = model.terminal.surfaces.primary_mut().unwrap();
+        let host = model.terminal.primary_mut().unwrap();
         let tinted = tint(SurfaceGrid {
             render: &mut host.render,
             palette,

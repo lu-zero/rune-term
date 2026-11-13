@@ -1,10 +1,11 @@
 //! Reusable terminal runtime state.
 
+use librio::SurfaceId;
 use rune::Mods;
 
 use crate::ime::Preedit;
 use crate::render::GridDrawStamp;
-use crate::surfaces::Surfaces;
+use crate::surfaces::{HostSurface, Surfaces};
 
 #[derive(Default)]
 pub struct State {
@@ -29,5 +30,33 @@ impl State {
                 ..GridDrawStamp::default()
             },
         }
+    }
+
+    pub fn primary(&self) -> Option<&HostSurface> {
+        self.surfaces.primary()
+    }
+
+    pub fn primary_mut(&mut self) -> Option<&mut HostSurface> {
+        self.surfaces.primary_mut()
+    }
+
+    pub fn by_mark(&self, mark: u32) -> Option<&HostSurface> {
+        self.surfaces.by_mark(mark)
+    }
+
+    pub fn by_mark_mut(&mut self, mark: u32) -> Option<&mut HostSurface> {
+        self.surfaces.by_mark_mut(mark)
+    }
+
+    pub fn shown_id(&self) -> Option<SurfaceId> {
+        self.surfaces.shown_id()
+    }
+
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut HostSurface> {
+        self.surfaces.iter_mut()
+    }
+
+    pub fn invalidate_theme(&mut self) {
+        self.grid_draw.invalidate_theme();
     }
 }

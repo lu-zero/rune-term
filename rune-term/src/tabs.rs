@@ -60,7 +60,7 @@ fn apply_profile_for_new_tab(model: &mut Model, profile: &str) {
     }
     if resolved.theme != model.palette.name {
         model.palette = model.config.resolve_palette_for(profile);
-        model.terminal.grid_draw.invalidate_theme();
+        model.terminal.invalidate_theme();
     }
 }
 
@@ -153,7 +153,7 @@ pub(crate) fn apply_active_profile(model: &mut Model) {
     }
     if resolved.theme != model.palette.name {
         model.palette = model.config.resolve_palette_for(&profile);
-        model.terminal.grid_draw.invalidate_theme();
+        model.terminal.invalidate_theme();
     }
 }
 
@@ -279,7 +279,7 @@ mod tests {
     }
 
     fn shown(model: &Model) -> SurfaceId {
-        model.terminal.surfaces.shown_id().expect("shown surface")
+        model.terminal.shown_id().expect("shown surface")
     }
 
     fn active_surface(model: &Model) -> SurfaceId {
