@@ -83,8 +83,8 @@ fn close_settings(model: &mut Model, tx: &mut rune::Tx) {
 fn settings_panel(model: &Model) -> El {
     let p = model.palette.as_ref();
     let active_tab = match &model.ui.settings_mode {
-        crate::model::SettingsMode::Open(ui) => ui.tab,
-        crate::model::SettingsMode::Closed => crate::model::SettingsTab::Font,
+        crate::settings_ui::SettingsMode::Open(ui) => ui.tab,
+        crate::settings_ui::SettingsMode::Closed => crate::settings_ui::SettingsTab::Font,
     };
     let header = row()
         .w_full()
@@ -99,26 +99,26 @@ fn settings_panel(model: &Model) -> El {
         .gap(space::S2)
         .child(settings_tab_chip(
             "Font",
-            crate::model::SettingsTab::Font,
+            crate::settings_ui::SettingsTab::Font,
             active_tab,
             p,
         ))
         .child(settings_tab_chip(
             "Theme",
-            crate::model::SettingsTab::Theme,
+            crate::settings_ui::SettingsTab::Theme,
             active_tab,
             p,
         ))
         .child(settings_tab_chip(
             "Profiles",
-            crate::model::SettingsTab::Profiles,
+            crate::settings_ui::SettingsTab::Profiles,
             active_tab,
             p,
         ));
     let body = match active_tab {
-        crate::model::SettingsTab::Font => font_settings(model, p),
-        crate::model::SettingsTab::Theme => theme_settings(model, p),
-        crate::model::SettingsTab::Profiles => profiles_settings(model, p),
+        crate::settings_ui::SettingsTab::Font => font_settings(model, p),
+        crate::settings_ui::SettingsTab::Theme => theme_settings(model, p),
+        crate::settings_ui::SettingsTab::Profiles => profiles_settings(model, p),
     };
     let body = col()
         .w_full()
@@ -162,8 +162,8 @@ fn settings_panel(model: &Model) -> El {
 
 fn settings_tab_chip(
     label: &str,
-    tab: crate::model::SettingsTab,
-    active: crate::model::SettingsTab,
+    tab: crate::settings_ui::SettingsTab,
+    active: crate::settings_ui::SettingsTab,
     p: &Palette,
 ) -> El {
     let selected = tab == active;
@@ -180,7 +180,7 @@ fn settings_tab_chip(
         .fill(theme::linear(if selected { p.bg } else { p.tab_bg }))
         .focusable(true)
         .on_press_tx(move |model: &mut Model, _tx| {
-            if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+            if let crate::settings_ui::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
                 ui.tab = tab;
             }
         })
@@ -211,7 +211,7 @@ fn font_settings(model: &Model, p: &Palette) -> El {
         resolved.font_family
     };
     let (picker_open, search_edit, active_idx) = match &model.ui.settings_mode {
-        crate::model::SettingsMode::Open(ui) => (
+        crate::settings_ui::SettingsMode::Open(ui) => (
             ui.font_family_picker_open,
             ui.font_search.clone(),
             ui.font_picker_active,
@@ -235,7 +235,7 @@ fn font_settings(model: &Model, p: &Palette) -> El {
             .border(1.0, theme::linear(p.active_border))
             .hover(hover_overlay(p))
             .on_press_tx(move |model: &mut Model, _tx| {
-                if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                if let crate::settings_ui::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
                     if ui.font_family_picker_open {
                         ui.font_family_picker_open = false;
                         ui.font_family_before_pick = None;
@@ -292,7 +292,7 @@ fn font_settings(model: &Model, p: &Palette) -> El {
             .unwrap_or_else(|| family.clone());
         let can_revert = matches!(
             &model.ui.settings_mode,
-            crate::model::SettingsMode::Open(ui)
+            crate::settings_ui::SettingsMode::Open(ui)
                 if ui.font_family_before_pick.as_deref().is_some_and(|b| b != family)
         );
         let search = text_input(&search_edit, TextStyle::new(13.0, 400.0))
@@ -310,7 +310,7 @@ fn font_settings(model: &Model, p: &Palette) -> El {
             .border(1.0, theme::linear(p.active_border))
             .color(text_color(p))
             .on_edit(|model: &mut Model| match &mut model.ui.settings_mode {
-                crate::model::SettingsMode::Open(ui) => {
+                crate::settings_ui::SettingsMode::Open(ui) => {
                     ui.font_picker_active = 0;
                     &mut ui.font_search
                 }
@@ -318,7 +318,7 @@ fn font_settings(model: &Model, p: &Palette) -> El {
             })
             .on_input_key(|model: &mut Model, ev: &KeyEvent, _tx: &mut Tx| {
                 let (families, active, family, before) = match &model.ui.settings_mode {
-                    crate::model::SettingsMode::Open(ui) => {
+                    crate::settings_ui::SettingsMode::Open(ui) => {
                         let catalog = font_picker::FontCatalog::system();
                         let filtered = catalog.filter(&ui.font_search.text);
                         (
@@ -339,37 +339,49 @@ fn font_settings(model: &Model, p: &Palette) -> El {
                 let current = active.min(families.len() - 1);
                 match ev.key {
                     Key::Down => {
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                        if let crate::settings_ui::SettingsMode::Open(ui) =
+                            &mut model.ui.settings_mode
+                        {
                             ui.font_picker_active = (current + 1).min(families.len() - 1);
                         }
                         true
                     }
                     Key::Up => {
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                        if let crate::settings_ui::SettingsMode::Open(ui) =
+                            &mut model.ui.settings_mode
+                        {
                             ui.font_picker_active = current.saturating_sub(1);
                         }
                         true
                     }
                     Key::PageDown => {
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                        if let crate::settings_ui::SettingsMode::Open(ui) =
+                            &mut model.ui.settings_mode
+                        {
                             ui.font_picker_active = (current + 10).min(families.len() - 1);
                         }
                         true
                     }
                     Key::PageUp => {
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                        if let crate::settings_ui::SettingsMode::Open(ui) =
+                            &mut model.ui.settings_mode
+                        {
                             ui.font_picker_active = current.saturating_sub(10);
                         }
                         true
                     }
                     Key::Home => {
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                        if let crate::settings_ui::SettingsMode::Open(ui) =
+                            &mut model.ui.settings_mode
+                        {
                             ui.font_picker_active = 0;
                         }
                         true
                     }
                     Key::End => {
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                        if let crate::settings_ui::SettingsMode::Open(ui) =
+                            &mut model.ui.settings_mode
+                        {
                             ui.font_picker_active = families.len() - 1;
                         }
                         true
@@ -381,7 +393,9 @@ fn font_settings(model: &Model, p: &Palette) -> El {
                             &mut rune::Tx::default(),
                             &chosen,
                         );
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                        if let crate::settings_ui::SettingsMode::Open(ui) =
+                            &mut model.ui.settings_mode
+                        {
                             ui.font_family_picker_open = false;
                             ui.font_family_before_pick = None;
                             ui.font_search = rune::TextEdit::new("");
@@ -391,7 +405,7 @@ fn font_settings(model: &Model, p: &Palette) -> El {
                     }
                     Key::Escape => {
                         let prev = match &model.ui.settings_mode {
-                            crate::model::SettingsMode::Open(ui) => {
+                            crate::settings_ui::SettingsMode::Open(ui) => {
                                 ui.font_family_before_pick.clone()
                             }
                             _ => None,
@@ -403,7 +417,9 @@ fn font_settings(model: &Model, p: &Palette) -> El {
                                 &prev,
                             );
                         }
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                        if let crate::settings_ui::SettingsMode::Open(ui) =
+                            &mut model.ui.settings_mode
+                        {
                             ui.font_family_picker_open = false;
                             ui.font_family_before_pick = None;
                             ui.font_search = rune::TextEdit::new("");
@@ -432,7 +448,7 @@ fn font_settings(model: &Model, p: &Palette) -> El {
                         .child(if can_revert {
                             settings_chip("Revert", "font-family-revert", p, |model, _tx| {
                                 let prev = match &model.ui.settings_mode {
-                                    crate::model::SettingsMode::Open(ui) => {
+                                    crate::settings_ui::SettingsMode::Open(ui) => {
                                         ui.font_family_before_pick.clone()
                                     }
                                     _ => None,
@@ -444,7 +460,7 @@ fn font_settings(model: &Model, p: &Palette) -> El {
                                         &prev,
                                     );
                                 }
-                                if let crate::model::SettingsMode::Open(ui) =
+                                if let crate::settings_ui::SettingsMode::Open(ui) =
                                     &mut model.ui.settings_mode
                                 {
                                     ui.font_family_picker_open = false;
@@ -473,7 +489,7 @@ fn font_settings(model: &Model, p: &Palette) -> El {
                                     &mut rune::Tx::default(),
                                     selected,
                                 );
-                                if let crate::model::SettingsMode::Open(ui) =
+                                if let crate::settings_ui::SettingsMode::Open(ui) =
                                     &mut model.ui.settings_mode
                                 {
                                     ui.font_family_picker_open = false;
@@ -483,7 +499,7 @@ fn font_settings(model: &Model, p: &Palette) -> El {
                                 }
                             },
                             |model: &mut Model, family: &str| {
-                                if let crate::model::SettingsMode::Open(ui) =
+                                if let crate::settings_ui::SettingsMode::Open(ui) =
                                     &mut model.ui.settings_mode
                                 {
                                     let filtered = font_picker::FontCatalog::system()
@@ -510,7 +526,7 @@ fn font_settings(model: &Model, p: &Palette) -> El {
 fn theme_settings(model: &Model, p: &Palette) -> El {
     if matches!(
         &model.ui.settings_mode,
-        crate::model::SettingsMode::Open(ui) if ui.theme_editor.is_some()
+        crate::settings_ui::SettingsMode::Open(ui) if ui.theme_editor.is_some()
     ) {
         return theme_editor_view(model);
     }
@@ -551,7 +567,7 @@ fn theme_settings(model: &Model, p: &Palette) -> El {
 fn theme_editor_view(model: &Model) -> El {
     let p = model.palette.as_ref();
     let editor = match &model.ui.settings_mode {
-        crate::model::SettingsMode::Open(ui) => match ui.theme_editor.as_ref() {
+        crate::settings_ui::SettingsMode::Open(ui) => match ui.theme_editor.as_ref() {
             Some(editor) => editor,
             None => return col(),
         },
@@ -567,13 +583,15 @@ fn theme_editor_view(model: &Model) -> El {
     ); 3] = [
         ("Name", "te-name", &editor.name, |m| {
             match &mut m.ui.settings_mode {
-                crate::model::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().name,
+                crate::settings_ui::SettingsMode::Open(ui) => {
+                    &mut ui.theme_editor.as_mut().unwrap().name
+                }
                 _ => unreachable!(),
             }
         }),
         ("Author", "te-author", &editor.author, |m| {
             match &mut m.ui.settings_mode {
-                crate::model::SettingsMode::Open(ui) => {
+                crate::settings_ui::SettingsMode::Open(ui) => {
                     &mut ui.theme_editor.as_mut().unwrap().author
                 }
                 _ => unreachable!(),
@@ -581,7 +599,9 @@ fn theme_editor_view(model: &Model) -> El {
         }),
         ("URL", "te-url", &editor.url, |m| {
             match &mut m.ui.settings_mode {
-                crate::model::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().url,
+                crate::settings_ui::SettingsMode::Open(ui) => {
+                    &mut ui.theme_editor.as_mut().unwrap().url
+                }
                 _ => unreachable!(),
             }
         }),
@@ -590,27 +610,47 @@ fn theme_editor_view(model: &Model) -> El {
         grid = grid.child(editor_text_row(label, key, te, p, on_edit));
     }
     let color_rows = [
-        ("Background", "te-bg", crate::model::ThemeColorField::Bg),
-        ("Foreground", "te-fg", crate::model::ThemeColorField::Fg),
+        (
+            "Background",
+            "te-bg",
+            crate::settings_ui::ThemeColorField::Bg,
+        ),
+        (
+            "Foreground",
+            "te-fg",
+            crate::settings_ui::ThemeColorField::Fg,
+        ),
         (
             "Bright FG",
             "te-fgb",
-            crate::model::ThemeColorField::FgBright,
+            crate::settings_ui::ThemeColorField::FgBright,
         ),
-        ("Muted", "te-muted", crate::model::ThemeColorField::Muted),
-        ("Tab BG", "te-tab", crate::model::ThemeColorField::TabBg),
+        (
+            "Muted",
+            "te-muted",
+            crate::settings_ui::ThemeColorField::Muted,
+        ),
+        (
+            "Tab BG",
+            "te-tab",
+            crate::settings_ui::ThemeColorField::TabBg,
+        ),
         (
             "Border",
             "te-border",
-            crate::model::ThemeColorField::ActiveBorder,
+            crate::settings_ui::ThemeColorField::ActiveBorder,
         ),
-        ("Accent", "te-accent", crate::model::ThemeColorField::Accent),
+        (
+            "Accent",
+            "te-accent",
+            crate::settings_ui::ThemeColorField::Accent,
+        ),
     ];
     for (label, key, field) in color_rows {
         grid = grid.child(editor_color_row(label, key, field, editor, p));
     }
     let picker = if let Some(field) = editor.picking {
-        let rgb = crate::model::parse_hex(&editor.field_edit(field).text).unwrap_or(0);
+        let rgb = crate::settings_ui::parse_hex(&editor.field_edit(field).text).unwrap_or(0);
         let hsv = color_picker::Hsv::from_rgb_u32(rgb);
         theme_color_picker_panel(field, hsv, p)
     } else {
@@ -654,7 +694,7 @@ fn theme_editor_view(model: &Model) -> El {
 }
 
 fn theme_color_picker_panel(
-    field: crate::model::ThemeColorField,
+    field: crate::settings_ui::ThemeColorField,
     hsv: color_picker::Hsv,
     p: &Palette,
 ) -> El {
@@ -686,13 +726,13 @@ fn theme_color_picker_panel(
             hsv,
             move |model: &mut Model, hsv| {
                 let rgb = hsv.to_rgb_u32();
-                if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                if let crate::settings_ui::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
                     if let Some(editor) = ui.theme_editor.as_mut() {
                         editor.set_field_hex(field, rgb);
                     }
                 }
                 // preview will run on next interaction? call helper-like inline
-                if let crate::model::SettingsMode::Open(ui) = &model.ui.settings_mode {
+                if let crate::settings_ui::SettingsMode::Open(ui) = &model.ui.settings_mode {
                     if let Some(editor) = ui.theme_editor.as_ref() {
                         let fallback = model
                             .config
@@ -714,12 +754,12 @@ fn theme_color_picker_panel(
             hsv,
             move |model: &mut Model, hsv| {
                 let rgb = hsv.to_rgb_u32();
-                if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                if let crate::settings_ui::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
                     if let Some(editor) = ui.theme_editor.as_mut() {
                         editor.set_field_hex(field, rgb);
                     }
                 }
-                if let crate::model::SettingsMode::Open(ui) = &model.ui.settings_mode {
+                if let crate::settings_ui::SettingsMode::Open(ui) = &model.ui.settings_mode {
                     if let Some(editor) = ui.theme_editor.as_ref() {
                         let fallback = model
                             .config
@@ -741,12 +781,12 @@ fn theme_color_picker_panel(
             hsv,
             move |model: &mut Model, hsv| {
                 let rgb = hsv.to_rgb_u32();
-                if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                if let crate::settings_ui::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
                     if let Some(editor) = ui.theme_editor.as_mut() {
                         editor.set_field_hex(field, rgb);
                     }
                 }
-                if let crate::model::SettingsMode::Open(ui) = &model.ui.settings_mode {
+                if let crate::settings_ui::SettingsMode::Open(ui) = &model.ui.settings_mode {
                     if let Some(editor) = ui.theme_editor.as_ref() {
                         let fallback = model
                             .config
@@ -806,12 +846,12 @@ fn editor_text_row(
 fn editor_color_row(
     label: &str,
     key: &'static str,
-    field: crate::model::ThemeColorField,
-    editor: &crate::model::ThemeEditor,
+    field: crate::settings_ui::ThemeColorField,
+    editor: &crate::settings_ui::ThemeEditor,
     p: &Palette,
 ) -> El {
     let edit = editor.field_edit(field);
-    let swatch = crate::model::parse_hex(&edit.text);
+    let swatch = crate::settings_ui::parse_hex(&edit.text);
     let selected = editor.picking == Some(field);
     let mut input_row = row().grow(1.0).min_w(0.0).h(32.0).gap(8.0).items_center();
     if let Some(color) = swatch {
@@ -831,36 +871,42 @@ fn editor_color_row(
         );
     }
     let on_edit: fn(&mut Model) -> &mut rune::TextEdit = match field {
-        crate::model::ThemeColorField::Bg => |m| match &mut m.ui.settings_mode {
-            crate::model::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().bg,
+        crate::settings_ui::ThemeColorField::Bg => |m| match &mut m.ui.settings_mode {
+            crate::settings_ui::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().bg,
             _ => unreachable!(),
         },
-        crate::model::ThemeColorField::Fg => |m| match &mut m.ui.settings_mode {
-            crate::model::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().fg,
+        crate::settings_ui::ThemeColorField::Fg => |m| match &mut m.ui.settings_mode {
+            crate::settings_ui::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().fg,
             _ => unreachable!(),
         },
-        crate::model::ThemeColorField::FgBright => |m| match &mut m.ui.settings_mode {
-            crate::model::SettingsMode::Open(ui) => {
+        crate::settings_ui::ThemeColorField::FgBright => |m| match &mut m.ui.settings_mode {
+            crate::settings_ui::SettingsMode::Open(ui) => {
                 &mut ui.theme_editor.as_mut().unwrap().fg_bright
             }
             _ => unreachable!(),
         },
-        crate::model::ThemeColorField::Muted => |m| match &mut m.ui.settings_mode {
-            crate::model::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().muted,
+        crate::settings_ui::ThemeColorField::Muted => |m| match &mut m.ui.settings_mode {
+            crate::settings_ui::SettingsMode::Open(ui) => {
+                &mut ui.theme_editor.as_mut().unwrap().muted
+            }
             _ => unreachable!(),
         },
-        crate::model::ThemeColorField::TabBg => |m| match &mut m.ui.settings_mode {
-            crate::model::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().tab_bg,
+        crate::settings_ui::ThemeColorField::TabBg => |m| match &mut m.ui.settings_mode {
+            crate::settings_ui::SettingsMode::Open(ui) => {
+                &mut ui.theme_editor.as_mut().unwrap().tab_bg
+            }
             _ => unreachable!(),
         },
-        crate::model::ThemeColorField::ActiveBorder => |m| match &mut m.ui.settings_mode {
-            crate::model::SettingsMode::Open(ui) => {
+        crate::settings_ui::ThemeColorField::ActiveBorder => |m| match &mut m.ui.settings_mode {
+            crate::settings_ui::SettingsMode::Open(ui) => {
                 &mut ui.theme_editor.as_mut().unwrap().active_border
             }
             _ => unreachable!(),
         },
-        crate::model::ThemeColorField::Accent => |m| match &mut m.ui.settings_mode {
-            crate::model::SettingsMode::Open(ui) => &mut ui.theme_editor.as_mut().unwrap().accent,
+        crate::settings_ui::ThemeColorField::Accent => |m| match &mut m.ui.settings_mode {
+            crate::settings_ui::SettingsMode::Open(ui) => {
+                &mut ui.theme_editor.as_mut().unwrap().accent
+            }
             _ => unreachable!(),
         },
     };
@@ -1008,7 +1054,7 @@ fn row_action(
 fn profiles_settings(model: &Model, p: &Palette) -> El {
     if matches!(
         &model.ui.settings_mode,
-        crate::model::SettingsMode::Open(ui) if ui.profile_editor.is_some()
+        crate::settings_ui::SettingsMode::Open(ui) if ui.profile_editor.is_some()
     ) {
         return profile_editor_view(model);
     }
@@ -1166,7 +1212,7 @@ fn profiles_settings(model: &Model, p: &Palette) -> El {
 fn profile_editor_view(model: &Model) -> El {
     let p = model.palette.as_ref();
     let editor = match &model.ui.settings_mode {
-        crate::model::SettingsMode::Open(ui) => match ui.profile_editor.as_ref() {
+        crate::settings_ui::SettingsMode::Open(ui) => match ui.profile_editor.as_ref() {
             Some(editor) => editor,
             None => return col(),
         },
@@ -1202,7 +1248,7 @@ fn profile_editor_view(model: &Model) -> El {
             .border(1.0, theme::linear(p.active_border))
             .color(text_color(p))
             .on_edit(|model: &mut Model| match &mut model.ui.settings_mode {
-                crate::model::SettingsMode::Open(ui) => {
+                crate::settings_ui::SettingsMode::Open(ui) => {
                     let editor = ui.profile_editor.as_mut().unwrap();
                     editor.font_picker_active = 0;
                     &mut editor.font_search
@@ -1211,7 +1257,7 @@ fn profile_editor_view(model: &Model) -> El {
             })
             .on_input_key(|model: &mut Model, ev: &KeyEvent, _tx: &mut Tx| {
                 let families = match &model.ui.settings_mode {
-                    crate::model::SettingsMode::Open(ui) => {
+                    crate::settings_ui::SettingsMode::Open(ui) => {
                         let editor = ui.profile_editor.as_ref().unwrap();
                         font_picker::FontCatalog::system().filter(&editor.font_search.text)
                     }
@@ -1220,13 +1266,15 @@ fn profile_editor_view(model: &Model) -> El {
                 if families.is_empty() {
                     if matches!(ev.key, Key::Escape) {
                         let prev = match &model.ui.settings_mode {
-                            crate::model::SettingsMode::Open(ui) => ui
+                            crate::settings_ui::SettingsMode::Open(ui) => ui
                                 .profile_editor
                                 .as_ref()
                                 .and_then(|e| e.font_family_before_pick.clone()),
                             _ => None,
                         };
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                        if let crate::settings_ui::SettingsMode::Open(ui) =
+                            &mut model.ui.settings_mode
+                        {
                             if let Some(editor) = ui.profile_editor.as_mut() {
                                 if let Some(prev) = prev {
                                     editor.font_family = rune::TextEdit::new(prev);
@@ -1242,7 +1290,7 @@ fn profile_editor_view(model: &Model) -> El {
                     return false;
                 }
                 let current = match &model.ui.settings_mode {
-                    crate::model::SettingsMode::Open(ui) => ui
+                    crate::settings_ui::SettingsMode::Open(ui) => ui
                         .profile_editor
                         .as_ref()
                         .unwrap()
@@ -1252,41 +1300,53 @@ fn profile_editor_view(model: &Model) -> El {
                 };
                 match ev.key {
                     Key::Down => {
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                        if let crate::settings_ui::SettingsMode::Open(ui) =
+                            &mut model.ui.settings_mode
+                        {
                             ui.profile_editor.as_mut().unwrap().font_picker_active =
                                 (current + 1).min(families.len() - 1);
                         }
                         true
                     }
                     Key::Up => {
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                        if let crate::settings_ui::SettingsMode::Open(ui) =
+                            &mut model.ui.settings_mode
+                        {
                             ui.profile_editor.as_mut().unwrap().font_picker_active =
                                 current.saturating_sub(1);
                         }
                         true
                     }
                     Key::PageDown => {
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                        if let crate::settings_ui::SettingsMode::Open(ui) =
+                            &mut model.ui.settings_mode
+                        {
                             ui.profile_editor.as_mut().unwrap().font_picker_active =
                                 (current + 10).min(families.len() - 1);
                         }
                         true
                     }
                     Key::PageUp => {
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                        if let crate::settings_ui::SettingsMode::Open(ui) =
+                            &mut model.ui.settings_mode
+                        {
                             ui.profile_editor.as_mut().unwrap().font_picker_active =
                                 current.saturating_sub(10);
                         }
                         true
                     }
                     Key::Home => {
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                        if let crate::settings_ui::SettingsMode::Open(ui) =
+                            &mut model.ui.settings_mode
+                        {
                             ui.profile_editor.as_mut().unwrap().font_picker_active = 0;
                         }
                         true
                     }
                     Key::End => {
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                        if let crate::settings_ui::SettingsMode::Open(ui) =
+                            &mut model.ui.settings_mode
+                        {
                             ui.profile_editor.as_mut().unwrap().font_picker_active =
                                 families.len() - 1;
                         }
@@ -1294,7 +1354,9 @@ fn profile_editor_view(model: &Model) -> El {
                     }
                     Key::Enter => {
                         let chosen = families[current].clone();
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                        if let crate::settings_ui::SettingsMode::Open(ui) =
+                            &mut model.ui.settings_mode
+                        {
                             if let Some(editor) = ui.profile_editor.as_mut() {
                                 editor.font_family = rune::TextEdit::new(chosen);
                                 editor.font_picker_open = false;
@@ -1307,13 +1369,15 @@ fn profile_editor_view(model: &Model) -> El {
                     }
                     Key::Escape => {
                         let prev = match &model.ui.settings_mode {
-                            crate::model::SettingsMode::Open(ui) => ui
+                            crate::settings_ui::SettingsMode::Open(ui) => ui
                                 .profile_editor
                                 .as_ref()
                                 .and_then(|e| e.font_family_before_pick.clone()),
                             _ => None,
                         };
-                        if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                        if let crate::settings_ui::SettingsMode::Open(ui) =
+                            &mut model.ui.settings_mode
+                        {
                             if let Some(editor) = ui.profile_editor.as_mut() {
                                 if let Some(prev) = prev {
                                     editor.font_family = rune::TextEdit::new(prev);
@@ -1372,7 +1436,7 @@ fn profile_editor_view(model: &Model) -> El {
                         &filtered,
                         &selected_for_list,
                         |model: &mut Model, family: &str| {
-                            if let crate::model::SettingsMode::Open(ui) =
+                            if let crate::settings_ui::SettingsMode::Open(ui) =
                                 &mut model.ui.settings_mode
                             {
                                 if let Some(editor) = ui.profile_editor.as_mut() {
@@ -1385,7 +1449,7 @@ fn profile_editor_view(model: &Model) -> El {
                             }
                         },
                         |model: &mut Model, family: &str| {
-                            if let crate::model::SettingsMode::Open(ui) =
+                            if let crate::settings_ui::SettingsMode::Open(ui) =
                                 &mut model.ui.settings_mode
                             {
                                 if let Some(editor) = ui.profile_editor.as_mut() {
@@ -1410,13 +1474,13 @@ fn profile_editor_view(model: &Model) -> El {
                         p,
                         |model, _tx| {
                             let prev = match &model.ui.settings_mode {
-                                crate::model::SettingsMode::Open(ui) => ui
+                                crate::settings_ui::SettingsMode::Open(ui) => ui
                                     .profile_editor
                                     .as_ref()
                                     .and_then(|e| e.font_family_before_pick.clone()),
                                 _ => None,
                             };
-                            if let crate::model::SettingsMode::Open(ui) =
+                            if let crate::settings_ui::SettingsMode::Open(ui) =
                                 &mut model.ui.settings_mode
                             {
                                 if let Some(editor) = ui.profile_editor.as_mut() {
@@ -1444,7 +1508,7 @@ fn profile_editor_view(model: &Model) -> El {
     ); 7] = [
         ("Name", "pe-name", &editor.name, |m| {
             match &mut m.ui.settings_mode {
-                crate::model::SettingsMode::Open(ui) => {
+                crate::settings_ui::SettingsMode::Open(ui) => {
                     &mut ui.profile_editor.as_mut().unwrap().name
                 }
                 _ => unreachable!(),
@@ -1455,7 +1519,7 @@ fn profile_editor_view(model: &Model) -> El {
             "pe-font-size",
             &editor.font_size,
             |m| match &mut m.ui.settings_mode {
-                crate::model::SettingsMode::Open(ui) => {
+                crate::settings_ui::SettingsMode::Open(ui) => {
                     &mut ui.profile_editor.as_mut().unwrap().font_size
                 }
                 _ => unreachable!(),
@@ -1463,7 +1527,7 @@ fn profile_editor_view(model: &Model) -> El {
         ),
         ("Theme", "pe-theme", &editor.theme, |m| {
             match &mut m.ui.settings_mode {
-                crate::model::SettingsMode::Open(ui) => {
+                crate::settings_ui::SettingsMode::Open(ui) => {
                     &mut ui.profile_editor.as_mut().unwrap().theme
                 }
                 _ => unreachable!(),
@@ -1471,7 +1535,7 @@ fn profile_editor_view(model: &Model) -> El {
         }),
         ("Backend", "pe-backend", &editor.backend, |m| {
             match &mut m.ui.settings_mode {
-                crate::model::SettingsMode::Open(ui) => {
+                crate::settings_ui::SettingsMode::Open(ui) => {
                     &mut ui.profile_editor.as_mut().unwrap().backend
                 }
                 _ => unreachable!(),
@@ -1482,7 +1546,7 @@ fn profile_editor_view(model: &Model) -> El {
             "pe-shell-program",
             &editor.shell_program,
             |m| match &mut m.ui.settings_mode {
-                crate::model::SettingsMode::Open(ui) => {
+                crate::settings_ui::SettingsMode::Open(ui) => {
                     &mut ui.profile_editor.as_mut().unwrap().shell_program
                 }
                 _ => unreachable!(),
@@ -1493,7 +1557,7 @@ fn profile_editor_view(model: &Model) -> El {
             "pe-shell-args",
             &editor.shell_args,
             |m| match &mut m.ui.settings_mode {
-                crate::model::SettingsMode::Open(ui) => {
+                crate::settings_ui::SettingsMode::Open(ui) => {
                     &mut ui.profile_editor.as_mut().unwrap().shell_args
                 }
                 _ => unreachable!(),
@@ -1501,7 +1565,7 @@ fn profile_editor_view(model: &Model) -> El {
         ),
         ("CWD", "pe-cwd", &editor.cwd, |m| {
             match &mut m.ui.settings_mode {
-                crate::model::SettingsMode::Open(ui) => {
+                crate::settings_ui::SettingsMode::Open(ui) => {
                     &mut ui.profile_editor.as_mut().unwrap().cwd
                 }
                 _ => unreachable!(),
@@ -1543,7 +1607,8 @@ fn profile_editor_view(model: &Model) -> El {
                 .border(1.0, theme::linear(p.active_border))
                 .hover(hover_overlay(p))
                 .on_press_tx(|model: &mut Model, _tx| {
-                    if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
+                    if let crate::settings_ui::SettingsMode::Open(ui) = &mut model.ui.settings_mode
+                    {
                         if let Some(editor) = ui.profile_editor.as_mut() {
                             editor.font_family_before_pick = Some(editor.font_family.text.clone());
                             editor.font_picker_open = true;

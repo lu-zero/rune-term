@@ -29,8 +29,8 @@ pub fn run_with_rune_args(args: impl IntoIterator<Item = String>) {
 pub fn app() -> App<Model> {
     let mut settings = MenuItem::new("Settings…", |model: &mut Model, _tx: &mut Tx| {
         model.ui.settings_mode =
-            crate::model::SettingsMode::Open(Box::new(crate::model::SettingsUi {
-                tab: crate::model::SettingsTab::Font,
+            crate::settings_ui::SettingsMode::Open(Box::new(crate::settings_ui::SettingsUi {
+                tab: crate::settings_ui::SettingsTab::Font,
                 theme_editor: None,
                 profile_editor: None,
                 font_family_picker_open: false,

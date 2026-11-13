@@ -316,8 +316,8 @@ fn handle_app_chord(
     }
     if code == term_input::PhysicalKeyCode::Comma {
         model.ui.settings_mode =
-            crate::model::SettingsMode::Open(Box::new(crate::model::SettingsUi {
-                tab: crate::model::SettingsTab::Font,
+            crate::settings_ui::SettingsMode::Open(Box::new(crate::settings_ui::SettingsUi {
+                tab: crate::settings_ui::SettingsTab::Font,
                 theme_editor: None,
                 profile_editor: None,
                 font_family_picker_open: false,
