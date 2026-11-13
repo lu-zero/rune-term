@@ -172,10 +172,11 @@ impl ThemeDraft {
     }
 }
 
-/// Every theme, the built-in ones first.
+/// Every theme, by name. The built-in ones and the custom ones are one list.
 pub fn names(config: &ConfigFile) -> Vec<String> {
     let mut names: Vec<String> = theme::builtins().iter().map(|p| p.name.clone()).collect();
     names.extend(config.custom_themes.keys().cloned());
+    names.sort_by_key(|name| name.to_lowercase());
     names
 }
 
@@ -190,6 +191,11 @@ pub fn palette(config: &ConfigFile, name: &str) -> Arc<Palette> {
 /// Whether the theme is one the user made.
 pub fn is_custom(config: &ConfigFile, name: &str) -> bool {
     config.custom_themes.contains_key(name)
+}
+
+/// The row a theme has in the list.
+pub fn index_of(config: &ConfigFile, name: &str) -> usize {
+    names(config).iter().position(|n| n == name).unwrap_or(0)
 }
 
 pub fn editor(kit: &Kit, model: &SettingsModel) -> El {

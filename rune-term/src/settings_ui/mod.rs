@@ -101,10 +101,13 @@ fn profile_draft(config: &ConfigFile) -> profiles::ProfileDraft {
     profiles::ProfileDraft::from_profile(&name, &profile)
 }
 
-/// The draft for the first theme in the config.
+/// The draft for the theme in use, or the first one in the list.
 fn theme_draft(config: &ConfigFile) -> themes::ThemeDraft {
-    let name = themes::names(config)
-        .first()
+    let names = themes::names(config);
+    let name = names
+        .iter()
+        .find(|name| *name == &config.settings.theme)
+        .or_else(|| names.first())
         .cloned()
         .unwrap_or_else(|| settings::DEFAULT_THEME.to_owned());
     themes::ThemeDraft::from_colors(&name, config)
@@ -181,6 +184,17 @@ fn reload_draft(model: &mut SettingsModel) {
     }
 }
 
+/// Shows a tab, with the row its list had.
+pub fn show_tab(model: &mut SettingsModel, tab: Tab) {
+    model.tab = tab;
+    model.selected = match tab {
+        Tab::Profiles => 0,
+        Tab::Themes => themes::index_of(&model.config, &model.config.settings.theme),
+    };
+    model.status = None;
+    reload_draft(model);
+}
+
 pub fn view(model: &SettingsModel, _cx: &mut Cx<SettingsModel>) -> El {
     let kit = kit(&model.config.resolve_palette());
     let mut overlays = Vec::new();
@@ -224,14 +238,14 @@ fn toolbar(kit: &Kit, model: &SettingsModel) -> El {
                 .fit()
                 .label("Section")
                 .on_pick(|m: &mut SettingsModel, index: usize, _tx| {
-                    m.tab = if index == 1 {
-                        Tab::Themes
-                    } else {
-                        Tab::Profiles
-                    };
-                    m.selected = 0;
-                    m.status = None;
-                    reload_draft(m);
+                    show_tab(
+                        m,
+                        if index == 1 {
+                            Tab::Themes
+                        } else {
+                            Tab::Profiles
+                        },
+                    );
                 })
                 .build(kit),
         )
@@ -529,7 +543,7 @@ mod tests {
     #[test]
     fn the_themes_tab_lists_the_builtin_themes() {
         let mut rt = runtime(model("themes"));
-        rt.state.tab = Tab::Themes;
+        show_tab(&mut rt.state, Tab::Themes);
         rt.frame(0.0);
         assert!(rt.find("theme-0").is_some());
         assert!(rt.state.config.custom_themes.is_empty());
@@ -538,25 +552,39 @@ mod tests {
     #[test]
     fn a_duplicated_theme_is_a_custom_one() {
         let mut rt = runtime(model("duplicate"));
-        rt.state.tab = Tab::Themes;
+        show_tab(&mut rt.state, Tab::Themes);
         rt.frame(0.0);
+        let source = rt.state.theme.original.clone();
         press(&mut rt, "theme-duplicate");
         assert_eq!(rt.state.config.custom_themes.len(), 1);
-        assert!(rt.state.config.is_custom_theme("Flexoki Black Copy"));
+        assert!(rt.state.config.is_custom_theme(&format!("{source} Copy")));
     }
 
     #[test]
     fn a_renamed_theme_keeps_its_colors() {
         let mut rt = runtime(model("rename"));
-        rt.state.tab = Tab::Themes;
+        show_tab(&mut rt.state, Tab::Themes);
         rt.frame(0.0);
+        let source = rt.state.theme.original.clone();
         press(&mut rt, "theme-duplicate");
+        let author = rt.state.theme.author.text.clone();
         rt.state.theme.name.text = "Night".to_owned();
         press(&mut rt, "theme-save");
         let theme = rt.state.config.custom_themes.get("Night").expect("renamed");
         assert_eq!(theme.accent, rt.state.theme.colors.accent);
-        assert_eq!(theme.author, "Steph Ango");
-        assert!(!rt.state.config.is_custom_theme("Flexoki Black Copy"));
+        assert_eq!(theme.author, author);
+        assert!(!rt.state.config.is_custom_theme(&format!("{source} Copy")));
+    }
+
+    #[test]
+    fn the_theme_list_is_sorted() {
+        let mut rt = runtime(model("sorted"));
+        show_tab(&mut rt.state, Tab::Themes);
+        rt.frame(0.0);
+        let names = themes::names(&rt.state.config);
+        let mut sorted = names.clone();
+        sorted.sort_by_key(|name| name.to_lowercase());
+        assert_eq!(names, sorted);
     }
 
     /// Presses a control and lets the frame that follows rebuild the view.
