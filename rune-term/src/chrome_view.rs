@@ -92,7 +92,7 @@ pub fn focus_leaf(model: &mut Model, id: LeafId, tx: &mut Tx) -> bool {
         (moved, leaf_surface(&tab.root, id))
     };
     if let Some(surface) = surface.filter(|sid| *sid != 0) {
-        model.surfaces.show(surface);
+        model.terminal.surfaces.show(surface);
     }
     tx.focus(format!("pane-{mark}"), false);
     moved
@@ -107,8 +107,8 @@ fn leaf_mark(node: &Node, id: LeafId) -> Option<u32> {
 }
 
 fn single(model: &Model, scale: f32) -> El {
-    let hover_active = model.surfaces.primary().is_some_and(|host| {
-        host.hover_link.is_some() && crate::hyperlink::open_mods_rune(model.held_mods)
+    let hover_active = model.terminal.surfaces.primary().is_some_and(|host| {
+        host.hover_link.is_some() && crate::hyperlink::open_mods_rune(model.terminal.held_mods)
     });
     let mut pane = effect(PANE_MARK)
         .key("pane")
@@ -123,6 +123,7 @@ fn single(model: &Model, scale: f32) -> El {
         pane = pane.cursor(rune::Cursor::Pointer);
     }
     let cell_px = model
+        .terminal
         .surfaces
         .primary()
         .map(|host| host.cell_px)
@@ -134,7 +135,7 @@ fn single(model: &Model, scale: f32) -> El {
         .min_w(0.0)
         .child(ime::mount_caret(
             wire(pane, PANE_MARK, scale),
-            model.cursor_cell,
+            model.terminal.cursor_cell,
             cell_px,
             scale,
         ))
@@ -191,8 +192,8 @@ fn leaf_el(leaf: &Leaf, model: &Model, scale: f32, cell: (f32, f32)) -> El {
     let surface = leaf.surface;
     let id = leaf.id;
     let mark = leaf.mark;
-    let hover_active = model.surfaces.by_mark(mark).is_some_and(|host| {
-        host.hover_link.is_some() && crate::hyperlink::open_mods_rune(model.held_mods)
+    let hover_active = model.terminal.surfaces.by_mark(mark).is_some_and(|host| {
+        host.hover_link.is_some() && crate::hyperlink::open_mods_rune(model.terminal.held_mods)
     });
     let mut pane = effect(mark)
         .key(format!("pane-{mark}"))
@@ -215,8 +216,13 @@ fn leaf_el(leaf: &Leaf, model: &Model, scale: f32, cell: (f32, f32)) -> El {
         .tabs
         .get(model.active)
         .is_some_and(|tab| tab.focused == id);
-    let cursor_cell = if focused { model.cursor_cell } else { (0, 0) };
+    let cursor_cell = if focused {
+        model.terminal.cursor_cell
+    } else {
+        (0, 0)
+    };
     let cell_px = model
+        .terminal
         .surfaces
         .get(surface)
         .map(|host| host.cell_px)
@@ -307,7 +313,7 @@ fn layout_leaf(
     tx: &mut Tx,
 ) {
     let cell_points = model.cell_points;
-    let Some(host) = model.surfaces.get_mut(surface) else {
+    let Some(host) = model.terminal.surfaces.get_mut(surface) else {
         tx.live_only();
         return;
     };
@@ -339,7 +345,7 @@ fn adopt_host_size(model: &mut Model, id: LeafId) {
     else {
         return;
     };
-    let Some(host) = model.surfaces.get(surface) else {
+    let Some(host) = model.terminal.surfaces.get(surface) else {
         return;
     };
     if host.cols == 0 || host.rows == 0 {
@@ -536,7 +542,7 @@ mod tests {
     #[test]
     fn a_split_keeps_one_cell_for_the_divider_and_isolates_damage() {
         let mut model = host();
-        assert_eq!(model.surfaces.len(), 1);
+        assert_eq!(model.terminal.surfaces.len(), 1);
         let first = model.tabs[0].root.clone();
         let Node::Leaf(original) = first else {
             panic!("the first tab is one leaf");
@@ -544,7 +550,7 @@ mod tests {
         assert_ne!(original.surface, 0);
 
         assert!(split_focused(&mut model, Axis::Horizontal));
-        assert_eq!(model.surfaces.len(), 2);
+        assert_eq!(model.terminal.surfaces.len(), 2);
         let (
             left_cols,
             right_cols,
@@ -595,17 +601,19 @@ mod tests {
         assert_eq!(model.tabs[0].focused, right_id);
         assert!(!focus_leaf(&mut model, right_id, &mut rune::Tx::default()));
         {
-            let host = model.surfaces.get_mut(left_surface).unwrap();
+            let host = model.terminal.surfaces.get_mut(left_surface).unwrap();
             host.surface.inject_output(b"only-a\r\n");
             host.frame_flag.store(true, Ordering::Release);
         }
         assert!(model
+            .terminal
             .surfaces
             .get(left_surface)
             .unwrap()
             .frame_flag
             .load(Ordering::Acquire));
         assert!(!model
+            .terminal
             .surfaces
             .get(right_surface)
             .unwrap()

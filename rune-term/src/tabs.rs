@@ -48,7 +48,7 @@ pub fn open_with_profile(model: &mut Model, profile: &str) -> bool {
     if let Some(leaf) = find_leaf_mut(&mut model.tabs[model.active].root, id) {
         leaf.surface = surface;
     }
-    model.surfaces.show(surface);
+    model.terminal.surfaces.show(surface);
     true
 }
 
@@ -60,7 +60,7 @@ fn apply_profile_for_new_tab(model: &mut Model, profile: &str) {
     }
     if resolved.theme != model.palette.name {
         model.palette = model.config.resolve_palette_for(profile);
-        model.grid_draw.invalidate_theme();
+        model.terminal.grid_draw.invalidate_theme();
     }
 }
 
@@ -106,7 +106,7 @@ pub fn close(model: &mut Model, index: usize, tx: &mut Tx) {
     let ids = surfaces_of(&tab.root);
     for id in ids {
         model.shared.remove_flag(id);
-        model.surfaces.remove(id);
+        model.terminal.surfaces.remove(id);
     }
     model.tabs.remove(index);
     if model.tabs.is_empty() {
@@ -139,7 +139,7 @@ pub fn show_active(model: &mut Model) {
     let Some(id) = model.tabs.get(model.active).and_then(surface_of) else {
         return;
     };
-    model.surfaces.show(id);
+    model.terminal.surfaces.show(id);
 }
 
 pub(crate) fn apply_active_profile(model: &mut Model) {
@@ -153,7 +153,7 @@ pub(crate) fn apply_active_profile(model: &mut Model) {
     }
     if resolved.theme != model.palette.name {
         model.palette = model.config.resolve_palette_for(&profile);
-        model.grid_draw.invalidate_theme();
+        model.terminal.grid_draw.invalidate_theme();
     }
 }
 
@@ -279,7 +279,7 @@ mod tests {
     }
 
     fn shown(model: &Model) -> SurfaceId {
-        model.surfaces.shown_id().expect("shown surface")
+        model.terminal.surfaces.shown_id().expect("shown surface")
     }
 
     fn active_surface(model: &Model) -> SurfaceId {
@@ -297,7 +297,7 @@ mod tests {
         let second = shown(&model);
         assert_ne!(second, first);
         assert_eq!(active_surface(&model), second);
-        assert_eq!(model.surfaces.len(), 2);
+        assert_eq!(model.terminal.surfaces.len(), 2);
     }
 
     #[test]
@@ -399,7 +399,10 @@ mod tests {
         open(&mut model);
         let s0 = surface_of(&model.tabs[0]).unwrap();
         model.active = 0;
-        model.surfaces.show(surface_of(&model.tabs[1]).unwrap());
+        model
+            .terminal
+            .surfaces
+            .show(surface_of(&model.tabs[1]).unwrap());
         assert_ne!(shown(&model), s0);
         show_active(&mut model);
         assert_eq!(shown(&model), s0);

@@ -35,17 +35,17 @@ fn pane_of(mark: u32) -> u32 {
 
 fn host_ref(model: &Model, pane: u32) -> Option<&HostSurface> {
     if pane == SHOWN_PANE {
-        model.surfaces.primary()
+        model.terminal.surfaces.primary()
     } else {
-        model.surfaces.by_mark(pane)
+        model.terminal.surfaces.by_mark(pane)
     }
 }
 
 fn host_mut(model: &mut Model, pane: u32) -> Option<&mut HostSurface> {
     if pane == SHOWN_PANE {
-        model.surfaces.primary_mut()
+        model.terminal.surfaces.primary_mut()
     } else {
-        model.surfaces.by_mark_mut(pane)
+        model.terminal.surfaces.by_mark_mut(pane)
     }
 }
 
@@ -57,7 +57,7 @@ pub fn note_activity(host: &mut HostSurface, tx: &mut Tx) {
 
 pub(crate) fn refresh(model: &mut Model, now: f64, tx: &mut Tx) -> bool {
     let mut wake = false;
-    for host in model.surfaces.iter_mut() {
+    for host in model.terminal.surfaces.iter_mut() {
         wake |= rune_term_core::scrollback::refresh_host(host, now);
     }
     if wake {
@@ -260,6 +260,7 @@ mod viewport {
         }
         bytes.extend_from_slice(b"BOTLINE\r\n");
         model
+            .terminal
             .surfaces
             .primary_mut()
             .unwrap()
@@ -272,7 +273,7 @@ mod viewport {
     fn dragging_to_the_top_shows_history_and_hides_the_cursor() {
         let mut model = host();
         {
-            let host = model.surfaces.primary_mut().unwrap();
+            let host = model.terminal.surfaces.primary_mut().unwrap();
             host.render.update();
             assert!(host.render.cursor_visible());
             assert!(
@@ -300,7 +301,7 @@ mod viewport {
             grab,
             &mut Tx::default(),
         );
-        let host = model.surfaces.by_mark(PANE_MARK).unwrap();
+        let host = model.terminal.surfaces.by_mark(PANE_MARK).unwrap();
         assert!(host.render.display_offset() > 0);
         assert!(!host.render.cursor_visible());
         let top = host.render.text_row(0);

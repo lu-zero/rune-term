@@ -280,7 +280,7 @@ pub(crate) fn open_host(
     let id = surface.id();
     model.shared.insert_flag(id, Arc::clone(&flag));
     let render = RenderState::new(&surface);
-    model.surfaces.insert(HostSurface {
+    model.terminal.surfaces.insert(HostSurface {
         surface,
         render,
         mark,
@@ -315,7 +315,7 @@ pub fn poll(model: &mut Model, now: f64, tx: &mut Tx) -> bool {
         let _ = resp_tx.send(crate::ipc::handle_control_request(model, req));
     }
     if let Some(bytes) = model.pending_inject.take() {
-        if let Some(host) = model.surfaces.primary_mut() {
+        if let Some(host) = model.terminal.surfaces.primary_mut() {
             host.surface.inject_output(&bytes);
             host.frame_flag.store(true, Ordering::Release);
         }
@@ -342,11 +342,11 @@ fn apply(model: &mut Model, event: HostEvent, tx: &mut Tx) -> bool {
 /// The shell exited. Drop its leaf. The window closes with the last surface.
 fn drop_closed(model: &mut Model, id: SurfaceId, tx: &mut Tx) -> bool {
     model.shared.remove_flag(id);
-    if model.surfaces.remove(id).is_none() {
+    if model.terminal.surfaces.remove(id).is_none() {
         return false;
     }
     drop_leaf(model, id);
-    if model.surfaces.is_empty() {
+    if model.terminal.surfaces.is_empty() {
         tx.close_window();
     } else {
         crate::tabs::show_active(model);
@@ -381,7 +381,7 @@ fn drop_leaf(model: &mut Model, surface: SurfaceId) {
 fn apply_action(model: &mut Model, id: SurfaceId, action: Action) -> bool {
     match action {
         Action::SetTitle { title, .. } => {
-            let changed = match model.surfaces.get_mut(id) {
+            let changed = match model.terminal.surfaces.get_mut(id) {
                 Some(host) if host.title != title => {
                     host.title = title.clone();
                     true
@@ -395,7 +395,7 @@ fn apply_action(model: &mut Model, id: SurfaceId, action: Action) -> bool {
             changed
         }
         Action::RingBell => {
-            let Some(host) = model.surfaces.get_mut(id) else {
+            let Some(host) = model.terminal.surfaces.get_mut(id) else {
                 return false;
             };
             if host.bell {
@@ -405,14 +405,14 @@ fn apply_action(model: &mut Model, id: SurfaceId, action: Action) -> bool {
             true
         }
         Action::CursorBlinkingChange => {
-            let Some(host) = model.surfaces.get_mut(id) else {
+            let Some(host) = model.terminal.surfaces.get_mut(id) else {
                 return false;
             };
             host.blink = !host.blink;
             true
         }
         Action::Progress { state, value } => {
-            let Some(host) = model.surfaces.get_mut(id) else {
+            let Some(host) = model.terminal.surfaces.get_mut(id) else {
                 return false;
             };
             let next = Some(Progress { state, value });
@@ -466,7 +466,7 @@ mod tests {
         let mut model = model::init();
         setup(&mut model, std::sync::Arc::new(|| {}));
         {
-            let host = model.surfaces.primary_mut().unwrap();
+            let host = model.terminal.surfaces.primary_mut().unwrap();
             // "hello" in base64. The child asks the host to store it.
             host.surface.inject_output(b"\x1b]52;c;aGVsbG8=\x07");
         }
@@ -481,10 +481,10 @@ mod tests {
     #[test]
     fn the_last_shell_closes_the_window() {
         let model = host();
-        let id = model.surfaces.primary().unwrap().surface.id();
+        let id = model.terminal.surfaces.primary().unwrap().surface.id();
         model.shared.delegate().close_surface(id);
         let rt = latch(model, true);
-        assert!(rt.state.surfaces.primary().is_none());
+        assert!(rt.state.terminal.surfaces.primary().is_none());
         assert!(rt.state.tabs.is_empty());
         assert_eq!(rt.shell_request, Some(Shell::Close));
     }
@@ -503,13 +503,16 @@ mod tests {
             },
             other => panic!("expected a split, got {other:?}"),
         };
-        let left = model.surfaces.primary().unwrap().surface.id();
+        let left = model.terminal.surfaces.primary().unwrap().surface.id();
         assert_ne!(left, right);
         model.shared.delegate().close_surface(right);
         let rt = latch(model, true);
         assert!(rt.shell_request.is_none());
-        assert_eq!(rt.state.surfaces.len(), 1);
-        assert_eq!(rt.state.surfaces.primary().unwrap().surface.id(), left);
+        assert_eq!(rt.state.terminal.surfaces.len(), 1);
+        assert_eq!(
+            rt.state.terminal.surfaces.primary().unwrap().surface.id(),
+            left
+        );
         assert!(matches!(rt.state.tabs[0].root, Node::Leaf(_)));
         assert_eq!(rt.state.tabs[0].focused, crate::chrome::LEAF);
     }
@@ -520,7 +523,7 @@ mod tests {
         model.shared.delegate().close_surface(usize::MAX);
         let rt = latch(model, false);
         assert!(rt.shell_request.is_none());
-        assert_eq!(rt.state.surfaces.len(), 1);
+        assert_eq!(rt.state.terminal.surfaces.len(), 1);
         assert_eq!(rt.state.tabs.len(), 1);
     }
 
@@ -546,12 +549,12 @@ mod tests {
             right_id,
             &mut rune::Tx::default()
         ));
-        assert_eq!(model.surfaces.shown_id(), Some(right_surface));
+        assert_eq!(model.terminal.surfaces.shown_id(), Some(right_surface));
         model.shared.delegate().close_surface(right_surface);
         let rt = latch(model, true);
         assert!(rt.shell_request.is_none());
-        assert_eq!(rt.state.surfaces.len(), 1);
-        assert_eq!(rt.state.surfaces.shown_id(), Some(left_surface));
+        assert_eq!(rt.state.terminal.surfaces.len(), 1);
+        assert_eq!(rt.state.terminal.surfaces.shown_id(), Some(left_surface));
         match &rt.state.tabs[0].root {
             Node::Leaf(leaf) => {
                 assert_eq!(leaf.surface, left_surface);
@@ -573,8 +576,8 @@ mod tests {
         assert!(rt.shell_request.is_none());
         assert_eq!(rt.state.tabs.len(), 1);
         assert_eq!(rt.state.active, 0);
-        assert_eq!(rt.state.surfaces.len(), 1);
-        assert_eq!(rt.state.surfaces.shown_id(), Some(active_surface));
+        assert_eq!(rt.state.terminal.surfaces.len(), 1);
+        assert_eq!(rt.state.terminal.surfaces.shown_id(), Some(active_surface));
         assert_eq!(
             crate::tabs::surface_of(&rt.state.tabs[0]),
             Some(active_surface)

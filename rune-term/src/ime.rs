@@ -26,13 +26,13 @@ pub fn mount_caret(pane: El, cursor_cell: (u16, u16), cell_px: (u16, u16), scale
 pub fn on_ime(model: &mut Model, ime: &Ime, tx: &mut Tx) -> bool {
     match ime {
         Ime::Preedit(text, cursor, _clauses) => {
-            rune_term_core::ime::set_preedit(&mut model.preedit, text.clone(), *cursor);
+            rune_term_core::ime::set_preedit(&mut model.terminal.preedit, text.clone(), *cursor);
             tx.wake_after(Duration::ZERO);
             true
         }
         Ime::Commit(text) => {
-            model.preedit = None;
-            if let Some(host) = model.surfaces.primary_mut() {
+            model.terminal.preedit = None;
+            if let Some(host) = model.terminal.surfaces.primary_mut() {
                 let _ = rune_term_core::ime::commit_text(&host.surface, text);
             }
             tx.wake_after(Duration::ZERO);
@@ -41,7 +41,7 @@ pub fn on_ime(model: &mut Model, ime: &Ime, tx: &mut Tx) -> bool {
         Ime::Select(_) => false,
         Ime::Enabled | Ime::Disabled => {
             if matches!(ime, Ime::Disabled) {
-                model.preedit = None;
+                model.terminal.preedit = None;
             }
             tx.wake_after(Duration::ZERO);
             true

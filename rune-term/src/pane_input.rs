@@ -55,7 +55,7 @@ pub fn on_wheel_mark(
     scale: f32,
     tx: &mut Tx,
 ) -> bool {
-    let Some(host) = model.surfaces.by_mark_mut(mark) else {
+    let Some(host) = model.terminal.surfaces.by_mark_mut(mark) else {
         return false;
     };
     let (lines, consumed) = core_terminal::wheel(
@@ -79,7 +79,7 @@ pub fn on_drag_mark(model: &mut Model, mark: u32, drag: &mut Drag, scale: f32, t
     let Some(button) = core_input::button_code(tx.button()) else {
         return;
     };
-    let Some(host) = model.surfaces.by_mark_mut(mark) else {
+    let Some(host) = model.terminal.surfaces.by_mark_mut(mark) else {
         return;
     };
     let action = core_terminal::gesture(
@@ -115,7 +115,7 @@ pub fn on_pointer_move_mark(
     scale: f32,
     tx: &mut Tx,
 ) {
-    let Some(host) = model.surfaces.by_mark_mut(mark) else {
+    let Some(host) = model.terminal.surfaces.by_mark_mut(mark) else {
         return;
     };
     let outcome = core_terminal::pointer_move(
@@ -137,7 +137,7 @@ pub fn on_secondary_mark(
     scale: f32,
     tx: &mut Tx,
 ) {
-    let Some(host) = model.surfaces.by_mark_mut(mark) else {
+    let Some(host) = model.terminal.surfaces.by_mark_mut(mark) else {
         return;
     };
     let mods = core_input::modifiers(tx.mods());
@@ -188,6 +188,7 @@ fn context_action(model: &mut Model, mark: u32, id: &str, tx: &mut Tx) {
     match id {
         "copy" => {
             let Some(text) = model
+                .terminal
                 .surfaces
                 .by_mark_mut(mark)
                 .and_then(|host| host.surface.selection_text())
@@ -231,6 +232,7 @@ pub fn on_key(model: &mut Model, event: &KeyEvent, tx: &mut Tx) -> bool {
         .map(core_input::code)
         .unwrap_or_else(|| core_input::logical_code(&event.key));
     let mark = model
+        .terminal
         .surfaces
         .primary()
         .map(|host| host.mark)
@@ -253,10 +255,10 @@ pub fn on_key(model: &mut Model, event: &KeyEvent, tx: &mut Tx) -> bool {
 }
 
 fn target_host(model: &mut Model, mark: u32) -> Option<&mut HostSurface> {
-    if model.surfaces.by_mark(mark).is_some() {
-        model.surfaces.by_mark_mut(mark)
+    if model.terminal.surfaces.by_mark(mark).is_some() {
+        model.terminal.surfaces.by_mark_mut(mark)
     } else {
-        model.surfaces.primary_mut()
+        model.terminal.surfaces.primary_mut()
     }
 }
 
@@ -451,7 +453,7 @@ mod tests {
     #[test]
     fn command_t_opens_a_tab() {
         let mut model = host();
-        let first = model.surfaces.primary().unwrap().surface.id();
+        let first = model.terminal.surfaces.primary().unwrap().surface.id();
         assert!(press(
             &mut model,
             Code::KeyT,
@@ -461,9 +463,9 @@ mod tests {
         ));
         assert!(model.shared.take_output().is_empty());
         assert_eq!(model.tabs.len(), 2);
-        assert_eq!(model.surfaces.len(), 2);
+        assert_eq!(model.terminal.surfaces.len(), 2);
         assert_eq!(model.active, 1);
-        let second = model.surfaces.primary().unwrap().surface.id();
+        let second = model.terminal.surfaces.primary().unwrap().surface.id();
         assert_ne!(first, second);
         assert_eq!(leaf_surface(&model, 1), second);
         assert!(press(
@@ -499,7 +501,7 @@ mod tests {
     #[test]
     fn command_1_selects_the_first_tab_on_macos() {
         let mut model = host();
-        let first = model.surfaces.primary().unwrap().surface.id();
+        let first = model.terminal.surfaces.primary().unwrap().surface.id();
         assert!(press(
             &mut model,
             Code::KeyT,
@@ -517,7 +519,10 @@ mod tests {
         if cfg!(target_os = "macos") {
             assert!(took);
             assert_eq!(model.active, 0);
-            assert_eq!(model.surfaces.primary().unwrap().surface.id(), first);
+            assert_eq!(
+                model.terminal.surfaces.primary().unwrap().surface.id(),
+                first
+            );
             assert!(press(
                 &mut model,
                 Code::Digit9,
@@ -536,7 +541,7 @@ mod tests {
     #[test]
     fn ctrl_tab_cycles_tabs() {
         let mut model = host();
-        let first = model.surfaces.primary().unwrap().surface.id();
+        let first = model.terminal.surfaces.primary().unwrap().surface.id();
         assert!(press(
             &mut model,
             Code::KeyT,
@@ -544,7 +549,7 @@ mod tests {
             None,
             rune::Mods::default()
         ));
-        let second = model.surfaces.primary().unwrap().surface.id();
+        let second = model.terminal.surfaces.primary().unwrap().surface.id();
         let ctrl = rune::Mods {
             ctrl: true,
             ..rune::Mods::default()
@@ -557,7 +562,10 @@ mod tests {
             rune::Mods::default()
         ));
         assert_eq!(model.active, 0);
-        assert_eq!(model.surfaces.primary().unwrap().surface.id(), first);
+        assert_eq!(
+            model.terminal.surfaces.primary().unwrap().surface.id(),
+            first
+        );
         let back = rune::Mods {
             ctrl: true,
             shift: true,
@@ -571,14 +579,17 @@ mod tests {
             rune::Mods::default()
         ));
         assert_eq!(model.active, 1);
-        assert_eq!(model.surfaces.primary().unwrap().surface.id(), second);
+        assert_eq!(
+            model.terminal.surfaces.primary().unwrap().surface.id(),
+            second
+        );
         assert!(model.shared.take_output().is_empty());
     }
 
     #[test]
     fn command_w_closes_the_selected_tab() {
         let mut model = host();
-        let first = model.surfaces.primary().unwrap().surface.id();
+        let first = model.terminal.surfaces.primary().unwrap().surface.id();
         assert!(press(
             &mut model,
             Code::KeyT,
@@ -595,9 +606,12 @@ mod tests {
         ));
         assert!(model.shared.take_output().is_empty());
         assert_eq!(model.tabs.len(), 1);
-        assert_eq!(model.surfaces.len(), 1);
+        assert_eq!(model.terminal.surfaces.len(), 1);
         assert_eq!(model.active, 0);
-        assert_eq!(model.surfaces.primary().unwrap().surface.id(), first);
+        assert_eq!(
+            model.terminal.surfaces.primary().unwrap().surface.id(),
+            first
+        );
     }
 
     #[test]
@@ -620,7 +634,7 @@ mod tests {
             assert!(on_physical(model, &event, tx));
         });
         assert!(rt.state.tabs.is_empty());
-        assert_eq!(rt.state.surfaces.len(), 0);
+        assert_eq!(rt.state.terminal.surfaces.len(), 0);
         assert_eq!(rt.shell_request, Some(Shell::Close));
     }
 
@@ -628,7 +642,7 @@ mod tests {
     fn shift_page_up_scrolls_and_writes_nothing() {
         let mut model = host();
         {
-            let host = model.surfaces.primary_mut().unwrap();
+            let host = model.terminal.surfaces.primary_mut().unwrap();
             host.rows = 24;
             let mut bytes = Vec::new();
             for _ in 0..40 {
@@ -648,7 +662,7 @@ mod tests {
             rune::Mods::default()
         ));
         assert!(model.shared.take_output().is_empty());
-        let host = model.surfaces.primary_mut().unwrap();
+        let host = model.terminal.surfaces.primary_mut().unwrap();
         host.render.update();
         assert!(host.render.display_offset() > 0);
     }
@@ -712,14 +726,14 @@ mod tests {
     }
 
     fn sized(model: &mut Model) {
-        let host = model.surfaces.primary_mut().unwrap();
+        let host = model.terminal.surfaces.primary_mut().unwrap();
         host.cell_px = (10, 20);
         host.cols = 80;
         host.rows = 24;
     }
 
     fn history(model: &mut Model) {
-        let host = model.surfaces.primary_mut().unwrap();
+        let host = model.terminal.surfaces.primary_mut().unwrap();
         let mut bytes = Vec::new();
         for _ in 0..40 {
             bytes.extend_from_slice(b"line\r\n");
@@ -738,7 +752,7 @@ mod tests {
     }
 
     fn offset(model: &mut Model) -> usize {
-        let host = model.surfaces.primary_mut().unwrap();
+        let host = model.terminal.surfaces.primary_mut().unwrap();
         host.render.update();
         host.render.display_offset()
     }
@@ -749,7 +763,7 @@ mod tests {
         sized(&mut model);
         history(&mut model);
         assert!(wheel(&mut model, 0.0, 2.0, rune::Mods::default()));
-        let remainder = model.surfaces.primary().unwrap().wheel_remainder;
+        let remainder = model.terminal.surfaces.primary().unwrap().wheel_remainder;
         assert!((remainder - 0.1).abs() < 1e-5, "{remainder}");
         assert_eq!(offset(&mut model), 0);
         assert!(model.shared.take_output().is_empty());
@@ -763,7 +777,7 @@ mod tests {
         for _ in 0..5 {
             assert!(wheel(&mut model, 0.0, 6.0, rune::Mods::default()));
         }
-        let remainder = model.surfaces.primary().unwrap().wheel_remainder;
+        let remainder = model.terminal.surfaces.primary().unwrap().wheel_remainder;
         assert!((remainder - 0.5).abs() < 1e-4, "{remainder}");
         assert_eq!(offset(&mut model), 1);
     }
@@ -790,7 +804,10 @@ mod tests {
         let moved = offset(&mut model);
         if cfg!(target_os = "macos") {
             assert_eq!(moved, 0);
-            assert_eq!(model.surfaces.primary().unwrap().wheel_remainder, 0.0);
+            assert_eq!(
+                model.terminal.surfaces.primary().unwrap().wheel_remainder,
+                0.0
+            );
         } else {
             assert_eq!(moved, 2);
         }
@@ -806,20 +823,29 @@ mod tests {
             &PhysicalInput::FocusLost,
             &mut Tx::default()
         ));
-        assert_eq!(model.surfaces.primary().unwrap().wheel_remainder, 0.0);
-        assert!(model.surfaces.primary().unwrap().pointer_button.is_none());
+        assert_eq!(
+            model.terminal.surfaces.primary().unwrap().wheel_remainder,
+            0.0
+        );
+        assert!(model
+            .terminal
+            .surfaces
+            .primary()
+            .unwrap()
+            .pointer_button
+            .is_none());
     }
 
     #[test]
     fn hit_testing_uses_the_drawn_pitch() {
         let mut model = host();
         {
-            let host = model.surfaces.primary_mut().unwrap();
+            let host = model.terminal.surfaces.primary_mut().unwrap();
             host.cell_px = (15, 15);
             host.cols = 78;
             host.rows = 78;
         }
-        let host = model.surfaces.primary().unwrap();
+        let host = model.terminal.surfaces.primary().unwrap();
         let scale = 2.0;
         for i in 0..78 {
             let center = (i as f32 + 0.5) * 7.5;
@@ -845,12 +871,13 @@ mod tests {
         mods: librio::Modifiers,
     ) {
         let mark = model
+            .terminal
             .surfaces
             .primary()
             .map(|host| host.mark)
             .unwrap_or(crate::chrome::PANE_MARK);
         let mut tx = Tx::default();
-        if let Some(host) = model.surfaces.by_mark_mut(mark) {
+        if let Some(host) = model.terminal.surfaces.by_mark_mut(mark) {
             let action = rune_term_core::terminal_input::gesture(
                 host, phase, x, y, clicks, 0, mods, 1.0, true,
             );
@@ -872,6 +899,7 @@ mod tests {
     fn select_hello(model: &mut Model) {
         sized(model);
         model
+            .terminal
             .surfaces
             .primary_mut()
             .unwrap()
@@ -888,6 +916,7 @@ mod tests {
         let mut model = host();
         select_hello(&mut model);
         let text = model
+            .terminal
             .surfaces
             .primary()
             .unwrap()
@@ -896,7 +925,7 @@ mod tests {
             .unwrap_or_default();
         assert!(text.contains("HELLO"), "{text:?}");
         assert!(!text.contains("WORLD"), "{text:?}");
-        assert!(!model.surfaces.primary().unwrap().selecting);
+        assert!(!model.terminal.surfaces.primary().unwrap().selecting);
     }
 
     #[test]
@@ -904,6 +933,7 @@ mod tests {
         let mut model = host();
         sized(&mut model);
         model
+            .terminal
             .surfaces
             .primary_mut()
             .unwrap()
@@ -926,6 +956,7 @@ mod tests {
             librio::Modifiers::empty(),
         );
         let text = model
+            .terminal
             .surfaces
             .primary()
             .unwrap()
@@ -941,6 +972,7 @@ mod tests {
         let mut model = host();
         sized(&mut model);
         model
+            .terminal
             .surfaces
             .primary_mut()
             .unwrap()
@@ -963,6 +995,7 @@ mod tests {
             librio::Modifiers::empty(),
         );
         let text = model
+            .terminal
             .surfaces
             .primary()
             .unwrap()
@@ -977,6 +1010,7 @@ mod tests {
         let mut model = host();
         sized(&mut model);
         model
+            .terminal
             .surfaces
             .primary_mut()
             .unwrap()
@@ -999,6 +1033,7 @@ mod tests {
             librio::Modifiers::empty(),
         );
         let text = model
+            .terminal
             .surfaces
             .primary()
             .unwrap()
@@ -1013,6 +1048,7 @@ mod tests {
         let mut model = host();
         sized(&mut model);
         model
+            .terminal
             .surfaces
             .primary_mut()
             .unwrap()
@@ -1035,6 +1071,7 @@ mod tests {
             librio::Modifiers::empty(),
         );
         assert!(model
+            .terminal
             .surfaces
             .primary()
             .unwrap()
@@ -1049,6 +1086,7 @@ mod tests {
         let mut model = host();
         sized(&mut model);
         model
+            .terminal
             .surfaces
             .primary_mut()
             .unwrap()
@@ -1071,6 +1109,7 @@ mod tests {
             librio::Modifiers::SHIFT,
         );
         let text = model
+            .terminal
             .surfaces
             .primary()
             .unwrap()
@@ -1086,7 +1125,7 @@ mod tests {
         let mut model = host();
         sized(&mut model);
         {
-            let host = model.surfaces.primary_mut().unwrap();
+            let host = model.terminal.surfaces.primary_mut().unwrap();
             host.surface.inject_output(
                 b"\x1b]8;;https://example.com\x07link\x1b]8;;\x07\x1b[?1000h\x1b[?1006h",
             );
@@ -1106,6 +1145,7 @@ mod tests {
             "mod+click must not produce mouse report"
         );
         assert!(model
+            .terminal
             .surfaces
             .primary()
             .unwrap()
@@ -1119,7 +1159,7 @@ mod tests {
         let mut model = host();
         sized(&mut model);
         {
-            let host = model.surfaces.primary_mut().unwrap();
+            let host = model.terminal.surfaces.primary_mut().unwrap();
             host.surface
                 .inject_output(b"\x1b]8;;https://example.com\x07link\x1b]8;;\x07");
             host.render.update();
@@ -1129,14 +1169,22 @@ mod tests {
         point.x = 1.0;
         point.y = 1.0;
         on_pointer_move_mark(&mut model, mark, point, 1.0, &mut Tx::default());
-        let probe = model.surfaces.primary().and_then(|h| h.hover_probe.clone());
+        let probe = model
+            .terminal
+            .surfaces
+            .primary()
+            .and_then(|h| h.hover_probe.clone());
         assert!(probe.is_some());
         let mut point = PointerEvent::default();
         point.x = 2.0;
         point.y = 2.0;
         on_pointer_move_mark(&mut model, mark, point, 1.0, &mut Tx::default());
         assert_eq!(
-            model.surfaces.primary().and_then(|h| h.hover_probe.clone()),
+            model
+                .terminal
+                .surfaces
+                .primary()
+                .and_then(|h| h.hover_probe.clone()),
             probe
         );
     }
@@ -1170,6 +1218,7 @@ mod tests {
         ));
         assert!(model.shared.take_output().is_empty());
         let text = model
+            .terminal
             .surfaces
             .primary()
             .unwrap()
@@ -1220,7 +1269,7 @@ mod tests {
         let mut model = host();
         select_hello(&mut model);
         {
-            let host = model.surfaces.primary_mut().unwrap();
+            let host = model.terminal.surfaces.primary_mut().unwrap();
             host.wheel_remainder = 0.3;
             host.pointer_button = Some(0);
             host.selecting = true;
@@ -1237,7 +1286,7 @@ mod tests {
             &PhysicalInput::FocusLost,
             &mut Tx::default()
         ));
-        let host = model.surfaces.primary().unwrap();
+        let host = model.terminal.surfaces.primary().unwrap();
         assert_eq!(host.wheel_remainder, 0.0);
         assert!(host.pointer_button.is_none());
         assert!(!host.selecting);
@@ -1250,7 +1299,7 @@ mod tests {
         let mut model = host();
         sized(&mut model);
         {
-            let host = model.surfaces.primary_mut().unwrap();
+            let host = model.terminal.surfaces.primary_mut().unwrap();
             host.surface
                 .inject_output(b"\x1b]8;;file:///tmp/x\x07link\x1b]8;;\x07");
             host.render.update();
@@ -1266,6 +1315,7 @@ mod tests {
         assert!(crate::hyperlink::take_captured_opens().is_empty());
         assert!(model.shared.take_output().is_empty());
         assert!(model
+            .terminal
             .surfaces
             .primary()
             .unwrap()
@@ -1279,6 +1329,7 @@ mod tests {
         let mut model = host();
         sized(&mut model);
         model
+            .terminal
             .surfaces
             .primary_mut()
             .unwrap()
@@ -1306,6 +1357,7 @@ mod tests {
         let mut model = host();
         sized(&mut model);
         model
+            .terminal
             .surfaces
             .primary_mut()
             .unwrap()
@@ -1313,8 +1365,11 @@ mod tests {
             .inject_output(b"HELLO WORLD\x1b[?1000h\x1b[?1006h");
         let mods = librio::Modifiers::empty();
         gesture_at(&mut model, Phase::Down, 1.0, 1.0, 1, mods);
-        assert_eq!(model.surfaces.primary().unwrap().pointer_button, Some(0));
-        assert!(!model.surfaces.primary().unwrap().selecting);
+        assert_eq!(
+            model.terminal.surfaces.primary().unwrap().pointer_button,
+            Some(0)
+        );
+        assert!(!model.terminal.surfaces.primary().unwrap().selecting);
         gesture_at(&mut model, Phase::Move, 21.0, 1.0, 1, mods);
         gesture_at(&mut model, Phase::Up, 21.0, 1.0, 1, mods);
         let out = model.shared.take_output();
@@ -1324,13 +1379,20 @@ mod tests {
             "expected press/release mouse reports, got {reports} in {out:?}"
         );
         assert!(model
+            .terminal
             .surfaces
             .primary()
             .unwrap()
             .surface
             .selection_text()
             .is_none());
-        assert!(model.surfaces.primary().unwrap().pointer_button.is_none());
+        assert!(model
+            .terminal
+            .surfaces
+            .primary()
+            .unwrap()
+            .pointer_button
+            .is_none());
     }
 
     #[test]
@@ -1338,6 +1400,7 @@ mod tests {
         let mut model = host();
         sized(&mut model);
         model
+            .terminal
             .surfaces
             .primary_mut()
             .unwrap()
@@ -1376,6 +1439,7 @@ mod tests {
             librio::Modifiers::empty(),
         );
         let text = model
+            .terminal
             .surfaces
             .primary()
             .unwrap()

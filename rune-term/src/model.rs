@@ -1,16 +1,13 @@
 use std::sync::Arc;
 
 use librio::Engine;
-use rune::{Mods, TextEdit};
+use rune::TextEdit;
 
 use crate::chrome::{Leaf, LeafId, Node, Tab, LEAF, PANE_MARK};
 use crate::delegate::{self, Shared};
 use crate::metrics;
 use crate::settings::ConfigFile;
-use crate::surfaces::Surfaces;
 use crate::theme::Palette;
-
-pub use rune_term_core::ime::Preedit;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SettingsTab {
@@ -92,34 +89,24 @@ pub struct ProfileEditor {
     pub font_picker_active: usize,
 }
 
-pub(crate) use rune_term_core::render::GridDrawStamp;
-
 pub struct Model {
     pub engine: Engine,
     pub tabs: Vec<Tab>,
     pub active: usize,
-    pub surfaces: Surfaces,
+    pub terminal: rune_term_core::terminal::State,
     pub cell_points: (f32, f32),
     pub scale: f32,
     pub config: ConfigFile,
     pub font_size: f32,
     pub palette: Arc<Palette>,
-    pub blink_phase_on: bool,
-    /// Filled by the IME change. The view does not read this.
-    pub preedit: Option<Preedit>,
-    /// Caret cell for IME placement. The view does not read this.
-    pub cursor_cell: (u16, u16),
     /// The search field is up. It takes focus while `query.focused` is set.
     pub search_open: bool,
     pub query: TextEdit,
-    /// The pattern the last grid upload tinted. Empty when search was closed.
-    pub(crate) grid_draw: GridDrawStamp,
     pub(crate) shared: Arc<Shared>,
     pub(crate) pending_inject: Option<Vec<u8>>,
     pub(crate) pending_link_open: Option<String>,
     pub(crate) settings_mode: SettingsMode,
     pub(crate) _ipc: Option<crate::ipc::Server>,
-    pub held_mods: rune::Mods,
 }
 
 pub fn init() -> Model {
@@ -147,27 +134,19 @@ pub fn init() -> Model {
             focused: LeafId(LEAF.0),
         }],
         active: 0,
-        surfaces: Surfaces::new(),
+        terminal: rune_term_core::terminal::State::new(palette.name.clone()),
         cell_points: metrics::cell_points_for(font_size),
         scale: 1.0,
         config,
         font_size,
-        blink_phase_on: true,
-        preedit: None,
-        cursor_cell: (0, 0),
+        palette,
         search_open: false,
         query: TextEdit::new(""),
-        grid_draw: GridDrawStamp {
-            theme: palette.name.clone(),
-            ..GridDrawStamp::default()
-        },
-        palette,
         shared: std::sync::Arc::clone(&shared),
         pending_inject,
         pending_link_open: None,
         settings_mode: SettingsMode::Closed,
         _ipc: Some(crate::ipc::start(shared)),
-        held_mods: Mods::default(),
     }
 }
 

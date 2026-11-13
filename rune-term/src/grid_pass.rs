@@ -17,24 +17,26 @@ pub fn sync(
     queue: &wgpu::Queue,
 ) {
     let shown = search::shown(model);
-    let active = model.surfaces.shown_id();
+    let active = model.terminal.surfaces.shown_id();
     let hover = model
+        .terminal
         .surfaces
         .primary()
         .and_then(|host| host.hover_link.clone());
-    let hover_active = hover.is_some() && crate::hyperlink::open_mods_rune(model.held_mods);
-    let preedit = model.preedit.clone();
+    let hover_active =
+        hover.is_some() && crate::hyperlink::open_mods_rune(model.terminal.held_mods);
+    let preedit = model.terminal.preedit.clone();
 
-    let force_upload = shown != model.grid_draw.search
-        || hover != model.grid_draw.hover
-        || hover_active != model.grid_draw.hover_active
-        || preedit != model.grid_draw.preedit
-        || model.palette.name != model.grid_draw.theme
-        || model.grid_draw.shown != active;
+    let force_upload = shown != model.terminal.grid_draw.search
+        || hover != model.terminal.grid_draw.hover
+        || hover_active != model.terminal.grid_draw.hover_active
+        || preedit != model.terminal.grid_draw.preedit
+        || model.palette.name != model.terminal.grid_draw.theme
+        || model.terminal.grid_draw.shown != active;
 
     let mut drew = false;
     let shared = Arc::clone(&model.shared);
-    for host in model.surfaces.iter_mut() {
+    for host in model.terminal.surfaces.iter_mut() {
         let is_active = Some(host.surface.id()) == active;
         if is_active {
             let result = core_render::sync_active_host(
@@ -53,7 +55,7 @@ pub fn sync(
                 shared.note_rearm();
             }
             if result.drew {
-                model.cursor_cell = result.cursor_cell;
+                model.terminal.cursor_cell = result.cursor_cell;
                 drew = true;
             }
         } else if core_render::rearm_background(host) {
@@ -63,11 +65,11 @@ pub fn sync(
     if !drew {
         images.clear();
     } else {
-        model.grid_draw.search = shown;
-        model.grid_draw.shown = active;
-        model.grid_draw.hover = hover;
-        model.grid_draw.hover_active = hover_active;
-        model.grid_draw.preedit = preedit;
-        model.grid_draw.theme = model.palette.name.clone();
+        model.terminal.grid_draw.search = shown;
+        model.terminal.grid_draw.shown = active;
+        model.terminal.grid_draw.hover = hover;
+        model.terminal.grid_draw.hover_active = hover_active;
+        model.terminal.grid_draw.preedit = preedit;
+        model.terminal.grid_draw.theme = model.palette.name.clone();
     }
 }
