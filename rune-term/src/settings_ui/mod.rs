@@ -195,14 +195,18 @@ pub fn show_tab(model: &mut SettingsModel, tab: Tab) {
     reload_draft(model);
 }
 
-pub fn view(model: &SettingsModel, _cx: &mut Cx<SettingsModel>) -> El {
+pub fn view(model: &SettingsModel, cx: &mut Cx<SettingsModel>) -> El {
     let kit = kit(&model.config.resolve_palette());
     let mut overlays = Vec::new();
+    // The window's own controls (the macOS traffic lights) sit over the
+    // content's top-left, so the bar keeps clear of them.
+    let insets = cx.chrome_insets();
+    let leading = insets.leading.max(cx.titlebar_inset());
     let body = col()
         .w_full()
         .h_full()
         .fill(kit.c.page)
-        .child(toolbar(&kit, model))
+        .child(toolbar(&kit, model, leading, insets.trailing))
         .child(
             row()
                 .w_full()
@@ -215,7 +219,7 @@ pub fn view(model: &SettingsModel, _cx: &mut Cx<SettingsModel>) -> El {
     rune_kit::root(body, overlays)
 }
 
-fn toolbar(kit: &Kit, model: &SettingsModel) -> El {
+fn toolbar(kit: &Kit, model: &SettingsModel, leading: f32, trailing: f32) -> El {
     let selected = match model.tab {
         Tab::Profiles => Some(0),
         Tab::Themes => Some(1),
@@ -224,7 +228,8 @@ fn toolbar(kit: &Kit, model: &SettingsModel) -> El {
     let mut bar = row()
         .w_full()
         .h(52.0)
-        .px(16.0)
+        .pl(leading + 16.0)
+        .pr(trailing + 16.0)
         .gap(12.0)
         .center_y()
         .fill(kit.c.bg_base)
