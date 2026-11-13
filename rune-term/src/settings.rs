@@ -11,6 +11,7 @@ use crate::theme::{self, Palette};
 pub use rune_term_core::font::{clamp_font_size, DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE};
 
 pub const DEFAULT_PROFILE: &str = "Default";
+pub const DEFAULT_THEME: &str = "Flexoki Black";
 const CONFIG_NAME: &str = "rune-term.toml";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -24,6 +25,9 @@ pub struct ConfigFile {
     /// defaults, but saving would overwrite the file, so saves are refused.
     #[serde(skip)]
     load_error: Option<String>,
+    /// The file the config is written to. `None` is the platform's.
+    #[serde(skip)]
+    path: Option<PathBuf>,
 }
 
 impl Default for ConfigFile {
@@ -36,6 +40,7 @@ impl Default for ConfigFile {
             profiles,
             custom_themes: BTreeMap::new(),
             load_error: None,
+            path: None,
         }
     }
 }
@@ -53,7 +58,7 @@ impl Default for Settings {
         Self {
             default_profile: DEFAULT_PROFILE.to_owned(),
             font_size: DEFAULT_FONT_SIZE,
-            theme: "Flexoki Black".to_owned(),
+            theme: DEFAULT_THEME.to_owned(),
         }
     }
 }
@@ -174,20 +179,37 @@ pub struct Resolved {
 impl ConfigFile {
     pub fn load() -> Self {
         let path = config_path();
-        match load_path(&path) {
-            Ok(mut config) => {
-                config.normalize();
-                config
-            }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => Self::default(),
+        match Self::read(&path) {
+            Ok(config) => config,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => Self::default().at(path),
             Err(err) => {
                 eprintln!("rune-term: failed to load {}: {err}", path.display());
                 Self {
                     load_error: Some(err.to_string()),
-                    ..Self::default()
+                    ..Self::default().at(path)
                 }
             }
         }
+    }
+
+    /// Reads a config file. A missing file is an error the caller decides on.
+    pub fn read(path: &Path) -> io::Result<Self> {
+        let text = fs::read_to_string(path)?;
+        let mut config: Self =
+            toml::from_str(&text).map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+        config.normalize();
+        Ok(config.at(path))
+    }
+
+    /// Writes the config to this file instead of the platform's.
+    pub fn at(mut self, path: impl Into<PathBuf>) -> Self {
+        self.path = Some(path.into());
+        self
+    }
+
+    /// The file the config is written to.
+    pub fn path(&self) -> PathBuf {
+        self.path.clone().unwrap_or_else(config_path)
     }
 
     pub(crate) fn normalize(&mut self) {
@@ -313,16 +335,84 @@ impl ConfigFile {
         } else {
             CustomTheme::default()
         };
-        let base = format!("{source_name} Copy");
-        let mut name = base.clone();
+        let name = self.unique_theme_name(&format!("{source_name} Copy"));
+        self.custom_themes.insert(name.clone(), source);
+        self.set_theme(name.clone());
+        name
+    }
+
+    /// A theme name no built-in or custom theme already holds.
+    pub fn unique_theme_name(&self, base: &str) -> String {
+        let base = base.trim();
+        let mut name = base.to_owned();
         let mut n = 2u32;
         while self.custom_themes.contains_key(&name) || theme::resolve_builtin(&name).is_some() {
             name = format!("{base} {n}");
             n += 1;
         }
-        self.custom_themes.insert(name.clone(), source);
-        self.set_theme(name.clone());
         name
+    }
+
+    /// A profile name no profile already holds.
+    pub fn unique_profile_name(&self, base: &str) -> String {
+        let base = base.trim();
+        let mut name = base.to_owned();
+        let mut n = 2u32;
+        while self.profiles.contains_key(&name) {
+            name = format!("{base} {n}");
+            n += 1;
+        }
+        name
+    }
+
+    /// Renames a custom theme and repoints everything that used it. Built-in
+    /// themes cannot be renamed.
+    pub fn rename_theme(&mut self, from: &str, to: &str) -> bool {
+        let to = to.trim();
+        if to.is_empty() || from == to {
+            return false;
+        }
+        if !self.custom_themes.contains_key(from) {
+            return false;
+        }
+        if self.custom_themes.contains_key(to) || theme::resolve_builtin(to).is_some() {
+            return false;
+        }
+        let Some(theme) = self.custom_themes.remove(from) else {
+            return false;
+        };
+        self.custom_themes.insert(to.to_owned(), theme);
+        if self.settings.theme == from {
+            self.settings.theme = to.to_owned();
+        }
+        for profile in self.profiles.values_mut() {
+            if profile.theme.as_deref() == Some(from) {
+                profile.theme = Some(to.to_owned());
+            }
+        }
+        true
+    }
+
+    /// Removes a custom theme and clears what pointed at it. Built-in themes
+    /// cannot be removed.
+    pub fn remove_theme(&mut self, name: &str) -> bool {
+        if self.custom_themes.remove(name).is_none() {
+            return false;
+        }
+        if self.settings.theme == name {
+            self.settings.theme = DEFAULT_THEME.to_owned();
+        }
+        for profile in self.profiles.values_mut() {
+            if profile.theme.as_deref() == Some(name) {
+                profile.theme = None;
+            }
+        }
+        true
+    }
+
+    /// Adds a custom theme, replacing one with the same name.
+    pub fn set_custom_theme(&mut self, name: &str, theme: CustomTheme) {
+        self.custom_themes.insert(name.to_owned(), theme);
     }
 
     pub fn ensure_profile(&mut self, name: &str) -> &mut Profile {
@@ -336,6 +426,25 @@ impl ConfigFile {
         } else {
             false
         }
+    }
+
+    /// Removes a profile. The last one stays, and the default moves to it.
+    pub fn remove_profile(&mut self, name: &str) -> bool {
+        if self.profiles.len() <= 1 || !self.profiles.contains_key(name) {
+            return false;
+        }
+        if self.profiles.remove(name).is_none() {
+            return false;
+        }
+        if self.settings.default_profile == name {
+            self.settings.default_profile = self
+                .profiles
+                .keys()
+                .next()
+                .cloned()
+                .unwrap_or_else(|| DEFAULT_PROFILE.to_owned());
+        }
+        true
     }
 
     pub fn rename_profile(&mut self, from: &str, to: &str) -> bool {
@@ -375,7 +484,7 @@ impl ConfigFile {
                 format!("config was not loaded: {err}"),
             ));
         }
-        let path = config_path();
+        let path = self.path();
         if let Some(dir) = path.parent() {
             fs::create_dir_all(dir)?;
         }
@@ -400,14 +509,71 @@ fn config_dir() -> PathBuf {
     PathBuf::from(".").join("rune-term")
 }
 
-fn load_path(path: &Path) -> io::Result<ConfigFile> {
-    let text = fs::read_to_string(path)?;
-    toml::from_str(&text).map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn removing_a_profile_moves_the_default_and_spares_the_last_one() {
+        let mut cfg = ConfigFile::default();
+        cfg.ensure_profile("Work");
+        cfg.set_default_profile("Work");
+        assert!(cfg.remove_profile("Work"));
+        assert!(cfg.profile("Work").is_none());
+        assert_eq!(cfg.default_profile_name(), DEFAULT_PROFILE);
+        assert!(!cfg.remove_profile(DEFAULT_PROFILE));
+        assert!(cfg.profile(DEFAULT_PROFILE).is_some());
+    }
+
+    #[test]
+    fn renaming_a_theme_repoints_what_used_it() {
+        let mut cfg = ConfigFile::default();
+        let copy = cfg.copy_theme("Dracula");
+        cfg.ensure_profile("Work").theme = Some(copy.clone());
+        assert!(cfg.rename_theme(&copy, "Night"));
+        assert!(cfg.custom_themes.contains_key("Night"));
+        assert!(!cfg.custom_themes.contains_key(&copy));
+        assert_eq!(cfg.settings.theme, "Night");
+        assert_eq!(
+            cfg.profile("Work").and_then(|p| p.theme.clone()),
+            Some("Night".to_owned())
+        );
+    }
+
+    #[test]
+    fn removing_a_theme_clears_what_pointed_at_it() {
+        let mut cfg = ConfigFile::default();
+        let copy = cfg.copy_theme("Dracula");
+        cfg.ensure_profile("Work").theme = Some(copy.clone());
+        assert!(cfg.remove_theme(&copy));
+        assert!(cfg.custom_themes.is_empty());
+        assert_eq!(cfg.settings.theme, DEFAULT_THEME);
+        assert!(cfg.profile("Work").and_then(|p| p.theme.clone()).is_none());
+        assert!(!cfg.remove_theme("Dracula"));
+    }
+
+    #[test]
+    fn a_free_name_does_not_collide_with_a_builtin_or_a_profile() {
+        let mut cfg = ConfigFile::default();
+        cfg.ensure_profile("Work");
+        assert_eq!(cfg.unique_profile_name("Work"), "Work 2");
+        assert_eq!(cfg.unique_theme_name("Dracula"), "Dracula 2");
+        cfg.set_custom_theme("Dracula 2", CustomTheme::default());
+        assert_eq!(cfg.unique_theme_name("Dracula"), "Dracula 3");
+    }
+
+    #[test]
+    fn the_config_writes_to_the_file_it_was_read_from() {
+        let dir = std::env::temp_dir().join("rune-term-settings-test");
+        let path = dir.join("rune-term.toml");
+        let _ = fs::remove_file(&path);
+        let mut cfg = ConfigFile::default().at(&path);
+        cfg.ensure_profile("Work").font_size = Some(18.0);
+        cfg.save().expect("save");
+        let loaded = ConfigFile::read(&path).expect("read");
+        assert_eq!(loaded.profile("Work").and_then(|p| p.font_size), Some(18.0));
+        let _ = fs::remove_file(&path);
+    }
 
     #[test]
     fn default_config_has_default_profile() {
