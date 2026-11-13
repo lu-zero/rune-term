@@ -20,6 +20,7 @@ mod scrollback;
 mod search;
 mod selection;
 pub mod settings;
+mod settings_actions;
 mod split;
 pub use rune_term_core::surfaces;
 mod tabs;

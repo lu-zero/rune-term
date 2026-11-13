@@ -376,7 +376,11 @@ fn font_settings(model: &Model, p: &Palette) -> El {
                     }
                     Key::Enter => {
                         let chosen = families[current].clone();
-                        crate::app::apply_font_family(model, &mut rune::Tx::default(), &chosen);
+                        crate::settings_actions::apply_font_family(
+                            model,
+                            &mut rune::Tx::default(),
+                            &chosen,
+                        );
                         if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
                             ui.font_family_picker_open = false;
                             ui.font_family_before_pick = None;
@@ -393,7 +397,11 @@ fn font_settings(model: &Model, p: &Palette) -> El {
                             _ => None,
                         };
                         if let Some(prev) = prev {
-                            crate::app::apply_font_family(model, &mut rune::Tx::default(), &prev);
+                            crate::settings_actions::apply_font_family(
+                                model,
+                                &mut rune::Tx::default(),
+                                &prev,
+                            );
                         }
                         if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
                             ui.font_family_picker_open = false;
@@ -430,7 +438,7 @@ fn font_settings(model: &Model, p: &Palette) -> El {
                                     _ => None,
                                 };
                                 if let Some(prev) = prev {
-                                    crate::app::apply_font_family(
+                                    crate::settings_actions::apply_font_family(
                                         model,
                                         &mut rune::Tx::default(),
                                         &prev,
@@ -460,7 +468,7 @@ fn font_settings(model: &Model, p: &Palette) -> El {
                             &filtered,
                             &selected_for_list,
                             |model: &mut Model, selected: &str| {
-                                crate::app::apply_font_family(
+                                crate::settings_actions::apply_font_family(
                                     model,
                                     &mut rune::Tx::default(),
                                     selected,
@@ -637,10 +645,10 @@ fn theme_editor_view(model: &Model) -> El {
                 .gap(8.0)
                 .justify_center()
                 .child(settings_chip("Cancel", "te-cancel", p, |model, tx| {
-                    crate::app::cancel_theme_edit(model, tx);
+                    crate::settings_actions::cancel_theme_edit(model, tx);
                 }))
                 .child(settings_chip("Save", "te-save", p, |model, tx| {
-                    crate::app::save_theme_edit(model, tx);
+                    crate::settings_actions::save_theme_edit(model, tx);
                 })),
         )
 }
@@ -779,7 +787,7 @@ fn editor_text_row(
         .color(text_color(p))
         .on_edit(on_edit)
         .on_input_change(|model: &mut Model, tx: &mut rune::Tx| {
-            crate::app::preview_theme_edit(model, tx);
+            crate::settings_actions::preview_theme_edit(model, tx);
         });
     row()
         .w_full()
@@ -818,7 +826,7 @@ fn editor_color_row(
                     crate::theme::linear(if selected { p.accent } else { p.active_border }),
                 )
                 .on_press(move |model: &mut Model| {
-                    crate::app::select_theme_color_field(model, field);
+                    crate::settings_actions::select_theme_color_field(model, field);
                 }),
         );
     }
@@ -873,7 +881,7 @@ fn editor_color_row(
             .color(text_color(p))
             .on_edit(on_edit)
             .on_input_change(|model: &mut Model, tx: &mut rune::Tx| {
-                crate::app::preview_theme_edit(model, tx);
+                crate::settings_actions::preview_theme_edit(model, tx);
             }),
     );
     row()
@@ -939,7 +947,7 @@ fn theme_choice(choice: &Palette, current: &Palette) -> El {
             current,
             true,
             move |model, tx| {
-                crate::app::edit_theme_named(model, tx, &edit_name);
+                crate::settings_actions::edit_theme_named(model, tx, &edit_name);
             },
         ))
         .child(row_action(
@@ -948,7 +956,7 @@ fn theme_choice(choice: &Palette, current: &Palette) -> El {
             current,
             del_enabled,
             move |model, tx| {
-                crate::app::delete_theme_named(model, tx, &del_name);
+                crate::settings_actions::delete_theme_named(model, tx, &del_name);
             },
         ));
     right = right.child(actions);
@@ -966,7 +974,7 @@ fn theme_choice(choice: &Palette, current: &Palette) -> El {
         .fill(crate::theme::linear(fill))
         .focusable(true)
         .on_press_tx(move |model: &mut Model, tx: &mut rune::Tx| {
-            crate::app::apply_theme(model, tx, &name);
+            crate::settings_actions::apply_theme(model, tx, &name);
         })
         .child(
             text(name_label)
@@ -1049,7 +1057,7 @@ fn profiles_settings(model: &Model, p: &Palette) -> El {
             p,
             !is_default,
             move |model, tx| {
-                crate::app::set_default_profile(model, tx, &name_for_set);
+                crate::settings_actions::set_default_profile(model, tx, &name_for_set);
             },
         ));
         actions = actions.child(row_action(
@@ -1058,7 +1066,7 @@ fn profiles_settings(model: &Model, p: &Palette) -> El {
             p,
             true,
             move |model, tx| {
-                crate::app::edit_profile_named(model, tx, &name_for_edit);
+                crate::settings_actions::edit_profile_named(model, tx, &name_for_edit);
             },
         ));
         actions = actions.child(row_action(
@@ -1067,8 +1075,10 @@ fn profiles_settings(model: &Model, p: &Palette) -> El {
             p,
             true,
             move |model, tx| {
-                if let Some(new_name) = crate::app::duplicate_profile(model, tx, &name_for_dup) {
-                    crate::app::edit_profile_named(model, tx, &new_name);
+                if let Some(new_name) =
+                    crate::settings_actions::duplicate_profile(model, tx, &name_for_dup)
+                {
+                    crate::settings_actions::edit_profile_named(model, tx, &new_name);
                 }
             },
         ));
@@ -1078,7 +1088,7 @@ fn profiles_settings(model: &Model, p: &Palette) -> El {
             p,
             can_delete_any,
             move |model, tx| {
-                crate::app::delete_profile(model, tx, &name_for_del);
+                crate::settings_actions::delete_profile(model, tx, &name_for_del);
             },
         ));
 
@@ -1138,8 +1148,8 @@ fn profiles_settings(model: &Model, p: &Palette) -> El {
         p,
         |model, tx| {
             let src = model.config.default_profile_name().to_owned();
-            if let Some(name) = crate::app::duplicate_profile(model, tx, &src) {
-                crate::app::edit_profile_named(model, tx, &name);
+            if let Some(name) = crate::settings_actions::duplicate_profile(model, tx, &src) {
+                crate::settings_actions::edit_profile_named(model, tx, &name);
             }
         },
     ));
@@ -1573,10 +1583,10 @@ fn profile_editor_view(model: &Model) -> El {
                 .gap(8.0)
                 .justify_center()
                 .child(settings_chip("Cancel", "pe-cancel", p, |model, tx| {
-                    crate::app::cancel_profile_edit(model, tx);
+                    crate::settings_actions::cancel_profile_edit(model, tx);
                 }))
                 .child(settings_chip("Save", "pe-save", p, |model, tx| {
-                    crate::app::save_profile_edit(model, tx);
+                    crate::settings_actions::save_profile_edit(model, tx);
                 })),
         )
 }
