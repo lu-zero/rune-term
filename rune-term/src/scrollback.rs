@@ -1,6 +1,4 @@
-//! A bar beside the pane. The thumb is painted in the compositor, so a
-//! wheel can move it without committing the view. The grid is not an
-//! `El::scroll`.
+//! Scrollbar UI and compositor presentation over terminal scrollback state.
 
 use std::time::Duration;
 
@@ -15,13 +13,13 @@ use crate::theme;
 pub const WIDTH: f32 = 8.0;
 /// The single-pane bar. It follows the selected tab, not a leaf mark.
 pub const SHOWN_PANE: u32 = 0;
-const MIN_THUMB: f32 = 24.0;
 const SCROLL_BIT: u32 = 0x8000_0000;
 const HIDE_DELAY: Duration = Duration::from_millis(400);
-const FADE_DUR: f64 = 0.18;
 
 #[allow(unused_imports)]
-pub use rune_term_core::scrollback::{offset_at, thumb, ScrollbarState, Thumb};
+pub use rune_term_core::scrollback::{
+    offset_at, thumb, ScrollbarState, Thumb, FADE_DUR_SECS, HIDE_DELAY_SECS, MIN_THUMB,
+};
 
 pub fn mark(pane: u32) -> u32 {
     pane | SCROLL_BIT
@@ -35,7 +33,7 @@ fn pane_of(mark: u32) -> u32 {
     mark & !SCROLL_BIT
 }
 
-fn host_ref(model: &Model, pane: u32) -> Option<&crate::surfaces::HostSurface> {
+fn host_ref(model: &Model, pane: u32) -> Option<&HostSurface> {
     if pane == SHOWN_PANE {
         model.surfaces.primary()
     } else {
@@ -43,7 +41,7 @@ fn host_ref(model: &Model, pane: u32) -> Option<&crate::surfaces::HostSurface> {
     }
 }
 
-fn host_mut(model: &mut Model, pane: u32) -> Option<&mut crate::surfaces::HostSurface> {
+fn host_mut(model: &mut Model, pane: u32) -> Option<&mut HostSurface> {
     if pane == SHOWN_PANE {
         model.surfaces.primary_mut()
     } else {
@@ -53,68 +51,19 @@ fn host_mut(model: &mut Model, pane: u32) -> Option<&mut crate::surfaces::HostSu
 
 /// Wheel and programmatic scroll keep the bar visible briefly.
 pub fn note_activity(host: &mut HostSurface, tx: &mut Tx) {
-    host.scrollbar.active_until = f64::INFINITY;
-    host.scrollbar.opacity = 1.0;
-    host.scrollbar.fade_start = 0.0;
+    host.scrollbar.note_activity();
     tx.wake_after(HIDE_DELAY);
 }
 
 pub(crate) fn refresh(model: &mut Model, now: f64, tx: &mut Tx) -> bool {
     let mut wake = false;
     for host in model.surfaces.iter_mut() {
-        let sb = &mut host.scrollbar;
-        let scrollable = host.surface.history_size() > 0 || host.render.display_offset() > 0;
-        if !scrollable {
-            fade_opacity(sb, now, &mut wake);
-            continue;
-        }
-        if sb.hover || host.render.display_offset() > 0 {
-            sb.active_until = 0.0;
-            sb.opacity = 1.0;
-            sb.fade_start = 0.0;
-            continue;
-        }
-        if sb.active_until.is_infinite() {
-            sb.active_until = now + HIDE_DELAY.as_secs_f64();
-            sb.opacity = 1.0;
-            sb.fade_start = 0.0;
-            wake = true;
-            continue;
-        }
-        if sb.active_until > now {
-            sb.opacity = 1.0;
-            sb.fade_start = 0.0;
-            wake = true;
-            continue;
-        }
-        sb.active_until = 0.0;
-        fade_opacity(sb, now, &mut wake);
+        wake |= rune_term_core::scrollback::refresh_host(host, now);
     }
     if wake {
         tx.wake_after(Duration::from_millis(16));
     }
     false
-}
-
-fn fade_opacity(sb: &mut ScrollbarState, now: f64, wake: &mut bool) {
-    if sb.opacity <= 0.0 {
-        sb.opacity = 0.0;
-        sb.fade_start = 0.0;
-        return;
-    }
-    if sb.fade_start == 0.0 {
-        sb.fade_start = now;
-        sb.fade_from = sb.opacity;
-    }
-    let t = ((now - sb.fade_start) / FADE_DUR).clamp(0.0, 1.0);
-    let inv = 1.0 - t;
-    sb.opacity = sb.fade_from * (inv * inv * inv) as f32;
-    if sb.opacity <= 0.0005 {
-        sb.opacity = 0.0;
-        sb.fade_start = 0.0;
-    } else {
-        *wake = true;
-    }
 }
 
 /// The track. Its thumb is not a child: the compositor paints that from
@@ -128,10 +77,8 @@ pub fn column(pane: u32) -> El {
             if let Some(host) = host_mut(model, pane) {
                 host.scrollbar.hover = inside;
                 if inside {
-                    host.scrollbar.active_until = 0.0;
                     if host.surface.history_size() > 0 || host.render.display_offset() > 0 {
-                        host.scrollbar.opacity = 1.0;
-                        host.scrollbar.fade_start = 0.0;
+                        host.scrollbar.show_immediate();
                     }
                 } else {
                     note_activity(host, tx);
@@ -159,30 +106,8 @@ pub(crate) fn pointer(
         return grab;
     };
     note_activity(host, tx);
-    host.render.update();
-    let history = host.surface.history_size();
-    let rows = host.render.lines();
-    let offset = host.render.display_offset();
-    if history == 0 || rows == 0 || track.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
-        tx.live_only();
-        return grab;
-    }
-    let geom = thumb(track, history, rows, offset, MIN_THUMB);
-    let grab = if phase == Phase::Down {
-        if y >= geom.top && y <= geom.top + geom.height {
-            y - geom.top
-        } else {
-            geom.height * 0.5
-        }
-    } else {
-        grab
-    };
-    let target = offset_at(track, history, rows, y, grab, MIN_THUMB);
-    let delta = target as i32 - offset as i32;
-    if delta != 0 {
-        host.surface.scroll(delta);
-        host.render.update();
-    }
+    let grab =
+        rune_term_core::scrollback::pointer_scroll(host, phase == Phase::Down, y, track, grab);
     tx.live_only();
     grab
 }
