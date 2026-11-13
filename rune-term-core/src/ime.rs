@@ -202,3 +202,59 @@ mod tests {
         assert!(!over.cursor().visible);
     }
 }
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CaretRect {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+}
+
+pub fn caret_rect(
+    cursor_cell: (u16, u16),
+    cell_px: (u16, u16),
+    scale: f32,
+    margin: f32,
+) -> CaretRect {
+    let (col, row) = cursor_cell;
+    let (cw, ch) = if scale.is_finite() && scale > 0.0 {
+        (f32::from(cell_px.0) / scale, f32::from(cell_px.1) / scale)
+    } else {
+        (1.0, 1.0)
+    };
+    let (x, y) = if cw > 0.0 && ch > 0.0 {
+        (margin + f32::from(col) * cw, margin + f32::from(row) * ch)
+    } else {
+        (margin, margin)
+    };
+    CaretRect {
+        x: x.max(0.0),
+        y: y.max(0.0),
+        w: cw.max(1.0),
+        h: ch.max(1.0),
+    }
+}
+
+pub fn set_preedit(preedit: &mut Option<Preedit>, text: String, cursor: Option<(usize, usize)>) {
+    if text.is_empty() {
+        *preedit = None;
+    } else {
+        *preedit = Some(Preedit { text, cursor });
+    }
+}
+
+pub fn commit_text(surface: &librio::Surface, text: &str) -> bool {
+    if text.is_empty() {
+        return false;
+    }
+    let event = librio::KeyEvent {
+        action: librio::KeyAction::Press,
+        key: None,
+        mods: librio::Modifiers::empty(),
+        consumed_mods: librio::Modifiers::empty(),
+        text: Some(text.to_owned()),
+        composing: false,
+    };
+    surface.key(&event)
+}

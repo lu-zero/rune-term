@@ -1,7 +1,5 @@
 //! Window shell. `perform_resize` is frozen; the winsize change does not edit it.
 
-use std::sync::atomic::Ordering;
-
 use rune::compose::DeviceKey;
 use rune::render::{Instance, KIND_EFFECT};
 use rune::{App, AppSpec, Compositor, Frame, MenuItem, Titlebar, Tx};
@@ -15,7 +13,7 @@ use crate::images::Images;
 use crate::ime;
 use crate::model::{self, Model};
 use crate::pane_input;
-use crate::resize::{self, GridMetrics, ResizeEffect, ResizeRequest};
+use crate::resize::{self, ResizeEffect, ResizeRequest};
 use crate::scrollback::{self, Bars};
 
 pub fn run() {
@@ -73,21 +71,13 @@ fn spec() -> AppSpec<Model> {
     }
 }
 
-/// Applies `window_points`, `Surface::resize`, `resized`, and `live_only`.
-/// The caller stores `cols`, `rows`, and `cell_px` on the host.
+/// Applies `window_points`, terminal surface resize, and `live_only`.
+/// The caller stores `cols`, `rows`, and `cell_px` on the host when needed.
 pub fn perform_resize(tx: &mut Tx, host: &crate::surfaces::HostSurface, effect: ResizeEffect) {
     if let Some(size) = effect.window_points {
         tx.resize_window_instant(size);
     }
-    if effect.resize_surface {
-        host.surface.resize(
-            effect.cols,
-            effect.rows,
-            effect.pixel_width,
-            effect.pixel_height,
-        );
-        host.resized.store(true, Ordering::Release);
-    }
+    rune_term_core::resize::apply_to_host(host, &effect);
     if effect.live_only {
         tx.live_only();
     }
@@ -119,29 +109,12 @@ pub fn fit_layout(model: &mut Model, slot: (f32, f32), scale: f32) -> Option<Res
     }
     let cell_points = model.cell_points;
     let host = model.surfaces.primary_mut()?;
-    let effect = resize::apply(ResizeRequest::Layout {
-        slot_points: slot,
+    Some(rune_term_core::resize::fit_layout_host(
+        host,
+        slot,
         scale,
         cell_points,
-        current: GridMetrics {
-            cols: host.cols,
-            rows: host.rows,
-            cell_px: host.cell_px,
-        },
-    });
-    if effect.resize_surface {
-        host.cols = effect.cols;
-        host.rows = effect.rows;
-        host.cell_px = effect.cell_px;
-        host.surface.resize(
-            effect.cols,
-            effect.rows,
-            effect.pixel_width,
-            effect.pixel_height,
-        );
-        host.resized.store(true, Ordering::Release);
-    }
-    Some(effect)
+    ))
 }
 
 pub fn apply_font_size(model: &mut Model, tx: &mut Tx, size: f32) {
