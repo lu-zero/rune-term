@@ -244,3 +244,6 @@ impl State {
         }
     }
 }
+
+/// Reusable terminal component state and operations.
+pub type Terminal = State;

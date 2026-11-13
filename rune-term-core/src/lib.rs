@@ -15,3 +15,5 @@ pub mod surfaces;
 pub mod terminal;
 pub mod terminal_input;
 pub mod theme;
+
+pub use terminal::{State as TerminalState, Terminal};
