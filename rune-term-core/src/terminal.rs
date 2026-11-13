@@ -1,11 +1,23 @@
 //! Reusable terminal runtime state.
 
+use std::sync::Arc;
+
 use librio::SurfaceId;
 use rune::Mods;
+use term_grid::GridRenderer;
 
+use crate::hyperlink::HoverLink;
+use crate::images::Images;
 use crate::ime::Preedit;
-use crate::render::GridDrawStamp;
+use crate::render::{self, GridDrawStamp};
 use crate::surfaces::{HostSurface, Surfaces};
+use crate::theme::Palette;
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RenderReport {
+    pub drew: bool,
+    pub rearms: usize,
+}
 
 #[derive(Default)]
 pub struct State {
@@ -117,5 +129,74 @@ impl State {
         self.surfaces
             .iter_mut()
             .any(|host| host.hover_link.is_some())
+    }
+
+    pub fn hover_for_render(&self) -> Option<HoverLink> {
+        self.primary().and_then(|host| host.hover_link.clone())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn sync_render(
+        &mut self,
+        grid: &mut GridRenderer,
+        images: &mut Images,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        palette: Arc<Palette>,
+        search_pattern: &str,
+        hover_active_mods: bool,
+    ) -> RenderReport {
+        let active = self.shown_id();
+        let hover = self.hover_for_render();
+        let hover_active = hover.is_some() && hover_active_mods;
+        let preedit = self.preedit.clone();
+
+        let force_upload = search_pattern != self.grid_draw.search
+            || hover != self.grid_draw.hover
+            || hover_active != self.grid_draw.hover_active
+            || preedit != self.grid_draw.preedit
+            || palette.name != self.grid_draw.theme
+            || self.grid_draw.shown != active;
+
+        let mut report = RenderReport::default();
+        let mut cursor_cell = self.cursor_cell;
+        for host in self.surfaces.iter_mut() {
+            let is_active = Some(host.surface.id()) == active;
+            if is_active {
+                let result = render::sync_active_host(
+                    host,
+                    grid,
+                    images,
+                    device,
+                    queue,
+                    palette.clone(),
+                    search_pattern,
+                    hover.as_ref(),
+                    preedit.as_ref(),
+                    force_upload,
+                );
+                if result.rearmed {
+                    report.rearms += 1;
+                }
+                if result.drew {
+                    cursor_cell = result.cursor_cell;
+                    report.drew = true;
+                }
+            } else if render::rearm_background(host) {
+                report.rearms += 1;
+            }
+        }
+        if report.drew {
+            self.cursor_cell = cursor_cell;
+            self.grid_draw.search = search_pattern.to_owned();
+            self.grid_draw.shown = active;
+            self.grid_draw.hover = hover;
+            self.grid_draw.hover_active = hover_active;
+            self.grid_draw.preedit = preedit;
+            self.grid_draw.theme = palette.name.clone();
+        } else {
+            images.clear();
+        }
+        report
     }
 }
