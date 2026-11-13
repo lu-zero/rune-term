@@ -29,7 +29,7 @@ pub fn copy_theme_named(model: &mut Model, _tx: &mut Tx, source_name: &str) {
     let name = model.config.copy_theme(source_name);
     model.palette = model.config.resolve_palette();
     if let Some(custom) = model.config.custom_themes.get(&name).cloned() {
-        model.settings_mode =
+        model.ui.settings_mode =
             crate::model::SettingsMode::Open(Box::new(crate::model::SettingsUi {
                 tab: crate::model::SettingsTab::Theme,
                 theme_editor: Some(crate::model::ThemeEditor::from_custom(&name, &custom)),
@@ -39,11 +39,11 @@ pub fn copy_theme_named(model: &mut Model, _tx: &mut Tx, source_name: &str) {
                 font_search: rune::TextEdit::new(""),
                 font_picker_active: 0,
             }));
-    } else if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+    } else if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
         ui.tab = crate::model::SettingsTab::Theme;
         ui.theme_editor = None;
     } else {
-        model.settings_mode =
+        model.ui.settings_mode =
             crate::model::SettingsMode::Open(Box::new(crate::model::SettingsUi {
                 tab: crate::model::SettingsTab::Theme,
                 theme_editor: None,
@@ -64,7 +64,7 @@ pub fn edit_theme_named(model: &mut Model, tx: &mut Tx, name: &str) {
     if let Some(custom) = model.config.custom_themes.get(name).cloned() {
         model.config.set_theme(name.to_owned());
         model.palette = model.config.resolve_palette();
-        model.settings_mode =
+        model.ui.settings_mode =
             crate::model::SettingsMode::Open(Box::new(crate::model::SettingsUi {
                 tab: crate::model::SettingsTab::Theme,
                 theme_editor: Some(crate::model::ThemeEditor::from_custom(name, &custom)),
@@ -77,14 +77,14 @@ pub fn edit_theme_named(model: &mut Model, tx: &mut Tx, name: &str) {
         model.terminal.invalidate_theme();
     } else if crate::theme::resolve_builtin(name).is_some() {
         copy_theme_named(model, tx, name);
-    } else if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+    } else if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
         ui.tab = crate::model::SettingsTab::Theme;
         ui.theme_editor = None;
     }
 }
 
 pub fn cancel_theme_edit(model: &mut Model, _tx: &mut Tx) {
-    if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+    if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
         ui.tab = crate::model::SettingsTab::Theme;
         ui.theme_editor = None;
     }
@@ -93,7 +93,7 @@ pub fn cancel_theme_edit(model: &mut Model, _tx: &mut Tx) {
 }
 
 pub fn preview_theme_edit(model: &mut Model, _tx: &mut Tx) {
-    let crate::model::SettingsMode::Open(ui) = &model.settings_mode else {
+    let crate::model::SettingsMode::Open(ui) = &model.ui.settings_mode else {
         return;
     };
     let Some(editor) = ui.theme_editor.as_ref() else {
@@ -110,7 +110,7 @@ pub fn preview_theme_edit(model: &mut Model, _tx: &mut Tx) {
 }
 
 pub fn select_theme_color_field(model: &mut Model, field: crate::model::ThemeColorField) {
-    if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+    if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
         if let Some(editor) = ui.theme_editor.as_mut() {
             editor.picking = if editor.picking == Some(field) {
                 None
@@ -122,7 +122,7 @@ pub fn select_theme_color_field(model: &mut Model, field: crate::model::ThemeCol
 }
 
 pub fn save_theme_edit(model: &mut Model, _tx: &mut Tx) {
-    let editor = match &mut model.settings_mode {
+    let editor = match &mut model.ui.settings_mode {
         crate::model::SettingsMode::Open(ui) => {
             ui.tab = crate::model::SettingsTab::Theme;
             ui.theme_editor.take()
@@ -133,7 +133,7 @@ pub fn save_theme_edit(model: &mut Model, _tx: &mut Tx) {
         return;
     };
     let Some((name, custom)) = editor.to_custom() else {
-        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+        if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
             ui.theme_editor = Some(editor);
         }
         return;
@@ -147,7 +147,7 @@ pub fn save_theme_edit(model: &mut Model, _tx: &mut Tx) {
         && (crate::theme::resolve_builtin(&name).is_some()
             || model.config.custom_themes.contains_key(&name))
     {
-        if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+        if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
             ui.theme_editor = Some(crate::model::ThemeEditor::from_custom(&original, &custom));
         }
         model.terminal.invalidate_theme();
@@ -167,7 +167,7 @@ pub fn delete_theme_named(model: &mut Model, _tx: &mut Tx, name: &str) {
         return;
     }
     model.config.custom_themes.remove(name);
-    if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+    if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
         if ui
             .theme_editor
             .as_ref()
@@ -295,7 +295,7 @@ pub fn edit_profile_named(model: &mut Model, _tx: &mut Tx, name: &str) {
     let Some(profile) = model.config.profile(name).cloned() else {
         return;
     };
-    model.settings_mode = crate::model::SettingsMode::Open(Box::new(crate::model::SettingsUi {
+    model.ui.settings_mode = crate::model::SettingsMode::Open(Box::new(crate::model::SettingsUi {
         tab: crate::model::SettingsTab::Profiles,
         theme_editor: None,
         profile_editor: Some(crate::model::ProfileEditor::from_profile(name, &profile)),
@@ -307,14 +307,14 @@ pub fn edit_profile_named(model: &mut Model, _tx: &mut Tx, name: &str) {
 }
 
 pub fn cancel_profile_edit(model: &mut Model, _tx: &mut Tx) {
-    if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+    if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
         ui.tab = crate::model::SettingsTab::Profiles;
         ui.profile_editor = None;
     }
 }
 
 pub fn save_profile_edit(model: &mut Model, tx: &mut Tx) {
-    let Some((editor, original)) = (match &model.settings_mode {
+    let Some((editor, original)) = (match &model.ui.settings_mode {
         crate::model::SettingsMode::Open(ui) => ui
             .profile_editor
             .as_ref()
@@ -346,7 +346,7 @@ pub fn save_profile_edit(model: &mut Model, tx: &mut Tx) {
             eprintln!("rune-term: failed to save settings: {err}");
         }
     }
-    if let crate::model::SettingsMode::Open(ui) = &mut model.settings_mode {
+    if let crate::model::SettingsMode::Open(ui) = &mut model.ui.settings_mode {
         ui.tab = crate::model::SettingsTab::Profiles;
         ui.profile_editor = None;
     }

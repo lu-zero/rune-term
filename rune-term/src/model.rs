@@ -104,6 +104,23 @@ impl Default for SearchUi {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct UiState {
+    pub search: SearchUi,
+    pub settings_mode: SettingsMode,
+    pub pending_link_open: Option<String>,
+}
+
+impl Default for UiState {
+    fn default() -> Self {
+        Self {
+            search: SearchUi::default(),
+            settings_mode: SettingsMode::Closed,
+            pending_link_open: None,
+        }
+    }
+}
+
 pub struct Model {
     pub engine: Engine,
     pub tabs: Vec<Tab>,
@@ -114,11 +131,9 @@ pub struct Model {
     pub config: ConfigFile,
     pub font_size: f32,
     pub palette: Arc<Palette>,
-    pub search: SearchUi,
+    pub ui: UiState,
     pub(crate) shared: Arc<Shared>,
     pub(crate) pending_inject: Option<Vec<u8>>,
-    pub(crate) pending_link_open: Option<String>,
-    pub(crate) settings_mode: SettingsMode,
     pub(crate) _ipc: Option<crate::ipc::Server>,
 }
 
@@ -153,11 +168,9 @@ pub fn init() -> Model {
         config,
         font_size,
         palette,
-        search: SearchUi::default(),
+        ui: UiState::default(),
         shared: std::sync::Arc::clone(&shared),
         pending_inject,
-        pending_link_open: None,
-        settings_mode: SettingsMode::Closed,
         _ipc: Some(crate::ipc::start(shared)),
     }
 }
