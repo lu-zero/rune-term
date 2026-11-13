@@ -108,12 +108,24 @@ pub enum Channel {
     Value,
 }
 
+/// The look of the sliders and the swatch, so the editor can follow the
+/// window it draws in.
+#[derive(Clone, Copy, Debug)]
+pub struct Style {
+    pub track: Color,
+    pub track_border: Color,
+    pub thumb: Color,
+    pub thumb_border: Color,
+    pub label: Color,
+    pub text: Color,
+}
+
 fn clamp01(v: f32) -> f32 {
     v.clamp(0.0, 1.0)
 }
 
 /// A draggable 1D slider for a channel. `set` receives the new HSV.
-pub fn channel_slider<S, Set>(key: &str, channel: Channel, hsv: Hsv, set: Set) -> El
+pub fn channel_slider<S, Set>(key: &str, channel: Channel, hsv: Hsv, set: Set, style: Style) -> El
 where
     S: 'static,
     Set: Fn(&mut S, Hsv) + 'static + Clone,
@@ -158,27 +170,14 @@ where
     };
     let t = clamp01(t);
     let set_drag = set.clone();
-    let track_bg = Color {
-        r: 0.14,
-        g: 0.14,
-        b: 0.15,
-        a: 1.0,
-    };
-    let track_border = Color {
-        r: 0.32,
-        g: 0.32,
-        b: 0.34,
-        a: 1.0,
-    };
-    let thumb = el().w(14.0).h(14.0).radius(7.0).fill(Color::WHITE).border(
-        1.0,
-        Color {
-            r: 0.0,
-            g: 0.0,
-            b: 0.0,
-            a: 0.35,
-        },
-    );
+    let track_bg = style.track;
+    let track_border = style.track_border;
+    let thumb = el()
+        .w(14.0)
+        .h(14.0)
+        .radius(7.0)
+        .fill(style.thumb)
+        .border(1.0, style.thumb_border);
 
     let fill_bar = row()
         .w_full()
@@ -242,17 +241,12 @@ where
         .h(22.0)
         .gap(8.0)
         .items_center()
-        .child(el().w(14.0).child(text(label).color(Color {
-            r: 0.78,
-            g: 0.78,
-            b: 0.80,
-            a: 1.0,
-        })))
+        .child(el().w(14.0).child(text(label).color(style.label)))
         .child(track)
 }
 
 /// HSV sliders + swatch for editing a color.
-pub fn hsv_editor<S, Set>(prefix: &str, hsv: Hsv, set: Set) -> El
+pub fn hsv_editor<S, Set>(prefix: &str, hsv: Hsv, set: Set, style: Style) -> El
 where
     S: 'static,
     Set: Fn(&mut S, Hsv) + 'static + Clone,
@@ -271,35 +265,30 @@ where
                         .h(28.0)
                         .radius(4.0)
                         .fill(linear_rgb(rgb))
-                        .border(
-                            1.0,
-                            Color {
-                                r: 0.4,
-                                g: 0.4,
-                                b: 0.4,
-                                a: 1.0,
-                            },
-                        ),
+                        .border(1.0, style.track_border),
                 )
-                .child(text(hex6(rgb)).color(Color::WHITE)),
+                .child(text(hex6(rgb)).color(style.text)),
         )
         .child(channel_slider::<S, _>(
             &format!("{prefix}-h"),
             Channel::Hue,
             hsv,
             set.clone(),
+            style,
         ))
         .child(channel_slider::<S, _>(
             &format!("{prefix}-s"),
             Channel::Saturation,
             hsv,
             set.clone(),
+            style,
         ))
         .child(channel_slider::<S, _>(
             &format!("{prefix}-v"),
             Channel::Value,
             hsv,
             set,
+            style,
         ))
 }
 
