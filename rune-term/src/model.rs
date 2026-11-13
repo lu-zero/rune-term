@@ -92,21 +92,7 @@ pub struct ProfileEditor {
     pub font_picker_active: usize,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct GridDrawStamp {
-    pub shown: Option<librio::SurfaceId>,
-    pub search: String,
-    pub hover: Option<crate::hyperlink::HoverLink>,
-    pub hover_active: bool,
-    pub preedit: Option<Preedit>,
-    pub theme: String,
-}
-
-impl GridDrawStamp {
-    pub fn invalidate_theme(&mut self) {
-        self.theme.clear();
-    }
-}
+pub(crate) use rune_term_core::render::GridDrawStamp;
 
 pub struct Model {
     pub engine: Engine,

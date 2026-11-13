@@ -3,6 +3,7 @@
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
+use librio::SurfaceId;
 use term_grid::GridRenderer;
 
 use crate::grid_source::SurfaceGrid;
@@ -93,5 +94,21 @@ pub fn rearm_background(host: &mut HostSurface) -> bool {
         true
     } else {
         false
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct GridDrawStamp {
+    pub shown: Option<SurfaceId>,
+    pub search: String,
+    pub hover: Option<HoverLink>,
+    pub hover_active: bool,
+    pub preedit: Option<Preedit>,
+    pub theme: String,
+}
+
+impl GridDrawStamp {
+    pub fn invalidate_theme(&mut self) {
+        self.theme.clear();
     }
 }
