@@ -2,7 +2,7 @@
 //! on it. The editor works on a copy, so a half-typed name never reaches the
 //! config.
 
-use rune::{col, row, text, El, ScrollSpec, TextEdit, Tx};
+use rune::{col, row, text, El, ScrollSpec, TextEdit};
 use rune_kit::{
     Button, ButtonVariant, ControlSize, Field, Kit, Select, SelectAppearance, TextInput,
 };
@@ -12,6 +12,8 @@ use crate::settings::{self, Profile, ShellSpec};
 
 /// The profile being edited.
 pub struct ProfileDraft {
+    /// The profile as it was loaded, for revert.
+    saved: Profile,
     /// The name the profile has in the config, before this edit.
     pub original: String,
     pub name: TextEdit,
@@ -56,6 +58,7 @@ impl ProfileDraft {
             })
             .unwrap_or_default();
         Self {
+            saved: profile.clone(),
             original: name.to_owned(),
             name: TextEdit::new(name),
             font_family: TextEdit::new(profile.font_family.clone()),
@@ -66,6 +69,20 @@ impl ProfileDraft {
             shell_program: TextEdit::new(shell_program),
             shell_args: TextEdit::new(shell_args),
         }
+    }
+
+    /// Whether the draft differs from the profile it was loaded from.
+    pub fn is_dirty(&self) -> bool {
+        match self.to_profile() {
+            Ok((name, profile)) => name != self.original || profile != self.saved,
+            Err(_) => true,
+        }
+    }
+
+    /// Puts the fields back as they were loaded.
+    pub fn revert(&mut self) {
+        let (original, saved) = (self.original.clone(), self.saved.clone());
+        *self = Self::from_profile(&original, &saved);
     }
 
     /// The profile the draft describes, or why it cannot make one.
@@ -281,47 +298,53 @@ fn theme_select(kit: &Kit, model: &SettingsModel, overlays: &mut Vec<El>) -> El 
         .on_choose(|m: &mut SettingsModel, value: &str, _tx| {
             m.profile.theme = value.to_owned();
             m.profile.theme_open = false;
-            super::preview(m, value);
+            preview_theme(m);
         })
         .build(kit, overlays)
 }
 
+/// Shows the theme the profile has in the terminal and in this window.
+pub fn preview_theme(model: &mut SettingsModel) {
+    let palette = match model.profile.theme.is_empty() {
+        true => model.config.resolve_palette(),
+        false => super::themes::palette(&model.config, &model.profile.theme),
+    };
+    super::preview(model, palette);
+}
+
 fn actions(kit: &Kit, model: &SettingsModel) -> El {
     let is_default = model.config.default_profile_name() == model.profile.original;
-    let dirty = is_dirty(model);
+    let dirty = model.profile.is_dirty();
     row()
         .w_full()
         .gap(8.0)
         .flex_wrap()
         .child(
-            Button::new("Save")
+            Button::new("Apply")
                 .variant(ButtonVariant::Contrast)
                 .control_size(ControlSize::Small)
-                .on_press_tx(|m: &mut SettingsModel, tx: &mut Tx| {
-                    if save(m) {
-                        tx.close_window();
-                    }
-                })
+                .disabled(is_default)
+                .on_press(apply_profile)
+                .build(kit)
+                .key("profile-apply"),
+        )
+        .child(
+            Button::new("Save")
+                .variant(ButtonVariant::Neutral)
+                .control_size(ControlSize::Small)
+                .disabled(!dirty)
+                .on_press(save)
                 .build(kit)
                 .key("profile-save"),
         )
         .child(
             Button::new("Revert")
-                .variant(ButtonVariant::Neutral)
+                .variant(ButtonVariant::Ghost)
                 .control_size(ControlSize::Small)
                 .disabled(!dirty)
                 .on_press(revert)
                 .build(kit)
                 .key("profile-revert"),
-        )
-        .child(
-            Button::new("Set as default")
-                .variant(ButtonVariant::Neutral)
-                .control_size(ControlSize::Small)
-                .disabled(is_default)
-                .on_press(set_default)
-                .build(kit)
-                .key("profile-default"),
         )
         .child(
             Button::new("Duplicate")
@@ -349,9 +372,9 @@ fn actions(kit: &Kit, model: &SettingsModel) -> El {
         )
 }
 
-/// Writes the draft into the config and hands it to the terminal. `false`
-/// when the profile could not be written.
-pub fn save(model: &mut SettingsModel) -> bool {
+/// Writes the draft into the config, renaming the profile when its name
+/// changed. `false` when it could not.
+pub(crate) fn commit(model: &mut SettingsModel) -> bool {
     let (name, profile) = match model.profile.to_profile() {
         Ok(profile) => profile,
         Err(err) => {
@@ -364,27 +387,37 @@ pub fn save(model: &mut SettingsModel) -> bool {
         model.status = Some(format!("A profile named '{name}' already exists"));
         return false;
     }
+    let changed = name != original || model.config.profiles.get(&original) != Some(&profile);
     model.config.profiles.insert(name.clone(), profile);
     model.profile.original = name.clone();
-    select_by_name(model, &name);
-    super::save_and_apply(model)
+    changed
 }
 
-/// Puts the draft back as the config holds it, and the terminal with it.
+/// Writes the draft into the config and hands it to the terminal.
+pub fn save(model: &mut SettingsModel) {
+    if !commit(model) {
+        return;
+    }
+    select_by_name(model, &model.profile.original.clone());
+    if super::write_config(model) {
+        super::push(model);
+    }
+}
+
+/// Puts the draft back as it was loaded, and the terminal with it.
 pub fn revert(model: &mut SettingsModel) {
-    model.profile = ProfileDraft::from_selected(model);
+    model.profile.revert();
     model.status = None;
     super::restore(model);
 }
 
-/// Whether the draft differs from the profile the config holds.
-pub(crate) fn is_dirty(model: &SettingsModel) -> bool {
-    let Some(saved) = model.config.profile(&model.profile.original) else {
-        return true;
+/// Makes the profile the one new sessions use.
+pub fn apply_profile(model: &mut SettingsModel) {
+    let Some(name) = selected_name(model) else {
+        return;
     };
-    match model.profile.to_profile() {
-        Ok((name, profile)) => name != model.profile.original || profile != *saved,
-        Err(_) => true,
+    if model.config.set_default_profile(&name) && super::write_config(model) {
+        super::push(model);
     }
 }
 
@@ -399,7 +432,9 @@ pub fn duplicate(model: &mut SettingsModel) {
     let copy = model.config.unique_profile_name(&format!("{name} Copy"));
     model.config.profiles.insert(copy.clone(), profile);
     select_by_name(model, &copy);
-    super::save_and_apply(model);
+    if super::write_config(model) {
+        super::push(model);
+    }
 }
 
 /// Removes the selected profile.
@@ -415,7 +450,9 @@ pub fn delete(model: &mut SettingsModel) {
         .selected
         .min(model.config.profiles.len().saturating_sub(1));
     model.profile = ProfileDraft::from_selected(model);
-    super::save_and_apply(model);
+    if super::write_config(model) {
+        super::push(model);
+    }
 }
 
 /// Adds a profile with the default settings.
@@ -426,16 +463,8 @@ pub fn create(model: &mut SettingsModel) {
         .profiles
         .insert(name.clone(), Profile::default());
     select_by_name(model, &name);
-    super::save_and_apply(model);
-}
-
-/// Makes the selected profile the one new sessions use.
-pub fn set_default(model: &mut SettingsModel) {
-    let Some(name) = selected_name(model) else {
-        return;
-    };
-    if model.config.set_default_profile(&name) {
-        super::save_and_apply(model);
+    if super::write_config(model) {
+        super::push(model);
     }
 }
 

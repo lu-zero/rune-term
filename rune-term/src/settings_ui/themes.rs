@@ -48,7 +48,7 @@ impl Slot {
 }
 
 /// The colors a theme carries.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Colors {
     pub bg: u32,
     pub fg: u32,
@@ -122,6 +122,9 @@ impl Colors {
 
 /// The theme being edited.
 pub struct ThemeDraft {
+    /// The theme as it was loaded, for revert. `None` for a built-in theme,
+    /// which cannot be changed.
+    saved: Option<CustomTheme>,
     /// The name the theme has in the config, before this edit.
     pub original: String,
     pub name: TextEdit,
@@ -143,18 +146,29 @@ impl ThemeDraft {
     }
 
     pub fn from_colors(name: &str, config: &ConfigFile) -> Self {
-        let custom = config.custom_themes.get(name);
-        let colors = match custom {
+        let custom = config.custom_themes.get(name).cloned();
+        let colors = match &custom {
             Some(custom) => Colors::from_theme(custom),
-            None => Colors::from_palette(
-                &theme::resolve_builtin(name).unwrap_or_else(theme::default_palette),
-            ),
+            None => Colors::from_palette(&palette(config, name)),
         };
         Self {
+            saved: custom,
             original: name.to_owned(),
             name: TextEdit::new(name),
-            author: TextEdit::new(custom.map(|t| t.author.clone()).unwrap_or_default()),
-            url: TextEdit::new(custom.map(|t| t.url.clone()).unwrap_or_default()),
+            author: TextEdit::new(
+                config
+                    .custom_themes
+                    .get(name)
+                    .map(|t| t.author.clone())
+                    .unwrap_or_default(),
+            ),
+            url: TextEdit::new(
+                config
+                    .custom_themes
+                    .get(name)
+                    .map(|t| t.url.clone())
+                    .unwrap_or_default(),
+            ),
             colors,
             slot: Slot::Bg,
         }
@@ -162,6 +176,7 @@ impl ThemeDraft {
 
     fn empty() -> Self {
         Self {
+            saved: None,
             original: String::new(),
             name: TextEdit::new(""),
             author: TextEdit::new(""),
@@ -169,6 +184,54 @@ impl ThemeDraft {
             colors: Colors::default(),
             slot: Slot::Bg,
         }
+    }
+
+    /// Whether the theme can be written: only the user's own can.
+    pub fn is_custom(&self) -> bool {
+        self.saved.is_some()
+    }
+
+    /// Whether the draft differs from the theme it was loaded from.
+    pub fn is_dirty(&self) -> bool {
+        let Some(saved) = &self.saved else {
+            return false;
+        };
+        self.name.text.trim() != self.original
+            || self.author.text.trim() != saved.author
+            || self.url.text.trim() != saved.url
+            || self.colors != Colors::from_theme(saved)
+    }
+
+    /// Puts the fields back as they were loaded.
+    pub fn revert(&mut self, config: &ConfigFile) {
+        let original = self.original.clone();
+        match &self.saved {
+            Some(saved) => {
+                let mut draft = Self::from_colors(&original, config);
+                draft.saved = Some(saved.clone());
+                draft.name = TextEdit::new(original);
+                *self = draft;
+            }
+            None => *self = Self::from_colors(&original, config),
+        }
+    }
+
+    /// The palette the draft describes, with the ANSI colors it does not edit.
+    pub fn palette(&self, config: &ConfigFile) -> Arc<Palette> {
+        let base = palette(config, &self.original);
+        Arc::new(Palette {
+            name: self.original.clone(),
+            bg: self.colors.bg,
+            fg: self.colors.fg,
+            fg_bright: self.colors.fg_bright,
+            muted: self.colors.muted,
+            tab_bg: self.colors.tab_bg,
+            active_border: self.colors.active_border,
+            accent: self.colors.accent,
+            ansi16: base.ansi16,
+            author: self.author.text.trim().to_owned(),
+            url: self.url.text.trim().to_owned(),
+        })
     }
 }
 
@@ -198,9 +261,15 @@ pub fn index_of(config: &ConfigFile, name: &str) -> usize {
     names(config).iter().position(|n| n == name).unwrap_or(0)
 }
 
+/// Shows the theme the list has selected in the terminal and in this window.
+pub fn preview_selected(model: &mut SettingsModel) {
+    let palette = model.theme.palette(&model.config);
+    super::preview(model, palette);
+}
+
 pub fn editor(kit: &Kit, model: &SettingsModel) -> El {
     let draft = &model.theme;
-    let custom = is_custom(&model.config, &draft.original);
+    let custom = draft.is_custom();
     let applied = model.config.settings.theme == draft.original;
     let mut body = col()
         .w_full()
@@ -230,7 +299,7 @@ pub fn editor(kit: &Kit, model: &SettingsModel) -> El {
                     el().w(0.0).h(0.0)
                 }),
         )
-        .child(actions(kit, custom, applied))
+        .child(actions(kit, model))
         .child(swatches(kit, model));
     if custom {
         body = body
@@ -312,6 +381,7 @@ fn swatches(kit: &Kit, model: &SettingsModel) -> El {
                 )
                 .on_press(move |m: &mut SettingsModel| {
                     m.theme.slot = slot;
+                    preview_selected(m);
                 }),
         );
     }
@@ -344,12 +414,16 @@ fn color_editor(kit: &Kit, model: &SettingsModel) -> El {
             hsv,
             |m: &mut SettingsModel, hsv: color_picker::Hsv| {
                 m.theme.colors.set(m.theme.slot, hsv.to_rgb_u32());
+                preview_selected(m);
             },
             style,
         ))
 }
 
-fn actions(kit: &Kit, custom: bool, applied: bool) -> El {
+fn actions(kit: &Kit, model: &SettingsModel) -> El {
+    let custom = model.theme.is_custom();
+    let applied = model.config.settings.theme == model.theme.original;
+    let dirty = model.theme.is_dirty();
     row()
         .w_full()
         .gap(8.0)
@@ -363,16 +437,23 @@ fn actions(kit: &Kit, custom: bool, applied: bool) -> El {
                 .build(kit)
                 .key("theme-apply"),
         )
-        // The row keeps its shape whatever the theme is, so a button that
-        // appears does not shift the ones after it.
         .child(
             Button::new("Save")
                 .variant(ButtonVariant::Neutral)
                 .control_size(ControlSize::Small)
-                .disabled(!custom)
+                .disabled(!custom || !dirty)
                 .on_press(save_theme)
                 .build(kit)
                 .key("theme-save"),
+        )
+        .child(
+            Button::new("Revert")
+                .variant(ButtonVariant::Ghost)
+                .control_size(ControlSize::Small)
+                .disabled(!dirty)
+                .on_press(revert_theme)
+                .build(kit)
+                .key("theme-revert"),
         )
         .child(
             Button::new("Duplicate")
@@ -391,6 +472,39 @@ fn actions(kit: &Kit, custom: bool, applied: bool) -> El {
                 .build(kit)
                 .key("theme-delete"),
         )
+        .child(
+            Button::new("New theme")
+                .variant(ButtonVariant::Ghost)
+                .control_size(ControlSize::Small)
+                .on_press(create_theme)
+                .build(kit)
+                .key("theme-new"),
+        )
+}
+
+/// Writes the draft into the config, renaming the theme when its name changed.
+pub(crate) fn commit(model: &mut SettingsModel) -> bool {
+    let original = model.theme.original.clone();
+    let Some(mut theme) = model.config.custom_themes.get(&original).cloned() else {
+        return false;
+    };
+    let name = model.theme.name.text.trim().to_owned();
+    if name.is_empty() {
+        model.status = Some("A theme needs a name".to_owned());
+        return false;
+    }
+    if name != original && !model.config.rename_theme(&original, &name) {
+        model.status = Some(format!("A theme named '{name}' already exists"));
+        return false;
+    }
+    theme.author = model.theme.author.text.trim().to_owned();
+    theme.url = model.theme.url.text.trim().to_owned();
+    let theme = model.theme.colors.into_theme(theme);
+    let changed = name != original || model.config.custom_themes.get(&original) != Some(&theme);
+    model.config.set_custom_theme(&name, theme);
+    model.theme.original = name.clone();
+    model.theme.name = TextEdit::new(name);
+    changed
 }
 
 /// Makes the theme the one the terminal uses.
@@ -400,7 +514,28 @@ pub fn apply_theme(model: &mut SettingsModel) {
         return;
     }
     model.config.set_theme(name);
-    super::save_and_apply(model);
+    if super::write_config(model) {
+        super::push(model);
+    }
+}
+
+/// Writes the draft into the config and hands it to the terminal.
+pub fn save_theme(model: &mut SettingsModel) {
+    if !commit(model) {
+        return;
+    }
+    select_by_name(model, &model.theme.original.clone());
+    if super::write_config(model) {
+        super::push(model);
+    }
+}
+
+/// Puts the draft back as it was loaded, and the terminal with it.
+pub fn revert_theme(model: &mut SettingsModel) {
+    let config = model.config.clone();
+    model.theme.revert(&config);
+    model.status = None;
+    super::restore(model);
 }
 
 /// Copies the theme into a custom one and selects it.
@@ -411,36 +546,10 @@ pub fn duplicate_theme(model: &mut SettingsModel) {
     }
     let copy = model.config.copy_theme(&name);
     select_by_name(model, &copy);
-    super::save_and_apply(model);
-}
-
-/// Writes the draft into the config, renaming the theme when its name changed.
-pub fn save_theme(model: &mut SettingsModel) {
-    let original = model.theme.original.clone();
-    if original.is_empty() {
-        return;
+    if super::write_config(model) {
+        super::push(model);
     }
-    let name = model.theme.name.text.trim().to_owned();
-    if name.is_empty() {
-        model.status = Some("A theme needs a name".to_owned());
-        return;
-    }
-    let Some(mut theme) = model.config.custom_themes.get(&original).cloned() else {
-        model.status = Some("Only a custom theme can be changed".to_owned());
-        return;
-    };
-    if name != original && !model.config.rename_theme(&original, &name) {
-        model.status = Some(format!("A theme named '{name}' already exists"));
-        return;
-    }
-    theme.author = model.theme.author.text.trim().to_owned();
-    theme.url = model.theme.url.text.trim().to_owned();
-    let theme = model.theme.colors.into_theme(theme);
-    model.config.set_custom_theme(&name, theme);
-    model.theme.original = name.clone();
-    model.theme.name = TextEdit::new(name.clone());
-    select_by_name(model, &name);
-    super::save_and_apply(model);
+    preview_selected(model);
 }
 
 /// Removes the custom theme.
@@ -457,7 +566,23 @@ pub fn delete_theme(model: &mut SettingsModel) {
         .selected
         .min(names(&model.config).len().saturating_sub(1));
     model.theme = ThemeDraft::from_selected(model);
-    super::save_and_apply(model);
+    if super::write_config(model) {
+        super::push(model);
+    }
+    preview_selected(model);
+}
+
+/// Adds a custom theme with the colors the terminal is using.
+pub fn create_theme(model: &mut SettingsModel) {
+    let palette = model.config.resolve_palette();
+    let name = model.config.unique_theme_name("New Theme");
+    let theme = CustomTheme::from_palette(&palette);
+    model.config.set_custom_theme(&name, theme);
+    select_by_name(model, &name);
+    if super::write_config(model) {
+        super::push(model);
+    }
+    preview_selected(model);
 }
 
 /// The list is sorted, so a name moves the row it sits on.

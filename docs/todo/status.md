@@ -62,12 +62,13 @@ The numbers are that plan's.
       not overwritten. Defaults/profile font size and theme are applied on init
       and Cascadia Code NF metrics scale with font size. A settings window
       (Cmd+,) opens on its own, built with rune-kit and drawn in the terminal's
-      own palette. It has a profiles list and a themes list, each with the
-      usual create, rename, edit, duplicate, delete and apply; the config is
-      written back and the change is pushed into the running terminal, where a
-      font size change keeps the grid's cell count and snaps the window. The
-      font family is stored but not yet applied to the atlas, and per-tab
-      setting application remains. Design:
+      own palette. It has a profiles list and a themes list that behave the
+      same: apply, save, revert, duplicate, delete and create, with the theme
+      on screen the one the editor is showing. The config is written back and
+      the change is pushed into the running terminal, where a font size change
+      keeps the grid's cell count and snaps the window. The font family is
+      stored but not yet applied to the atlas, and per-tab setting application
+      remains. Design:
       [`settings-profiles.md`](./settings-profiles.md). Follow-on:
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
 - [x] **17. Box-drawing and braille sprites.** Box drawing, block elements

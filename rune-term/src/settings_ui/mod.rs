@@ -42,9 +42,9 @@ pub struct SettingsModel {
     pub profile: profiles::ProfileDraft,
     pub theme: themes::ThemeDraft,
     pub status: Option<String>,
-    /// The theme the terminal and this window are showing, while the editor
+    /// The palette the terminal and this window are showing, while the editor
     /// previews one that is not saved yet.
-    pub previewed: Option<String>,
+    pub previewed: Option<Arc<Palette>>,
     /// The terminal window. The spec's own initializer has no terminal to
     /// talk to; the window the terminal opens always has one.
     pub terminal: Option<AppHandle<Model>>,
@@ -88,11 +88,16 @@ pub fn window(terminal: AppHandle<Model>) -> WindowSpec<SettingsModel> {
         })
 }
 
-/// The window closed: the profile that was edited is saved, so what the user
-/// saw in the preview is what they keep.
+/// The window closed: what the editor was showing is written, so the user
+/// keeps what they saw.
 fn save_on_close(model: &mut SettingsModel, _tx: &mut Tx) {
-    if profiles::is_dirty(model) {
-        profiles::save(model);
+    let changed = match model.tab {
+        Tab::Profiles => profiles::commit(model),
+        Tab::Themes => themes::commit(model),
+    };
+    if changed && write_config(model) {
+        model.previewed = None;
+        push(model);
     }
 }
 
@@ -102,11 +107,11 @@ fn init() -> SettingsModel {
     SettingsModel::with_config(ConfigFile::load(), None)
 }
 
-/// The palette the window draws with: the theme it is previewing, else the
-/// one the config holds.
+/// The palette the window draws with: the one it is previewing, else the one
+/// the config holds.
 fn previewed_palette(model: &SettingsModel) -> Arc<Palette> {
     match &model.previewed {
-        Some(name) => themes::palette(&model.config, name),
+        Some(palette) => palette.clone(),
         None => model.config.resolve_palette(),
     }
 }
@@ -198,11 +203,20 @@ fn select(model: &mut SettingsModel, index: usize, tx: &mut Tx) {
     tx.focus(row_key(model, index), false);
 }
 
-/// Puts the list's row into the editor again.
+/// Puts the list's row into the editor again, and shows it in the terminal.
 fn reload_draft(model: &mut SettingsModel) {
     match model.tab {
         Tab::Profiles => model.profile = profiles::ProfileDraft::from_selected(model),
         Tab::Themes => model.theme = themes::ThemeDraft::from_selected(model),
+    }
+    preview_selected(model);
+}
+
+/// The terminal shows the theme of the row the list has selected.
+fn preview_selected(model: &mut SettingsModel) {
+    match model.tab {
+        Tab::Profiles => profiles::preview_theme(model),
+        Tab::Themes => themes::preview_selected(model),
     }
 }
 
@@ -339,9 +353,13 @@ fn profile_row(kit: &Kit, model: &SettingsModel, index: usize, name: &str, defau
         .focus_highlight(kit.c.surface_raised_hover)
         .on_press(move |m: &mut SettingsModel| {
             if m.selected != index {
+                if profiles::commit(m) {
+                    write_config(m);
+                }
                 m.selected = index;
                 m.status = None;
                 m.profile = profiles::ProfileDraft::from_selected(m);
+                preview_selected(m);
             }
         })
         .child(marker(kit, selected))
@@ -377,9 +395,13 @@ fn theme_row(kit: &Kit, model: &SettingsModel, index: usize, name: &str) -> El {
         .focus_highlight(kit.c.surface_raised_hover)
         .on_press(move |m: &mut SettingsModel| {
             if m.selected != index {
+                if themes::commit(m) {
+                    write_config(m);
+                }
                 m.selected = index;
                 m.status = None;
                 m.theme = themes::ThemeDraft::from_selected(m);
+                preview_selected(m);
             }
         })
         .child(marker(kit, selected))
@@ -476,29 +498,23 @@ fn luminance(rgb: u32) -> f32 {
     (0.2126 * f32::from(r) + 0.7152 * f32::from(g) + 0.0722 * f32::from(b)) / 255.0
 }
 
-/// Writes the config back and hands it to the terminal window. `false` when
-/// the config could not be written.
-pub fn save_and_apply(model: &mut SettingsModel) -> bool {
-    if let Err(err) = model.config.save() {
-        model.status = Some(format!("Could not save: {err}"));
-        return false;
+/// Writes the config back. `false` when it could not be written.
+pub fn write_config(model: &mut SettingsModel) -> bool {
+    match model.config.save() {
+        Ok(()) => {
+            model.status = None;
+            true
+        }
+        Err(err) => {
+            model.status = Some(format!("Could not save: {err}"));
+            false
+        }
     }
-    model.status = None;
-    model.previewed = None;
-    let Some(terminal) = model.terminal.clone() else {
-        return true;
-    };
-    let config = model.config.clone();
-    terminal.update(move |model: &mut Model, tx: &mut Tx| {
-        apply(model, &config, tx);
-    });
-    true
 }
 
-/// Shows a theme in the terminal as it is picked, without saving it.
-pub fn preview(model: &mut SettingsModel, theme: &str) {
-    let palette = themes::palette(&model.config, theme);
-    model.previewed = Some(theme.to_owned());
+/// Shows a palette in the terminal and in this window, without saving it.
+pub fn preview(model: &mut SettingsModel, palette: Arc<Palette>) {
+    model.previewed = Some(palette.clone());
     let Some(terminal) = model.terminal.clone() else {
         return;
     };
@@ -508,16 +524,26 @@ pub fn preview(model: &mut SettingsModel, theme: &str) {
     });
 }
 
-/// Puts the terminal back to what the config holds, after a preview.
-pub fn restore(model: &mut SettingsModel) {
-    model.previewed = None;
+/// Hands the config to the terminal window, with the preview on top of it.
+fn push(model: &mut SettingsModel) {
     let Some(terminal) = model.terminal.clone() else {
         return;
     };
     let config = model.config.clone();
+    let previewed = model.previewed.clone();
     terminal.update(move |model: &mut Model, tx: &mut Tx| {
         apply(model, &config, tx);
+        if let Some(palette) = &previewed {
+            model.palette = palette.clone();
+            model.terminal.invalidate_theme();
+        }
     });
+}
+
+/// Puts the terminal back to what the config holds, after a preview.
+pub fn restore(model: &mut SettingsModel) {
+    model.previewed = None;
+    push(model);
 }
 
 /// Puts a saved config into the terminal window: the grid's palette, the cell
@@ -556,7 +582,6 @@ fn apply(model: &mut Model, config: &ConfigFile, tx: &mut Tx) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::settings_ui::profiles::is_dirty;
     use rune::{Env, Runtime};
 
     /// A model over a config of its own, so a test never writes the user's.
@@ -628,6 +653,9 @@ mod tests {
         press(&mut rt, "theme-duplicate");
         let author = rt.state.theme.author.text.clone();
         rt.state.theme.name.text = "Night".to_owned();
+        // The field was written, not typed, so the view has not seen it yet.
+        rt.invalidate();
+        rt.frame(0.0);
         press(&mut rt, "theme-save");
         let theme = rt.state.config.custom_themes.get("Night").expect("renamed");
         assert_eq!(theme.accent, rt.state.theme.colors.accent);
@@ -658,7 +686,7 @@ mod tests {
     fn a_clean_draft_keeps_revert_disabled() {
         let mut rt = runtime(model("clean"));
         rt.frame(0.0);
-        assert!(!is_dirty(&rt.state));
+        assert!(!rt.state.profile.is_dirty());
         assert!(rt.find("profile-revert").is_some());
     }
 
@@ -671,8 +699,11 @@ mod tests {
             .find(|name| *name != rt.state.config.settings.theme)
             .expect("another theme");
         rt.state.profile.theme = other.clone();
-        preview(&mut rt.state, &other);
-        assert_eq!(rt.state.previewed.as_deref(), Some(other.as_str()));
+        profiles::preview_theme(&mut rt.state);
+        assert_eq!(
+            rt.state.previewed.as_ref().map(|p| p.name.clone()),
+            Some(other.clone())
+        );
         assert_eq!(previewed_palette(&rt.state).name, other);
     }
 
@@ -682,10 +713,10 @@ mod tests {
         rt.frame(0.0);
         let saved = rt.state.config.settings.theme.clone();
         rt.state.profile.theme = "Dracula".to_owned();
-        preview(&mut rt.state, "Dracula");
-        assert!(is_dirty(&rt.state));
+        profiles::preview_theme(&mut rt.state);
+        assert!(rt.state.profile.is_dirty());
         profiles::revert(&mut rt.state);
-        assert!(!is_dirty(&rt.state));
+        assert!(!rt.state.profile.is_dirty());
         assert!(rt.state.profile.theme.is_empty());
         assert_eq!(rt.state.previewed, None);
         assert_eq!(previewed_palette(&rt.state).name, saved);
@@ -696,10 +727,12 @@ mod tests {
         let mut rt = runtime(model("save"));
         rt.frame(0.0);
         rt.state.profile.name.text = "Renamed".to_owned();
-        assert!(profiles::save(&mut rt.state));
+        rt.invalidate();
+        rt.frame(0.0);
+        profiles::save(&mut rt.state);
         assert!(rt.state.config.profiles.contains_key("Renamed"));
         assert!(!rt.state.config.profiles.contains_key("Default"));
-        assert!(!is_dirty(&rt.state));
+        assert!(!rt.state.profile.is_dirty());
     }
 
     #[test]
@@ -721,10 +754,64 @@ mod tests {
         let mut rt = runtime(model("close"));
         rt.frame(0.0);
         rt.state.profile.name.text = "Renamed".to_owned();
-        assert!(is_dirty(&rt.state));
+        rt.invalidate();
+        rt.frame(0.0);
+        assert!(rt.state.profile.is_dirty());
         save_on_close(&mut rt.state, &mut Tx::default());
         assert!(rt.state.config.profiles.contains_key("Renamed"));
-        assert!(!is_dirty(&rt.state));
+        assert!(!rt.state.profile.is_dirty());
+    }
+
+    #[test]
+    fn selecting_a_theme_previews_it() {
+        let mut rt = runtime(model("themes-preview"));
+        show_tab(&mut rt.state, Tab::Themes);
+        rt.frame(0.0);
+        press(&mut rt, "theme-1");
+        assert_eq!(
+            rt.state
+                .previewed
+                .as_ref()
+                .map(|palette| palette.name.clone()),
+            Some(rt.state.theme.original.clone())
+        );
+        assert_ne!(rt.state.theme.original, rt.state.config.settings.theme);
+    }
+
+    #[test]
+    fn a_new_theme_starts_from_the_palette_in_use() {
+        let mut rt = runtime(model("themes-new"));
+        show_tab(&mut rt.state, Tab::Themes);
+        rt.frame(0.0);
+        themes::create_theme(&mut rt.state);
+        assert_eq!(rt.state.config.custom_themes.len(), 1);
+        let name = rt
+            .state
+            .config
+            .custom_themes
+            .keys()
+            .next()
+            .expect("a theme");
+        assert_eq!(
+            rt.state.config.custom_themes[name].bg,
+            rt.state.config.resolve_palette().bg
+        );
+    }
+
+    #[test]
+    fn reverting_a_theme_puts_its_colors_back() {
+        let mut rt = runtime(model("themes-revert"));
+        show_tab(&mut rt.state, Tab::Themes);
+        rt.frame(0.0);
+        themes::duplicate_theme(&mut rt.state);
+        let before = rt.state.theme.colors;
+        rt.state.theme.colors.accent = 0x00FF_00FF;
+        rt.invalidate();
+        rt.frame(0.0);
+        assert!(rt.state.theme.is_dirty());
+        themes::revert_theme(&mut rt.state);
+        assert!(!rt.state.theme.is_dirty());
+        assert_eq!(rt.state.theme.colors, before);
     }
 
     #[test]

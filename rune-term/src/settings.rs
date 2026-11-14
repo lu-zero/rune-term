@@ -103,7 +103,7 @@ impl Default for Profile {
     }
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CustomTheme {
     pub author: String,
