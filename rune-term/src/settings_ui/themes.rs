@@ -346,25 +346,7 @@ pub fn editor(kit: &Kit, model: &SettingsModel) -> El {
                 .color(kit.c.text_muted),
         );
     }
-    body = body.child(credit(kit, model));
     body
-}
-
-/// Who made the theme, and where to read more about it.
-fn credit(kit: &Kit, model: &SettingsModel) -> El {
-    let palette = model.theme.palette(&model.config);
-    let author = palette.author.clone();
-    let url = palette.url.clone();
-    row()
-        .w_full()
-        .gap(6.0)
-        .center_y()
-        .child(
-            text(format!("Palette by {author}"))
-                .font(kit.ty.small)
-                .color(kit.c.text_muted),
-        )
-        .child(super::link(kit, url))
 }
 
 /// The theme's colors, each one a target for the editor.
