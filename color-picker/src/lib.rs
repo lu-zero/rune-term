@@ -227,8 +227,23 @@ where
             let frac = (x / span).clamp(0.0, 1.0);
             let mut next = hsv;
             match channel {
-                Channel::Hue => next.h = frac * 359.999,
-                Channel::Saturation => next.s = frac,
+                Channel::Hue => {
+                    next.h = frac * 359.999;
+                    // Black has no hue, and grey has none to show, so a drag
+                    // that picks one gives the colour what it needs to show it.
+                    if next.v <= 0.0 {
+                        next.v = 1.0;
+                    }
+                    if next.s <= 0.0 {
+                        next.s = 1.0;
+                    }
+                }
+                Channel::Saturation => {
+                    next.s = frac;
+                    if next.v <= 0.0 {
+                        next.v = 1.0;
+                    }
+                }
                 Channel::Value => next.v = frac,
             }
             set_drag(s, next);

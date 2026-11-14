@@ -10,8 +10,8 @@ pub mod themes;
 use std::sync::Arc;
 
 use rune::{
-    col, el, icon, row, text, AppHandle, AppSpec, Color, Cx, El, Key, KeyEvent, ScrollSpec, Tx,
-    WindowOptions, WindowSpec,
+    col, el, icon, row, text, AppHandle, AppSpec, Color, Cx, El, Icon, Key, KeyEvent, ScrollSpec,
+    Tx, WindowOptions, WindowSpec,
 };
 use rune_kit::Kit;
 
@@ -25,6 +25,20 @@ pub const MIN_SIZE: (f32, f32) = (620.0, 400.0);
 
 /// The width of the list column.
 const SIDEBAR_W: f32 = 300.0;
+
+/// The arrow that points back, for reverting.
+pub(crate) static REVERT: Icon = Icon {
+    name: "rune-term-revert",
+    view: 16.0,
+    body: r#"<path d="M9.5 3.5L4.5 8L9.5 12.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
+/// The arrow that goes down onto a line, for saving.
+pub(crate) static SAVE: Icon = Icon {
+    name: "rune-term-save",
+    view: 16.0,
+    body: r#"<path d="M8 2.5V9M4.5 6L8 9.5L11.5 6M3 12.5H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Tab {
@@ -310,19 +324,29 @@ fn sidebar(kit: &Kit, model: &SettingsModel) -> El {
         .px(8.0)
         .gap(2.0)
         .child(list(kit, model))
-        .child(add_row(kit, model))
+        .child(foot(kit, model))
+}
+
+/// The foot of the list: the button that adds a row, and the row's actions.
+fn foot(kit: &Kit, model: &SettingsModel) -> El {
+    row()
+        .w_full()
+        .h(30.0)
+        .gap(4.0)
+        .center_y()
+        .child(add_row(kit))
+        .child(el().grow(1.0))
+        .child(actions(kit, model))
 }
 
 /// The button that adds a row to the list.
-fn add_row(kit: &Kit, _model: &SettingsModel) -> El {
+fn add_row(kit: &Kit) -> El {
     row()
         .key("add-row")
-        .w_full()
-        .h(30.0)
-        .px(8.0)
-        .gap(8.0)
-        .center_y()
-        .radius(kit.radius.md)
+        .w(26.0)
+        .h(26.0)
+        .center()
+        .radius(kit.radius.sm)
         .hover(kit.c.hover)
         .focusable(true)
         .on_press(move |m: &mut SettingsModel| match m.tab {
@@ -330,6 +354,51 @@ fn add_row(kit: &Kit, _model: &SettingsModel) -> El {
             Tab::Themes => themes::create_theme(m),
         })
         .child(text("+").font(kit.ty.ui_medium).color(kit.c.text_muted))
+}
+
+/// The actions the selected row has, as square buttons.
+fn actions(kit: &Kit, model: &SettingsModel) -> El {
+    match model.tab {
+        Tab::Profiles => profiles::actions(kit, model),
+        Tab::Themes => themes::actions(kit, model),
+    }
+}
+
+/// A square button that runs one of the row's actions.
+pub(crate) fn action(
+    kit: &Kit,
+    key: &str,
+    glyph: &'static Icon,
+    label: &str,
+    enabled: bool,
+    press: impl Fn(&mut SettingsModel) + 'static,
+) -> El {
+    let mut button = el()
+        .key(key)
+        .w(26.0)
+        .h(26.0)
+        .center()
+        .radius(kit.radius.sm)
+        .fill(if enabled {
+            kit.c.surface_raised
+        } else {
+            Color::TRANSPARENT
+        })
+        .hover(if enabled {
+            kit.c.hover
+        } else {
+            Color::TRANSPARENT
+        })
+        .help(label)
+        .child(icon(glyph, 16.0).color(if enabled {
+            kit.c.text_base
+        } else {
+            kit.c.text_faint
+        }));
+    if enabled {
+        button = button.on_press(press);
+    }
+    button
 }
 
 fn list(kit: &Kit, model: &SettingsModel) -> El {
@@ -414,9 +483,6 @@ fn make_default(kit: &Kit, name: String, default: bool) -> El {
 
 fn theme_row(kit: &Kit, model: &SettingsModel, index: usize, name: &str) -> El {
     let selected = model.selected == index;
-    let palette = themes::palette(&model.config, name);
-    let author = palette.author.clone();
-    let url = palette.url.clone();
     row()
         .key(format!("theme-{index}"))
         .role("option")
@@ -449,15 +515,6 @@ fn theme_row(kit: &Kit, model: &SettingsModel, index: usize, name: &str) -> El {
                 .min_w(0.0)
                 .truncate(),
         )
-        .child(
-            text(author)
-                .font(kit.ty.small)
-                .color(kit.c.text_muted)
-                .max_w(96.0)
-                .shrink()
-                .truncate(),
-        )
-        .child(link(kit, url))
 }
 
 /// The button that opens where a theme came from.

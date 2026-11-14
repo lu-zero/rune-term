@@ -3,9 +3,7 @@
 //! config.
 
 use rune::{col, row, El, ScrollSpec, TextEdit};
-use rune_kit::{
-    Button, ButtonVariant, ControlSize, Field, Kit, Select, SelectAppearance, TextInput,
-};
+use rune_kit::{Field, Kit, Select, SelectAppearance, TextInput};
 
 use super::SettingsModel;
 use crate::settings::{self, Profile, ShellSpec};
@@ -161,7 +159,6 @@ pub fn editor(kit: &Kit, model: &SettingsModel, overlays: &mut Vec<El>) -> El {
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
-        .child(actions(kit, model))
         .child(
             row()
                 .w_full()
@@ -307,46 +304,42 @@ pub fn preview_theme(model: &mut SettingsModel) {
     super::preview(model, palette);
 }
 
-fn actions(kit: &Kit, model: &SettingsModel) -> El {
+pub fn actions(kit: &Kit, model: &SettingsModel) -> El {
     let dirty = model.profile.is_dirty();
     row()
-        .w_full()
-        .gap(8.0)
-        .flex_wrap()
-        .child(
-            Button::new("Save")
-                .variant(ButtonVariant::Contrast)
-                .control_size(ControlSize::Small)
-                .disabled(!dirty)
-                .on_press(save)
-                .build(kit)
-                .key("profile-save"),
-        )
-        .child(
-            Button::new("Revert")
-                .variant(ButtonVariant::Ghost)
-                .control_size(ControlSize::Small)
-                .disabled(!dirty)
-                .on_press(revert)
-                .build(kit)
-                .key("profile-revert"),
-        )
-        .child(
-            Button::new("Duplicate")
-                .variant(ButtonVariant::Ghost)
-                .control_size(ControlSize::Small)
-                .on_press(duplicate)
-                .build(kit)
-                .key("profile-duplicate"),
-        )
-        .child(
-            Button::new("Delete")
-                .variant(ButtonVariant::Ghost)
-                .control_size(ControlSize::Small)
-                .on_press(delete)
-                .build(kit)
-                .key("profile-delete"),
-        )
+        .gap(4.0)
+        .child(super::action(
+            kit,
+            "profile-save",
+            &super::SAVE,
+            "Save",
+            dirty,
+            save,
+        ))
+        .child(super::action(
+            kit,
+            "profile-revert",
+            &super::REVERT,
+            "Revert",
+            dirty,
+            revert,
+        ))
+        .child(super::action(
+            kit,
+            "profile-duplicate",
+            kit.glyph.copy,
+            "Duplicate",
+            true,
+            duplicate,
+        ))
+        .child(super::action(
+            kit,
+            "profile-delete",
+            kit.glyph.close,
+            "Delete",
+            model.config.profiles.len() > 1,
+            delete,
+        ))
 }
 
 /// Writes the draft into the config, renaming the profile when its name

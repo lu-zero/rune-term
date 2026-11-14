@@ -4,8 +4,8 @@
 
 use std::sync::Arc;
 
-use rune::{col, el, row, text, El, ScrollSpec, TextEdit};
-use rune_kit::{Button, ButtonVariant, ControlSize, Field, Kit, TextInput};
+use rune::{col, el, row, text, Color, El, ScrollSpec, TextEdit};
+use rune_kit::{Field, Kit, TextInput};
 
 use super::SettingsModel;
 use crate::settings::{ConfigFile, CustomTheme};
@@ -289,8 +289,8 @@ pub fn editor(kit: &Kit, model: &SettingsModel) -> El {
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
-        .child(actions(kit, model))
-        .child(swatches(kit, model));
+        .child(credit(kit, model))
+        .child(color_list(kit, model));
     if custom {
         body = body
             .child(
@@ -339,46 +339,94 @@ pub fn editor(kit: &Kit, model: &SettingsModel) -> El {
                     ),
             )
             .child(color_editor(kit, model));
-    } else {
-        body = body.child(
-            text("A built-in theme is read-only. Duplicate it to change it.")
-                .font(kit.ty.small)
-                .color(kit.c.text_muted),
-        );
     }
     body
 }
 
+/// Who made the theme, and where to read more about it. A built-in theme
+/// cannot be changed, and says so.
+fn credit(kit: &Kit, model: &SettingsModel) -> El {
+    let palette = model.theme.palette(&model.config);
+    let author = palette.author.clone();
+    let url = palette.url.clone();
+    row()
+        .w_full()
+        .gap(6.0)
+        .center_y()
+        .child(
+            text(format!("Palette by {author}"))
+                .font(kit.ty.small)
+                .color(kit.c.text_muted),
+        )
+        .child(super::link(kit, url))
+        .child(el().grow(1.0))
+        .child(read_only(kit, model))
+}
+
+/// The lock on a built-in theme.
+fn read_only(kit: &Kit, model: &SettingsModel) -> El {
+    if model.theme.is_custom() {
+        return el().w(0.0).h(0.0);
+    }
+    el().key("theme-read-only")
+        .w(22.0)
+        .h(22.0)
+        .center()
+        .help("A built-in theme is read-only. Duplicate it to change it.")
+        .child(rune::icon(kit.glyph.lock, 16.0).color(kit.c.text_faint))
+}
+
 /// The theme's colors, each one a target for the editor.
-fn swatches(kit: &Kit, model: &SettingsModel) -> El {
-    let mut row = row().w_full().gap(10.0).flex_wrap();
+fn color_list(kit: &Kit, model: &SettingsModel) -> El {
+    let mut list = col().w_full().gap(2.0);
     for slot in Slot::ALL {
         let selected = model.theme.slot == slot;
         let color = model.theme.colors.get(slot);
-        row = row.child(
-            el().key(format!("slot-{}", slot.label()))
-                .w(30.0)
-                .h(30.0)
-                .radius(6.0)
-                .fill(theme::linear(color))
-                .border(
-                    if selected { 2.0 } else { 1.0 },
-                    if selected {
-                        kit.c.text_accent
-                    } else {
-                        kit.c.text_muted
-                    },
-                )
+        list = list.child(
+            row()
+                .key(format!("slot-{}", slot.label()))
+                .role("option")
+                .w_full()
+                .h(28.0)
+                .px(6.0)
+                .gap(10.0)
+                .center_y()
+                .radius(kit.radius.sm)
+                .fill(if selected {
+                    kit.c.surface_raised
+                } else {
+                    Color::TRANSPARENT
+                })
+                .hover(kit.c.hover)
+                .focusable(true)
+                .focus_selected(selected)
                 .on_press(move |m: &mut SettingsModel| {
                     m.theme.slot = slot;
                     preview_selected(m);
-                }),
+                })
+                .child(swatch(kit, color))
+                .child(
+                    text(slot.label())
+                        .font(kit.ty.ui)
+                        .color(kit.c.text_base)
+                        .grow(1.0)
+                        .min_w(0.0),
+                ),
         );
     }
-    row
+    list
 }
 
-/// The editor for the color the swatches have selected.
+/// A colour, with an edge a colour that matches the surface can still show.
+fn swatch(kit: &Kit, rgb: u32) -> El {
+    el().w(20.0)
+        .h(20.0)
+        .radius(4.0)
+        .fill(theme::linear(rgb))
+        .border(1.0, kit.c.text_muted)
+}
+
+/// The editor for the color the list has selected.
 fn color_editor(kit: &Kit, model: &SettingsModel) -> El {
     let slot = model.theme.slot;
     let color = model.theme.colors.get(slot);
@@ -410,48 +458,44 @@ fn color_editor(kit: &Kit, model: &SettingsModel) -> El {
         ))
 }
 
-fn actions(kit: &Kit, model: &SettingsModel) -> El {
+/// The actions the selected theme has.
+pub fn actions(kit: &Kit, model: &SettingsModel) -> El {
     let custom = model.theme.is_custom();
     let dirty = model.theme.is_dirty();
     row()
-        .w_full()
-        .gap(8.0)
-        .flex_wrap()
-        .child(
-            Button::new("Save")
-                .variant(ButtonVariant::Contrast)
-                .control_size(ControlSize::Small)
-                .disabled(!custom || !dirty)
-                .on_press(save_theme)
-                .build(kit)
-                .key("theme-save"),
-        )
-        .child(
-            Button::new("Revert")
-                .variant(ButtonVariant::Ghost)
-                .control_size(ControlSize::Small)
-                .disabled(!dirty)
-                .on_press(revert_theme)
-                .build(kit)
-                .key("theme-revert"),
-        )
-        .child(
-            Button::new("Duplicate")
-                .variant(ButtonVariant::Ghost)
-                .control_size(ControlSize::Small)
-                .on_press(duplicate_theme)
-                .build(kit)
-                .key("theme-duplicate"),
-        )
-        .child(
-            Button::new("Delete")
-                .variant(ButtonVariant::Ghost)
-                .control_size(ControlSize::Small)
-                .disabled(!custom)
-                .on_press(delete_theme)
-                .build(kit)
-                .key("theme-delete"),
-        )
+        .gap(4.0)
+        .child(super::action(
+            kit,
+            "theme-save",
+            &super::SAVE,
+            "Save",
+            custom && dirty,
+            save_theme,
+        ))
+        .child(super::action(
+            kit,
+            "theme-revert",
+            &super::REVERT,
+            "Revert",
+            dirty,
+            revert_theme,
+        ))
+        .child(super::action(
+            kit,
+            "theme-duplicate",
+            kit.glyph.copy,
+            "Duplicate",
+            true,
+            duplicate_theme,
+        ))
+        .child(super::action(
+            kit,
+            "theme-delete",
+            kit.glyph.close,
+            "Delete",
+            custom,
+            delete_theme,
+        ))
 }
 
 /// Writes the draft into the config, renaming the theme when its name changed.
