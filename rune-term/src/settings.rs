@@ -78,7 +78,7 @@ impl ShellSpec {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Profile {
     pub font_family: String,

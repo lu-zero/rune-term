@@ -469,6 +469,25 @@ fn luminance(rgb: u32) -> f32 {
     (0.2126 * f32::from(r) + 0.7152 * f32::from(g) + 0.0722 * f32::from(b)) / 255.0
 }
 
+/// Writes the config back and hands it to the terminal window. `false` when
+/// the config could not be written.
+pub fn save_and_apply(model: &mut SettingsModel) -> bool {
+    if let Err(err) = model.config.save() {
+        model.status = Some(format!("Could not save: {err}"));
+        return false;
+    }
+    model.status = None;
+    model.previewed = None;
+    let Some(terminal) = model.terminal.clone() else {
+        return true;
+    };
+    let config = model.config.clone();
+    terminal.update(move |model: &mut Model, tx: &mut Tx| {
+        apply(model, &config, tx);
+    });
+    true
+}
+
 /// Shows a theme in the terminal as it is picked, without saving it.
 pub fn preview(model: &mut SettingsModel, theme: &str) {
     let palette = themes::palette(&model.config, theme);
@@ -482,13 +501,9 @@ pub fn preview(model: &mut SettingsModel, theme: &str) {
     });
 }
 
-/// Writes the config back and hands it to the terminal window.
-pub fn save_and_apply(model: &mut SettingsModel) {
-    if let Err(err) = model.config.save() {
-        model.status = Some(format!("Could not save: {err}"));
-        return;
-    }
-    model.status = None;
+/// Puts the terminal back to what the config holds, after a preview.
+pub fn restore(model: &mut SettingsModel) {
+    model.previewed = None;
     let Some(terminal) = model.terminal.clone() else {
         return;
     };
@@ -534,6 +549,7 @@ fn apply(model: &mut Model, config: &ConfigFile, tx: &mut Tx) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings_ui::profiles::is_dirty;
     use rune::{Env, Runtime};
 
     /// A model over a config of its own, so a test never writes the user's.
@@ -629,6 +645,54 @@ mod tests {
         rt.pointer_down(x, y);
         rt.pointer_up(x, y);
         rt.frame(0.0);
+    }
+
+    #[test]
+    fn a_clean_draft_keeps_revert_disabled() {
+        let mut rt = runtime(model("clean"));
+        rt.frame(0.0);
+        assert!(!is_dirty(&rt.state));
+        assert!(rt.find("profile-revert").is_some());
+    }
+
+    #[test]
+    fn a_picked_theme_previews_in_the_window_and_the_terminal() {
+        let mut rt = runtime(model("preview"));
+        rt.frame(0.0);
+        let other = themes::names(&rt.state.config)
+            .into_iter()
+            .find(|name| *name != rt.state.config.settings.theme)
+            .expect("another theme");
+        rt.state.profile.theme = other.clone();
+        preview(&mut rt.state, &other);
+        assert_eq!(rt.state.previewed.as_deref(), Some(other.as_str()));
+        assert_eq!(previewed_palette(&rt.state).name, other);
+    }
+
+    #[test]
+    fn reverting_puts_the_draft_and_the_theme_back() {
+        let mut rt = runtime(model("revert"));
+        rt.frame(0.0);
+        let saved = rt.state.config.settings.theme.clone();
+        rt.state.profile.theme = "Dracula".to_owned();
+        preview(&mut rt.state, "Dracula");
+        assert!(is_dirty(&rt.state));
+        profiles::revert(&mut rt.state);
+        assert!(!is_dirty(&rt.state));
+        assert!(rt.state.profile.theme.is_empty());
+        assert_eq!(rt.state.previewed, None);
+        assert_eq!(previewed_palette(&rt.state).name, saved);
+    }
+
+    #[test]
+    fn saving_a_profile_writes_its_new_name() {
+        let mut rt = runtime(model("save"));
+        rt.frame(0.0);
+        rt.state.profile.name.text = "Renamed".to_owned();
+        profiles::save(&mut rt.state, &mut Tx::default());
+        assert!(rt.state.config.profiles.contains_key("Renamed"));
+        assert!(!rt.state.config.profiles.contains_key("Default"));
+        assert!(!is_dirty(&rt.state));
     }
 
     #[test]

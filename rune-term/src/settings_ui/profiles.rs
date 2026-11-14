@@ -2,7 +2,7 @@
 //! on it. The editor works on a copy, so a half-typed name never reaches the
 //! config.
 
-use rune::{col, row, text, El, ScrollSpec, TextEdit};
+use rune::{col, row, text, El, ScrollSpec, TextEdit, Tx};
 use rune_kit::{
     Button, ButtonVariant, ControlSize, Field, Kit, Select, SelectAppearance, TextInput,
 };
@@ -288,6 +288,7 @@ fn theme_select(kit: &Kit, model: &SettingsModel, overlays: &mut Vec<El>) -> El 
 
 fn actions(kit: &Kit, model: &SettingsModel) -> El {
     let is_default = model.config.default_profile_name() == model.profile.original;
+    let dirty = is_dirty(model);
     row()
         .w_full()
         .gap(8.0)
@@ -296,9 +297,18 @@ fn actions(kit: &Kit, model: &SettingsModel) -> El {
             Button::new("Save")
                 .variant(ButtonVariant::Contrast)
                 .control_size(ControlSize::Small)
-                .on_press(save)
+                .on_press_tx(save)
                 .build(kit)
                 .key("profile-save"),
+        )
+        .child(
+            Button::new("Revert")
+                .variant(ButtonVariant::Neutral)
+                .control_size(ControlSize::Small)
+                .disabled(!dirty)
+                .on_press(revert)
+                .build(kit)
+                .key("profile-revert"),
         )
         .child(
             Button::new("Set as default")
@@ -335,8 +345,8 @@ fn actions(kit: &Kit, model: &SettingsModel) -> El {
         )
 }
 
-/// Writes the draft into the config.
-pub fn save(model: &mut SettingsModel) {
+/// Writes the draft into the config and closes the window on success.
+pub fn save(model: &mut SettingsModel, tx: &mut Tx) {
     let (name, profile) = match model.profile.to_profile() {
         Ok(profile) => profile,
         Err(err) => {
@@ -352,7 +362,27 @@ pub fn save(model: &mut SettingsModel) {
     model.config.profiles.insert(name.clone(), profile);
     model.profile.original = name.clone();
     select_by_name(model, &name);
-    super::save_and_apply(model);
+    if super::save_and_apply(model) {
+        tx.close_window();
+    }
+}
+
+/// Puts the draft back as the config holds it, and the terminal with it.
+pub fn revert(model: &mut SettingsModel) {
+    model.profile = ProfileDraft::from_selected(model);
+    model.status = None;
+    super::restore(model);
+}
+
+/// Whether the draft differs from the profile the config holds.
+pub(crate) fn is_dirty(model: &SettingsModel) -> bool {
+    let Some(saved) = model.config.profile(&model.profile.original) else {
+        return true;
+    };
+    match model.profile.to_profile() {
+        Ok((name, profile)) => name != model.profile.original || profile != *saved,
+        Err(_) => true,
+    }
 }
 
 /// Copies the selected profile under a free name.
