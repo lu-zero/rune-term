@@ -355,26 +355,16 @@ fn credit(kit: &Kit, model: &SettingsModel) -> El {
     let palette = model.theme.palette(&model.config);
     let author = palette.author.clone();
     let url = palette.url.clone();
-    col()
+    row()
         .w_full()
-        .gap(4.0)
+        .gap(6.0)
+        .center_y()
         .child(
-            row()
-                .w_full()
-                .gap(6.0)
-                .center_y()
-                .child(
-                    text(format!("Palette by {author}"))
-                        .font(kit.ty.small)
-                        .color(kit.c.text_muted),
-                )
-                .child(super::link(kit, url)),
-        )
-        .child(
-            text("Palette colors © their respective authors")
+            text(format!("Palette by {author}"))
                 .font(kit.ty.small)
-                .color(kit.c.text_faint),
+                .color(kit.c.text_muted),
         )
+        .child(super::link(kit, url))
 }
 
 /// The theme's colors, each one a target for the editor.
