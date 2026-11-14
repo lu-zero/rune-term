@@ -74,19 +74,26 @@ impl SettingsModel {
 /// The window's spec. The terminal opens it; it holds the terminal's handle so
 /// an applied change reaches the running grid.
 pub fn window(terminal: AppHandle<Model>) -> WindowSpec<SettingsModel> {
-    WindowSpec::new(
-        "settings",
-        AppSpec {
-            min_size: Some(MIN_SIZE),
-            on_key: Some(on_key),
-            ..AppSpec::new("Settings", SIZE, init, view)
-        },
-    )
-    .state(SettingsModel::new(terminal))
-    .options(WindowOptions {
-        visible: false,
-        ..WindowOptions::default()
+    let app = rune::App::new(AppSpec {
+        min_size: Some(MIN_SIZE),
+        on_key: Some(on_key),
+        ..AppSpec::new("Settings", SIZE, init, view)
     })
+    .on_close(save_on_close);
+    WindowSpec::from_app("settings", app)
+        .state(SettingsModel::new(terminal))
+        .options(WindowOptions {
+            visible: false,
+            ..WindowOptions::default()
+        })
+}
+
+/// The window closed: the profile that was edited is saved, so what the user
+/// saw in the preview is what they keep.
+fn save_on_close(model: &mut SettingsModel, _tx: &mut Tx) {
+    if profiles::is_dirty(model) {
+        profiles::save(model);
+    }
 }
 
 /// The spec's initializer. The window's state carries the terminal's handle,
@@ -689,7 +696,7 @@ mod tests {
         let mut rt = runtime(model("save"));
         rt.frame(0.0);
         rt.state.profile.name.text = "Renamed".to_owned();
-        profiles::save(&mut rt.state, &mut Tx::default());
+        assert!(profiles::save(&mut rt.state));
         assert!(rt.state.config.profiles.contains_key("Renamed"));
         assert!(!rt.state.config.profiles.contains_key("Default"));
         assert!(!is_dirty(&rt.state));
@@ -707,6 +714,17 @@ mod tests {
         };
         assert!(on_key(&mut rt.state, &down, &mut Tx::default()));
         assert_eq!(rt.state.selected, 0);
+    }
+
+    #[test]
+    fn closing_the_window_saves_the_profile_that_was_edited() {
+        let mut rt = runtime(model("close"));
+        rt.frame(0.0);
+        rt.state.profile.name.text = "Renamed".to_owned();
+        assert!(is_dirty(&rt.state));
+        save_on_close(&mut rt.state, &mut Tx::default());
+        assert!(rt.state.config.profiles.contains_key("Renamed"));
+        assert!(!is_dirty(&rt.state));
     }
 
     #[test]

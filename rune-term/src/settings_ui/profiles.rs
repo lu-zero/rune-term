@@ -297,7 +297,11 @@ fn actions(kit: &Kit, model: &SettingsModel) -> El {
             Button::new("Save")
                 .variant(ButtonVariant::Contrast)
                 .control_size(ControlSize::Small)
-                .on_press_tx(save)
+                .on_press_tx(|m: &mut SettingsModel, tx: &mut Tx| {
+                    if save(m) {
+                        tx.close_window();
+                    }
+                })
                 .build(kit)
                 .key("profile-save"),
         )
@@ -345,26 +349,25 @@ fn actions(kit: &Kit, model: &SettingsModel) -> El {
         )
 }
 
-/// Writes the draft into the config and closes the window on success.
-pub fn save(model: &mut SettingsModel, tx: &mut Tx) {
+/// Writes the draft into the config and hands it to the terminal. `false`
+/// when the profile could not be written.
+pub fn save(model: &mut SettingsModel) -> bool {
     let (name, profile) = match model.profile.to_profile() {
         Ok(profile) => profile,
         Err(err) => {
             model.status = Some(err);
-            return;
+            return false;
         }
     };
     let original = model.profile.original.clone();
     if name != original && !model.config.rename_profile(&original, &name) {
         model.status = Some(format!("A profile named '{name}' already exists"));
-        return;
+        return false;
     }
     model.config.profiles.insert(name.clone(), profile);
     model.profile.original = name.clone();
     select_by_name(model, &name);
-    if super::save_and_apply(model) {
-        tx.close_window();
-    }
+    super::save_and_apply(model)
 }
 
 /// Puts the draft back as the config holds it, and the terminal with it.
