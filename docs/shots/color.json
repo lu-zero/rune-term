@@ -1,0 +1,6 @@
+[
+  {"t": 0.15, "type": "click", "key": "section-themes"},
+  {"t": 0.4, "type": "click", "key": "theme-6"},
+  {"t": 0.7, "type": "click", "key": "slot-Background"},
+  {"t": 0.7, "type": "mark", "name": "end"}
+]

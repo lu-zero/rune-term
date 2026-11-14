@@ -33,6 +33,21 @@ pub(crate) fn take_inject() -> Option<Vec<u8>> {
     QUEUED_INJECT.lock().expect("inject").take()
 }
 
+/// `RUNE_TERM_INJECT` is child output for a run with no shell.
+pub(crate) fn read_inject_file() -> Option<Vec<u8>> {
+    let path = std::env::var_os("RUNE_TERM_INJECT")?;
+    match std::fs::read(&path) {
+        Ok(bytes) => Some(bytes),
+        Err(err) => {
+            eprintln!(
+                "rune-term: {}: {err}",
+                std::path::Path::new(&path).display()
+            );
+            None
+        }
+    }
+}
+
 pub(crate) fn publish(shared: &Arc<Shared>) {
     *PUBLISHED.lock().expect("harness") = Some(Arc::clone(shared));
 }
@@ -318,6 +333,18 @@ pub fn poll(model: &mut Model, now: f64, tx: &mut Tx) -> bool {
         if let Some(host) = model.terminal.primary_mut() {
             host.surface.inject_output(&bytes);
             host.frame_flag.store(true, Ordering::Release);
+        }
+    }
+    let sized = model
+        .terminal
+        .primary()
+        .is_some_and(|host| host.cols > 0 && host.rows > 0);
+    if sized {
+        if let Some(bytes) = model.inject_when_sized.take() {
+            if let Some(host) = model.terminal.primary_mut() {
+                host.surface.inject_output(&bytes);
+                host.frame_flag.store(true, Ordering::Release);
+            }
         }
     }
     if crate::scrollback::refresh(model, now, tx) {

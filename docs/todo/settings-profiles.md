@@ -15,58 +15,66 @@ mux workspaces.
 
 ## Format
 
-TOML, serde-typed, one file for v1. Declarative only: no Lua, no
-`import`/include stacks. If multi-file composition is needed later, add a
-fixed discovery rule (e.g. `themes/` or `profiles/` directory) rather
-than arbitrary imports.
+TOML, serde-typed, split across a directory. Declarative only: no Lua,
+no `import`/include stacks. Discovery is fixed: `config.toml`,
+`profiles/<name>.toml`, and `themes/<name>.toml`. A theme file is a
+WezTerm color scheme. `settings.adaptive_theme` names a dark scheme and
+a light scheme; a profile theme wins over that pair.
 
 iTerm Dynamic Profiles (watched JSON merged by GUID, often
 machine-generated) are a possible interop format later. They are not the
 native format.
 
-## Paths (v1)
+## Paths
 
-The XDG config directory, file name `rune-term.toml`:
+The XDG config directory:
 
-`${XDG_CONFIG_HOME:-~/.config}/rune-term/rune-term.toml`
+`${XDG_CONFIG_HOME:-~/.config}/rune-term/`
+
+`config.toml` holds `version` and `[settings]`. Each profile and each
+custom theme is its own file. The stem is the name.
 
 The XDG base directories apply on every platform. `etcetera`'s XDG
 strategy reads `XDG_CONFIG_HOME` and falls back to `~/.config` under the
 home directory, on macOS and Windows too; there is no native macOS or
 Windows config path.
 
-Missing file: built-in defaults. Parse/load errors: keep running with
-defaults and log/report the error (do not overwrite the user's file).
+Missing directory: built-in defaults. Parse/load errors: keep running with
+defaults and log/report the error (do not overwrite the user's files).
 
-## Schema sketch (v1)
+## Schema sketch
+
+`config.toml`:
 
 ```toml
 version = 1
 
 [settings]
-# Name of [profiles.*] used for new sessions when none is specified.
 default_profile = "Default"
-
-# Minimal v1 knobs; extend as implementation lands.
 font_size = 14.0
-# theme = "flexoki-dark"
+theme = "Flexoki Black"
 
-[profiles.Default]
-# Omitted fields inherit from built-in defaults (and, if added later,
-# from an explicit base profile). Keep merge rules bounded and explicit.
+[settings.adaptive_theme]
+dark = "Flexoki Black"
+light = "Flexoki Light"
+```
+
+`profiles/Default.toml`:
+
+```toml
 font_family = "Cascadia Code NF"
 font_size = 14.0
-# theme = "flexoki-dark"
+# theme = "Flexoki Black"
 # shell = { program = "/bin/zsh", args = [] }
 # cwd = "~"
 ```
 
+The field list and the theme file are in [`docs/config.md`](../config.md).
+
 Rules to keep:
-- `version` is required once the file exists; unknown future versions need
-  an explicit compatibility decision (reject with a clear error, or
-  migrate).
-- Unknown keys: warn/ignore in v1 for forward tolerance, or reject if that
-  proves safer; choose one behavior and test it.
+- `version` is required in `config.toml`. A newer number is still loaded;
+  there is no migration step yet.
+- Unknown keys are ignored.
 - Profile resolution: built-in defaults → selected profile fields.
   Inheritance between named profiles is out of scope for v1 unless a real
   need appears.
@@ -78,8 +86,9 @@ Rules to keep:
 
 1. Built-in defaults.
 2. Config file.
-3. Runtime/UI changes (Cmd+,) update in-memory state and, when persistence
-   is implemented, write the config file or a clearly defined subset of it.
+3. The settings window writes the directory when a field is finished, on
+   Save, and when the window closes. The format and the pictures are in
+   [`docs/config.md`](../config.md).
 
 Command-line overrides are a later, separate concern.
 
@@ -90,10 +99,12 @@ Command-line overrides are a later, separate concern.
 - WezTerm-style workspaces/mux runtime model.
 - iTerm Dynamic Profiles JSON as the primary/native format.
 - Window arrangement/session restore, CWD/process restore.
-- Full settings UI parity; Cmd+, remains a minimal Rune surface until a
-  specific setting needs editing.
+- Settings beyond the profile and theme editors (environment, scrollback,
+  titles, window chrome).
 
 ## Implementation order
+
+Steps 1–4 are in the tree.
 
 1. Typed `Settings`/`Profile` structs + TOML load with defaults (no write
    yet, or atomic write only when explicitly saving).

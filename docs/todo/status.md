@@ -57,18 +57,30 @@ The numbers are that plan's.
       uploaded/cached by image stamp, and drawn in z-buckets (under-text and
       over-text) around the grid pass. Headless `graphics` test injects a small
       kitty image and verifies pixels. Sixel/iTerm2 remain item 18.
-- [~] **16. Settings.** Config loads from and saves to TOML
-      (`rune-term.toml`, XDG/platform path); unreadable/unparseable config is
-      not overwritten. Defaults/profile font size and theme are applied on init
+- [~] **16. Settings.** Config loads from and saves to
+      `$XDG_CONFIG_HOME/rune-term/` (`config.toml`, `profiles/<name>.toml`,
+      `themes/<name>.toml` in WezTerm's color-scheme shape). An unreadable
+      file is not overwritten. `settings.adaptive_theme` names a dark scheme
+      and a light scheme; a profile theme wins, and the desktop appearance is
+      sampled when the pair is used. Defaults/profile font size and theme are
+      applied on init
       and Cascadia Code NF metrics scale with font size. A settings window
       (Cmd+,) opens on its own, built with rune-kit and drawn in the terminal's
       own palette. It has a profiles list and a themes list that behave the
       same: apply, save, revert, duplicate, delete and create, with the theme
-      on screen the one the editor is showing. The config is written back and
-      the change is pushed into the running terminal, where a font size change
-      keeps the grid's cell count and snaps the window. The font family is
+      on screen the one the editor is showing. The editor shows Name, Author,
+      and Source, then Basic beside UI, then ANSI, Cube, and Gray. Those rows
+      stack as the window narrows, and the cube flows by group. ANSI is the
+      normal row, then the bright row. The cube and the
+      gray ramp are the xterm indexes 16–231 and 232–255; an edit stores that
+      index, and the xterm color removes it. UI is the window chrome. A swatch
+      names itself
+      in a tooltip, and clicking one on a custom theme opens the color editor.
+      The config is written back and the change is pushed into the running
+      terminal, where a font size change keeps the grid's cell count and snaps
+      the window. The font family is
       stored but not yet applied to the atlas, and per-tab setting application
-      remains. Design:
+      remains. Pictures: [`docs/config.md`](../config.md). Design:
       [`settings-profiles.md`](./settings-profiles.md). Follow-on:
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
 - [x] **17. Box-drawing and braille sprites.** Box drawing, block elements
@@ -116,7 +128,7 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
 - [~] **20. Profiles and creation.** Named/default profiles and “open with
       profile”, applied at session/tab/pane creation (settings, shell/cwd/env),
       then a versioned, capability-validated `backend`/target stanza as the
-      uniform creation/attach template. Config supports named `[profiles.*]`
+      uniform creation/attach template. Config supports named profile files
       with default-profile resolution/fallback/persistence, and `Profile`
       carries `font_family`/`font_size`/`theme` plus `backend` (default
       `local`), `shell` (program/args), and `cwd` wired into local
@@ -154,9 +166,8 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
 - [x] **4. Rune paired text.** `PhysicalInput::Key` carries `text` and
       `consumed_mods` on `lu-zero/rune` branch `physical-key-text`.
 - [x] **`RenderState::update_rearm`.** On `lu-zero/rio` branch
-      `librio-update-rearm`. This tree calls it.
-- [~] **3. Reflow.** Join-then-split is on Rio's local branch
-      `rio-vt-reflow`. This tree builds without that branch.
+      `librio-update-rearm-reflow`. This tree calls it, and `notify_focus`.
+- [~] **3. Reflow.** Join-then-split is on that same branch.
       `preserve_scrollback` is still false on macOS in the plan.
 
 The design header still records an empty workspace. This page is the status.

@@ -7,6 +7,14 @@ created.
 macOS first. The crates are unpublished. This page is about the repository.
 The plan and what is still missing are in [`docs/todo/`](./docs/todo/).
 
+![Tabs. The pane is a 24-bit hue plane from docs/shots/truecolor.py.](./docs/images/terminal-tabs.png)
+
+Configuration is a directory of TOML files. Cmd+, opens it. The format and
+the window are in [`docs/config.md`](./docs/config.md). `just shots` renders
+these pictures.
+
+![The theme editor](./docs/images/settings-themes.png)
+
 ## Crates
 
 - `term-grid`: the cell pass and the atlas. No Rune and no librio.
@@ -18,8 +26,9 @@ The plan and what is still missing are in [`docs/todo/`](./docs/todo/).
 `rune` and `librio` are the upstream git dependencies. `[patch]` replaces
 them with [lu-zero/rune](https://github.com/lu-zero/rune) branch
 `physical-key-text` and [lu-zero/rio](https://github.com/lu-zero/rio) branch
-`librio-update-rearm`. Cascadia Code NF is vendored in `term-grid/`. wgpu
-is pinned at `=30.0.1`.
+`librio-update-rearm-reflow`. winit is the vendored copy in that rune
+checkout (`../rune/vendor/winit`). Cascadia Code NF is vendored in
+`term-grid/`. wgpu is pinned at `=30.0.1`.
 
 ### System dependencies
 

@@ -27,11 +27,17 @@ pub struct Model {
     pub settings: Option<AppHandle<SettingsModel>>,
     pub(crate) shared: Arc<Shared>,
     pub(crate) pending_inject: Option<Vec<u8>>,
+    /// Child output from `RUNE_TERM_INJECT`, held until the pane has a size so a line is not wrapped at the default 80 columns.
+    pub(crate) inject_when_sized: Option<Vec<u8>>,
     pub(crate) _ipc: Option<crate::ipc::Server>,
 }
 
 pub fn init() -> Model {
     let pending_inject = delegate::take_inject();
+    let inject_when_sized = match pending_inject {
+        Some(_) => None,
+        None => delegate::read_inject_file(),
+    };
     let shared = Shared::new();
     delegate::publish(&shared);
     let engine = Engine::new(shared.delegate());
@@ -66,6 +72,7 @@ pub fn init() -> Model {
         settings: None,
         shared: std::sync::Arc::clone(&shared),
         pending_inject,
+        inject_when_sized,
         _ipc: Some(crate::ipc::start(shared)),
     }
 }

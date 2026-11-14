@@ -41,6 +41,38 @@ check-all: fmt-check clippy test-lib
 run:
     cargo run -p rune-term
 
+# Headless pictures. Settings follow the desktop appearance. The terminal picture is a 24-bit script.
+shots:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root="$(pwd)"
+    cargo build -p rune-term --no-default-features --offline
+    mkdir -p "$root/docs/images"
+    bin="$root/target/debug/rune-term"
+    settings() {
+        local home
+        home="$(mktemp -d)"
+        cp -R "$root/docs/shots/config/rune-term" "$home/rune-term"
+        XDG_CONFIG_HOME="$home" "$bin" --rune-args \
+            --window settings --size 880x560 --scale 2 \
+            --script "$root/docs/shots/$2" \
+            --snap "$root/docs/images/$1.png"
+        rm -rf "$home"
+    }
+    settings settings-profiles settle.json
+    settings settings-theme-menu theme-menu.json
+    settings settings-themes themes.json
+    settings settings-color color.json
+    # 960×560 at scale 2, Cascadia 14pt (9×17). The pane is 106×30 cells.
+    home="$(mktemp -d)"
+    cp -R "$root/docs/shots/term-config/rune-term" "$home/rune-term"
+    python3 "$root/docs/shots/truecolor.py" 106 30 > "$home/truecolor.bin"
+    XDG_CONFIG_HOME="$home" RUNE_TERM_INJECT="$home/truecolor.bin" "$bin" --rune-args \
+        --size 960x560 --scale 2 \
+        --script "$root/docs/shots/tabs.json" \
+        --snap "$root/docs/images/terminal-tabs.png"
+    rm -rf "$home"
+
 ci: check-all
 
 ctl *args:

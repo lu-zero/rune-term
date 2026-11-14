@@ -1,0 +1,25 @@
+[colors]
+foreground = "#CECDC3"
+background = "#100F0F"
+foreground_bright = "#E6E4D9"
+muted = "#878580"
+accent = "#205EA6"
+cursor_fg = "#100F0F"
+cursor_bg = "#CECDC3"
+selection_fg = "#100F0F"
+selection_bg = "#CECDC3"
+split = "#343331"
+scrollbar_thumb = "#878580"
+ansi = ["#100F0F", "#AF3029", "#66800B", "#AD8301", "#205EA6", "#A02F6F", "#24837B", "#CECDC3"]
+brights = ["#6F6E69", "#D14D41", "#879A39", "#D0A215", "#4385BE", "#CE5D97", "#3AA99F", "#E6E4D9"]
+
+[colors.tab_bar]
+background = "#1C1B1A"
+
+[colors.indexed]
+16 = "#E8BBD0"
+
+[metadata]
+name = "Night"
+author = "Ada"
+origin_url = "https://example.com"

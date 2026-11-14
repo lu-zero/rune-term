@@ -1,0 +1,5 @@
+[
+  {"t": 0.4, "type": "click", "key": "tab-new"},
+  {"t": 0.7, "type": "click", "key": "tab-0"},
+  {"t": 0.7, "type": "mark", "name": "end"}
+]

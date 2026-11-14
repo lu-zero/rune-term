@@ -1,0 +1,10 @@
+version = 1
+
+[settings]
+default_profile = "Default"
+font_size = 14.0
+theme = "Flexoki Black"
+
+[settings.adaptive_theme]
+dark = "Flexoki Black"
+light = "Flexoki Light"

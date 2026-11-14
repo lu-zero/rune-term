@@ -1,20 +1,29 @@
-# rune-term configuration (TOML)
+# rune-term configuration
 
-`rune-term` can be configured by editing its TOML config file directly. This is the primary/manual configuration path; the in-app settings UI (when available) edits the same file.
+The config is a directory of TOML files. Cmd+, opens a window on the same files. The pictures below are headless renders of [`docs/shots/`](shots/) (`just shots`). The profiles window follows the desktop appearance.
 
 ## Location
 
-- **Path:** `$XDG_CONFIG_HOME/rune-term/rune-term.toml` (or the platform XDG config directory as resolved by `etcetera`)
-- **Fallback:** `./rune-term/config/rune-term.toml` (relative to the current working directory) if an XDG config directory is unavailable
+`$XDG_CONFIG_HOME/rune-term/` (etcetera's XDG directory on every platform). If that directory cannot be resolved, `./rune-term/`.
 
-## Behavior and safety
+```
+rune-term/
+  config.toml
+  profiles/<name>.toml
+  themes/<name>.toml
+```
 
-- If the config file does not exist, `rune-term` starts with defaults.
-- If the config file exists but cannot be read or parsed, `rune-term` starts with defaults and **refuses to save** from the app, to avoid overwriting an unreadable/broken file.
-- Font sizes are clamped to a supported range (currently `6.0..=96.0`).
-- `settings.default_profile` falls back to `Default` (or the first available profile) if it does not exist.
+The file stem is the profile or theme name. A name cannot be empty, `.` or `..`, start with `.`, or contain `/ \ : * ? " < > |` or a control character. Spaces are allowed.
 
-## Schema (v1)
+## Behavior
+
+- No `config.toml` and no `profiles/` or `themes/` directory: built-in defaults.
+- No `config.toml`, but `profiles/` or `themes/` is present: those files are loaded. A later save writes `config.toml` and does not delete theme files that were read.
+- A file that cannot be read or parsed: start on defaults and refuse to save, so the broken file is not overwritten.
+- Font sizes are clamped to `6.0..=96.0`.
+- `settings.default_profile` falls back to `Default`, then the first profile, when the named profile is missing. A directory with no profile files gains a `Default` profile.
+
+## `config.toml`
 
 ```toml
 version = 1
@@ -24,70 +33,94 @@ default_profile = "Default"
 font_size = 14.0
 theme = "Flexoki Black"
 
-[profiles.Default]
-font_family = "Cascadia Code NF"
-font_size = 14.0
-# theme = "Flexoki Black"      # optional; inherits settings.theme when omitted
-backend = "local"               # currently only "local" is accepted
-# cwd = "/path/to/dir"         # optional working directory
-
-# [profiles.Default.shell]     # optional; platform default shell when omitted
-# program = "/bin/zsh"
-# args = ["-l"]
-
-[custom_themes."My Theme"]
-author = ""
-url = ""
-created_at = 0                  # unix seconds (informational)
-bg = 0x0010_0F0F                # 0x00RRGGBB
-fg = 0x00CE_CDC3
-fg_bright = 0x00FF_FCF0
-muted = 0x0087_8580
-tab_bg = 0x001C_1B1A
-active_border = 0x0028_2826
-accent = 0x00DA_702C
-ansi16 = [
-  [16, 15, 15], [209, 77, 65], [135, 154, 57], [208, 162, 21],
-  [67, 133, 190], [206, 93, 151], [58, 169, 159], [135, 133, 128],
-  [111, 110, 105], [209, 77, 65], [135, 154, 57], [208, 162, 21],
-  [67, 133, 190], [206, 93, 151], [58, 169, 159], [206, 205, 195],
-]
+[settings.adaptive_theme]
+dark = "Flexoki Black"
+light = "Flexoki Light"
 ```
 
-## Sections and fields
+- `default_profile`: profile used when none is named.
+- `font_size`: default size in points.
+- `theme`: theme used when a profile does not name one and the appearance pair is not in use.
+- `adaptive_theme`: two theme names. When both are non-empty and the profile has no theme, the desktop appearance picks `dark` or `light`. On macOS that is `AppleInterfaceStyle`. Elsewhere, and when the appearance cannot be read, `dark` is used. The pair is not watched while the app is running.
 
-### `[settings]`
-Global defaults and app-level selections.
+`version` is required. Unknown keys are ignored.
 
-- `default_profile` (string): name of the profile used by default.
-- `font_size` (float): global/default font size (points).
-- `theme` (string): default theme name (built-in or custom).
+## `profiles/<name>.toml`
 
-### `[profiles.<name>]`
-Named launch/runtime profiles. Profiles can override global settings.
+```toml
+font_family = "Cascadia Code NF"
+font_size = 14.0
+theme = "Nord"
+backend = "local"
+cwd = "/Users/me/work"
 
-- `font_family` (string): font family name. Default: `"Cascadia Code NF"`.
-- `font_size` (float, optional): overrides `[settings].font_size` for this profile.
-- `theme` (string, optional): overrides `[settings].theme` for this profile.
-- `backend` (string): session backend. Default: `"local"`. **Currently only `"local"` is available**; unknown values are rejected by validation.
-- `cwd` (string, optional): working directory for new sessions/tabs/panes created with this profile.
-- `[profiles.<name>.shell]` (table, optional): shell to launch.
-  - `program` (string, optional): executable path/name. If omitted/empty and `args` is empty, the platform default shell is used.
-  - `args` (array of strings): arguments passed to `program`.
+[shell]
+program = "/bin/zsh"
+args = ["-l"]
+```
 
-> Note: profile `font_family` is stored in config and selectable in settings, but terminal font/atlas rendering may not yet apply it in all cases (font size is applied live). See `docs/todo/status.md` for current status.
+- `font_family`: default `"Cascadia Code NF"`. Stored and selectable. The live atlas does not switch face yet; font size does apply.
+- `font_size` (optional): overrides `settings.font_size`.
+- `theme` (optional): a theme name. When it is omitted, the profile inherits. With both `adaptive_theme` names set, that is the desktop appearance, and the field reads `Inherit (Appearance)`. Otherwise it is `settings.theme`, and the field reads `Inherit` and that name. A named theme wins over both. The menu lists theme names. Inherit is the empty value.
+- `backend`: `"local"` only.
+- `cwd` (optional): working directory for sessions created with this profile.
+- `[shell]` (optional): `program` and `args`. When `program` is empty and `args` is empty, the platform shell is used.
 
-### `[custom_themes.<name>]`
-User-defined themes. A custom theme name can be referenced from `[settings].theme` or `[profiles.<name>].theme`.
+## `themes/<name>.toml`
 
-- `author` (string), `url` (string): metadata.
-- `created_at` (integer): creation timestamp (unix seconds).
-- `bg`, `fg`, `fg_bright`, `muted`, `tab_bg`, `active_border`, `accent` (integer): colors as `0x00RRGGBB`.
-- `ansi16` (array of 16 `[r, g, b]` entries): ANSI palette colors (`0..255` per channel).
+A [WezTerm color scheme file](https://wezterm.org/config/appearance.html#defining-a-color-scheme-in-a-separate-file). `colors.ansi` is required (8 colors). `brights` fills the upper eight and, when omitted, copies `ansi`. Other color keys may be omitted.
+
+```toml
+[colors]
+foreground = "#CECDC3"
+background = "#100F0F"
+foreground_bright = "#E6E4D9"
+muted = "#878580"
+accent = "#205EA6"
+cursor_fg = "#100F0F"
+cursor_bg = "#CECDC3"
+selection_fg = "#100F0F"
+selection_bg = "#CECDC3"
+split = "#343331"
+scrollbar_thumb = "#878580"
+ansi = ["#100F0F", "#AF3029", "#66800B", "#AD8301", "#205EA6", "#A02F6F", "#24837B", "#CECDC3"]
+brights = ["#6F6E69", "#D14D41", "#879A39", "#D0A215", "#4385BE", "#CE5D97", "#3AA99F", "#E6E4D9"]
+
+[colors.tab_bar]
+background = "#1C1B1A"
+
+[colors.indexed]
+16 = "#E8BBD0"
+
+[metadata]
+name = "Night"
+author = "Ada"
+origin_url = "https://example.com"
+```
+
+Colors are `#RGB`, `#RRGGBB`, `#RRGGBBAA` (alpha ignored), or `rgb()` / `rgba()` including percentages. Unknown keys are ignored, so a pasted WezTerm scheme loads. The name is the file stem. `metadata.name` is written on save and is not read back.
+
+Cursor and selection colors fall back to an inverted foreground and background. `split` and `scrollbar_thumb` fall back to bright black. `tab_bar.background` falls back to the background. `foreground_bright`, `muted`, and `accent` fall back to bright white, bright black, and blue; WezTerm ignores those three keys. Indexes 16–255 in `indexed` replace the xterm cube and gray ramp. A file whose stem is a built-in theme name replaces that built-in until the file is removed.
+
+## Settings window
+
+A field stays in the draft while it is typed and is written when the field is finished: Enter, Tab, or a click elsewhere. Choosing a theme from the menu writes that name immediately. Save writes the whole draft, and so does closing the window. Revert restores the last stored values.
+
+### Profiles
+
+![Profiles. The theme is empty, so the profile inherits the desktop appearance. This desktop was light, so the window uses the light scheme.](images/settings-profiles.png)
+
+![The theme menu, the same width as its field.](images/settings-theme-menu.png)
+
+### Themes
+
+![The theme editor: Name, Author, and Source, then Basic beside UI, ANSI, the cube, and the gray ramp.](images/settings-themes.png)
+
+The editor lays a theme out as Name, Author, and Source, then Basic beside UI, then ANSI, Cube, and Gray. ANSI is two rows, the normal colors then the bright colors. The cube is indexes 16–231 and Gray is indexes 232–255, drawn in the xterm colors unless `indexed` replaces one. A narrower window stacks Name, Author, and Source, and stacks Basic and UI. The cube flows by group, six groups on a line where they fit. UI is muted, accent, the split border, the tab strip, and the scrollbar. Hover a swatch for its name. On a theme from `themes/`, click a swatch to edit it as `#RRGGBB` and RGB sliders. A built-in theme does not open the editor. Editing a cube or gray cell stores that index. Setting the cell back to its xterm color, or removing it, drops the override.
+
+![Editing Background on the Night theme from the example above.](images/settings-color.png)
 
 ## Built-in themes
-
-Built-in theme names currently include:
 
 - `Flexoki Black` (default)
 - `Flexoki Dark`
@@ -99,51 +132,4 @@ Built-in theme names currently include:
 - `Gruvbox Dark`
 - `Catppuccin Mocha`
 
-Use these exact names in `settings.theme` or a profile’s `theme`. Custom themes with the same name are treated as custom entries in config storage, but prefer unique names.
-
-## Examples
-
-### Minimal config
-```toml
-version = 1
-
-[settings]
-default_profile = "Default"
-font_size = 14.0
-theme = "Flexoki Black"
-
-[profiles.Default]
-font_family = "Cascadia Code NF"
-```
-
-### Multiple profiles (manual editing)
-```toml
-version = 1
-
-[settings]
-default_profile = "Work"
-font_size = 14.0
-theme = "Flexoki Black"
-
-[profiles.Default]
-font_family = "Cascadia Code NF"
-font_size = 14.0
-
-[profiles.Work]
-font_family = "Cascadia Code NF"
-font_size = 16.0
-theme = "Nord"
-backend = "local"
-cwd = "/Users/me/work"
-
-[profiles.Work.shell]
-program = "/bin/zsh"
-args = ["-l"]
-```
-
-## Editing tips
-
-- Keep `version = 1`.
-- Use valid TOML; if parsing fails, the app will fall back to defaults and will not overwrite the file on save.
-- Prefer editing while the app is not writing settings, or restart after manual edits to ensure the running instance reflects changes.
-- Profile/theme names are referenced by string; renaming a profile/theme requires updating references (`settings.default_profile`, profile `theme` fields).
+Use these names in `settings.theme`, `settings.adaptive_theme`, or a profile's `theme`.
