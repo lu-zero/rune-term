@@ -151,41 +151,17 @@ pub fn editor(kit: &Kit, model: &SettingsModel, overlays: &mut Vec<El>) -> El {
         )
         .child(actions(kit, model))
         .child(
-            Field::new()
-                .label("Name")
-                .control(
-                    TextInput::new(&draft.name)
-                        .placeholder("Profile name")
-                        .width(None)
-                        .on_edit(|m: &mut SettingsModel| &mut m.profile.name)
-                        .build(kit),
-                )
-                .build(kit),
-        )
-        .child(
-            Field::new()
-                .label("Font family")
-                .control(
-                    TextInput::new(&draft.font_family)
-                        .placeholder("Cascadia Code NF")
-                        .width(None)
-                        .on_edit(|m: &mut SettingsModel| &mut m.profile.font_family)
-                        .build(kit),
-                )
-                .build(kit),
-        )
-        .child(
             row()
                 .w_full()
                 .gap(12.0)
                 .child(
                     Field::new()
-                        .label("Font size")
+                        .label("Name")
                         .control(
-                            TextInput::new(&draft.font_size)
-                                .placeholder("14")
+                            TextInput::new(&draft.name)
+                                .placeholder("Profile name")
                                 .width(None)
-                                .on_edit(|m: &mut SettingsModel| &mut m.profile.font_size)
+                                .on_edit(|m: &mut SettingsModel| &mut m.profile.name)
                                 .build(kit),
                         )
                         .build(kit)
@@ -202,16 +178,37 @@ pub fn editor(kit: &Kit, model: &SettingsModel, overlays: &mut Vec<El>) -> El {
                 ),
         )
         .child(
-            Field::new()
-                .label("Working directory")
-                .control(
-                    TextInput::new(&draft.cwd)
-                        .placeholder("Use current directory")
-                        .width(None)
-                        .on_edit(|m: &mut SettingsModel| &mut m.profile.cwd)
-                        .build(kit),
+            row()
+                .w_full()
+                .gap(12.0)
+                .child(
+                    Field::new()
+                        .label("Font family")
+                        .control(
+                            TextInput::new(&draft.font_family)
+                                .placeholder("Cascadia Code NF")
+                                .width(None)
+                                .on_edit(|m: &mut SettingsModel| &mut m.profile.font_family)
+                                .build(kit),
+                        )
+                        .build(kit)
+                        .grow(1.0)
+                        .min_w(0.0),
                 )
-                .build(kit),
+                .child(
+                    Field::new()
+                        .label("Font size")
+                        .control(
+                            TextInput::new(&draft.font_size)
+                                .placeholder("14")
+                                .width(None)
+                                .on_edit(|m: &mut SettingsModel| &mut m.profile.font_size)
+                                .build(kit),
+                        )
+                        .build(kit)
+                        .grow(1.0)
+                        .min_w(0.0),
+                ),
         )
         .child(
             row()
@@ -245,6 +242,18 @@ pub fn editor(kit: &Kit, model: &SettingsModel, overlays: &mut Vec<El>) -> El {
                         .grow(1.0)
                         .min_w(0.0),
                 ),
+        )
+        .child(
+            Field::new()
+                .label("Working directory")
+                .control(
+                    TextInput::new(&draft.cwd)
+                        .placeholder("Use current directory")
+                        .width(None)
+                        .on_edit(|m: &mut SettingsModel| &mut m.profile.cwd)
+                        .build(kit),
+                )
+                .build(kit),
         )
 }
 
