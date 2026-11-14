@@ -24,7 +24,7 @@ pub const SIZE: (f32, f32) = (880.0, 560.0);
 pub const MIN_SIZE: (f32, f32) = (620.0, 400.0);
 
 /// The width of the list column.
-const SIDEBAR_W: f32 = 264.0;
+const SIDEBAR_W: f32 = 300.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Tab {
@@ -308,7 +308,28 @@ fn sidebar(kit: &Kit, model: &SettingsModel) -> El {
         .h_full()
         .py(8.0)
         .px(8.0)
+        .gap(2.0)
         .child(list(kit, model))
+        .child(add_row(kit, model))
+}
+
+/// The button that adds a row to the list.
+fn add_row(kit: &Kit, _model: &SettingsModel) -> El {
+    row()
+        .key("add-row")
+        .w_full()
+        .h(30.0)
+        .px(8.0)
+        .gap(8.0)
+        .center_y()
+        .radius(kit.radius.md)
+        .hover(kit.c.hover)
+        .focusable(true)
+        .on_press(move |m: &mut SettingsModel| match m.tab {
+            Tab::Profiles => profiles::create(m),
+            Tab::Themes => themes::create_theme(m),
+        })
+        .child(text("+").font(kit.ty.ui_medium).color(kit.c.text_muted))
 }
 
 fn list(kit: &Kit, model: &SettingsModel) -> El {
@@ -339,6 +360,7 @@ fn list(kit: &Kit, model: &SettingsModel) -> El {
 
 fn profile_row(kit: &Kit, model: &SettingsModel, index: usize, name: &str, default: bool) -> El {
     let selected = model.selected == index;
+    let profile = name.to_owned();
     row()
         .key(format!("profile-{index}"))
         .role("option")
@@ -371,16 +393,30 @@ fn profile_row(kit: &Kit, model: &SettingsModel, index: usize, name: &str, defau
                 .min_w(0.0)
                 .truncate(),
         )
-        .child(if default {
-            text("default").font(kit.ty.small).color(kit.c.text_muted)
+        .child(make_default(kit, profile, default))
+}
+
+/// The button that makes a profile the one new sessions use.
+fn make_default(kit: &Kit, name: String, default: bool) -> El {
+    el().key(format!("profile-default-{name}"))
+        .w(22.0)
+        .h(22.0)
+        .center()
+        .radius(4.0)
+        .hover(kit.c.hover)
+        .on_press(move |m: &mut SettingsModel| profiles::set_default(m, &name))
+        .child(icon(kit.glyph.check_small, 16.0).color(if default {
+            kit.c.text_accent
         } else {
-            el().w(0.0).h(0.0)
-        })
+            kit.c.text_faint
+        }))
 }
 
 fn theme_row(kit: &Kit, model: &SettingsModel, index: usize, name: &str) -> El {
     let selected = model.selected == index;
     let palette = themes::palette(&model.config, name);
+    let author = palette.author.clone();
+    let url = palette.url.clone();
     row()
         .key(format!("theme-{index}"))
         .role("option")
@@ -401,7 +437,7 @@ fn theme_row(kit: &Kit, model: &SettingsModel, index: usize, name: &str) -> El {
                 m.selected = index;
                 m.status = None;
                 m.theme = themes::ThemeDraft::from_selected(m);
-                preview_selected(m);
+                themes::apply_theme(m);
             }
         })
         .child(marker(kit, selected))
@@ -413,9 +449,33 @@ fn theme_row(kit: &Kit, model: &SettingsModel, index: usize, name: &str) -> El {
                 .min_w(0.0)
                 .truncate(),
         )
-        .child(swatch(kit, palette.bg))
-        .child(swatch(kit, palette.fg))
-        .child(swatch(kit, palette.accent))
+        .child(
+            text(author)
+                .font(kit.ty.small)
+                .color(kit.c.text_muted)
+                .max_w(96.0)
+                .shrink()
+                .truncate(),
+        )
+        .child(link(kit, url))
+}
+
+/// The button that opens where a theme came from.
+pub(crate) fn link(kit: &Kit, url: String) -> El {
+    let mut button = el()
+        .key(format!("theme-url-{url}"))
+        .w(22.0)
+        .h(22.0)
+        .center()
+        .radius(4.0)
+        .hover(kit.c.hover)
+        .child(text("↗").font(kit.ty.small).color(kit.c.text_muted));
+    if !url.is_empty() {
+        button = button.on_press(move |_m: &mut SettingsModel| {
+            let _ = crate::hyperlink::open_uri(&url);
+        });
+    }
+    button
 }
 
 /// The tick on the selected row.
@@ -425,14 +485,6 @@ fn marker(kit: &Kit, selected: bool) -> El {
     } else {
         el().w(16.0).h(16.0)
     }
-}
-
-fn swatch(kit: &Kit, rgb: u32) -> El {
-    el().w(14.0)
-        .h(14.0)
-        .radius(4.0)
-        .fill(theme::linear(rgb))
-        .border(1.0, kit.c.border_muted)
 }
 
 /// The editor column.
@@ -609,7 +661,7 @@ mod tests {
     fn a_new_profile_joins_the_config_and_the_list() {
         let mut rt = runtime(model("create"));
         rt.frame(0.0);
-        press(&mut rt, "profile-new");
+        press(&mut rt, "add-row");
         assert!(rt.state.config.profiles.contains_key("Profile"));
         assert!(rt.find("profile-1").is_some());
     }
@@ -618,7 +670,7 @@ mod tests {
     fn a_deleted_profile_leaves_the_config() {
         let mut rt = runtime(model("delete"));
         rt.frame(0.0);
-        press(&mut rt, "profile-new");
+        press(&mut rt, "add-row");
         press(&mut rt, "profile-delete");
         assert!(!rt.state.config.profiles.contains_key("Profile"));
         assert!(rt.find("profile-1").is_none());
@@ -739,7 +791,7 @@ mod tests {
     fn the_arrow_keys_move_the_selection() {
         let mut rt = runtime(model("arrows"));
         rt.frame(0.0);
-        press(&mut rt, "profile-new");
+        press(&mut rt, "add-row");
         assert_eq!(rt.state.selected, 1);
         let down = rune::KeyEvent {
             key: Key::Up,
@@ -763,11 +815,12 @@ mod tests {
     }
 
     #[test]
-    fn selecting_a_theme_previews_it() {
+    fn selecting_a_theme_applies_it() {
         let mut rt = runtime(model("themes-preview"));
         show_tab(&mut rt.state, Tab::Themes);
         rt.frame(0.0);
         press(&mut rt, "theme-1");
+        assert_eq!(rt.state.config.settings.theme, rt.state.theme.original);
         assert_eq!(
             rt.state
                 .previewed
@@ -775,7 +828,6 @@ mod tests {
                 .map(|palette| palette.name.clone()),
             Some(rt.state.theme.original.clone())
         );
-        assert_ne!(rt.state.theme.original, rt.state.config.settings.theme);
     }
 
     #[test]

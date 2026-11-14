@@ -2,7 +2,7 @@
 //! on it. The editor works on a copy, so a half-typed name never reaches the
 //! config.
 
-use rune::{col, row, text, El, ScrollSpec, TextEdit};
+use rune::{col, row, El, ScrollSpec, TextEdit};
 use rune_kit::{
     Button, ButtonVariant, ControlSize, Field, Kit, Select, SelectAppearance, TextInput,
 };
@@ -161,11 +161,6 @@ pub fn editor(kit: &Kit, model: &SettingsModel, overlays: &mut Vec<El>) -> El {
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
-        .child(
-            text(draft.original.clone())
-                .font(kit.ty.ui_medium)
-                .color(kit.c.text_base),
-        )
         .child(actions(kit, model))
         .child(
             row()
@@ -313,24 +308,14 @@ pub fn preview_theme(model: &mut SettingsModel) {
 }
 
 fn actions(kit: &Kit, model: &SettingsModel) -> El {
-    let is_default = model.config.default_profile_name() == model.profile.original;
     let dirty = model.profile.is_dirty();
     row()
         .w_full()
         .gap(8.0)
         .flex_wrap()
         .child(
-            Button::new("Apply")
-                .variant(ButtonVariant::Contrast)
-                .control_size(ControlSize::Small)
-                .disabled(is_default)
-                .on_press(apply_profile)
-                .build(kit)
-                .key("profile-apply"),
-        )
-        .child(
             Button::new("Save")
-                .variant(ButtonVariant::Neutral)
+                .variant(ButtonVariant::Contrast)
                 .control_size(ControlSize::Small)
                 .disabled(!dirty)
                 .on_press(save)
@@ -361,14 +346,6 @@ fn actions(kit: &Kit, model: &SettingsModel) -> El {
                 .on_press(delete)
                 .build(kit)
                 .key("profile-delete"),
-        )
-        .child(
-            Button::new("New profile")
-                .variant(ButtonVariant::Ghost)
-                .control_size(ControlSize::Small)
-                .on_press(create)
-                .build(kit)
-                .key("profile-new"),
         )
 }
 
@@ -412,11 +389,8 @@ pub fn revert(model: &mut SettingsModel) {
 }
 
 /// Makes the profile the one new sessions use.
-pub fn apply_profile(model: &mut SettingsModel) {
-    let Some(name) = selected_name(model) else {
-        return;
-    };
-    if model.config.set_default_profile(&name) && super::write_config(model) {
+pub fn set_default(model: &mut SettingsModel, name: &str) {
+    if model.config.set_default_profile(name) && super::write_config(model) {
         super::push(model);
     }
 }

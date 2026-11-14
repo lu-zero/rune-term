@@ -219,6 +219,14 @@ impl ThemeDraft {
     /// The palette the draft describes, with the ANSI colors it does not edit.
     pub fn palette(&self, config: &ConfigFile) -> Arc<Palette> {
         let base = palette(config, &self.original);
+        // A built-in theme keeps its own credit; a custom one has the fields.
+        let (author, url) = match &self.saved {
+            Some(_) => (
+                self.author.text.trim().to_owned(),
+                self.url.text.trim().to_owned(),
+            ),
+            None => (base.author.clone(), base.url.clone()),
+        };
         Arc::new(Palette {
             name: self.original.clone(),
             bg: self.colors.bg,
@@ -229,8 +237,8 @@ impl ThemeDraft {
             active_border: self.colors.active_border,
             accent: self.colors.accent,
             ansi16: base.ansi16,
-            author: self.author.text.trim().to_owned(),
-            url: self.url.text.trim().to_owned(),
+            author,
+            url,
         })
     }
 }
@@ -270,7 +278,6 @@ pub fn preview_selected(model: &mut SettingsModel) {
 pub fn editor(kit: &Kit, model: &SettingsModel) -> El {
     let draft = &model.theme;
     let custom = draft.is_custom();
-    let applied = model.config.settings.theme == draft.original;
     let mut body = col()
         .w_full()
         .h_full()
@@ -282,23 +289,6 @@ pub fn editor(kit: &Kit, model: &SettingsModel) -> El {
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
-        .child(
-            row()
-                .w_full()
-                .gap(10.0)
-                .center_y()
-                .child(
-                    text(draft.original.clone())
-                        .font(kit.ty.ui_medium)
-                        .color(kit.c.text_base),
-                )
-                .child(el().grow(1.0))
-                .child(if applied {
-                    text("in use").font(kit.ty.small).color(kit.c.text_muted)
-                } else {
-                    el().w(0.0).h(0.0)
-                }),
-        )
         .child(actions(kit, model))
         .child(swatches(kit, model));
     if custom {
@@ -356,7 +346,35 @@ pub fn editor(kit: &Kit, model: &SettingsModel) -> El {
                 .color(kit.c.text_muted),
         );
     }
+    body = body.child(credit(kit, model));
     body
+}
+
+/// Who made the theme, and where to read more about it.
+fn credit(kit: &Kit, model: &SettingsModel) -> El {
+    let palette = model.theme.palette(&model.config);
+    let author = palette.author.clone();
+    let url = palette.url.clone();
+    col()
+        .w_full()
+        .gap(4.0)
+        .child(
+            row()
+                .w_full()
+                .gap(6.0)
+                .center_y()
+                .child(
+                    text(format!("Palette by {author}"))
+                        .font(kit.ty.small)
+                        .color(kit.c.text_muted),
+                )
+                .child(super::link(kit, url)),
+        )
+        .child(
+            text("Palette colors © their respective authors")
+                .font(kit.ty.small)
+                .color(kit.c.text_faint),
+        )
 }
 
 /// The theme's colors, each one a target for the editor.
@@ -376,7 +394,7 @@ fn swatches(kit: &Kit, model: &SettingsModel) -> El {
                     if selected {
                         kit.c.text_accent
                     } else {
-                        kit.c.border_muted
+                        kit.c.text_muted
                     },
                 )
                 .on_press(move |m: &mut SettingsModel| {
@@ -422,24 +440,14 @@ fn color_editor(kit: &Kit, model: &SettingsModel) -> El {
 
 fn actions(kit: &Kit, model: &SettingsModel) -> El {
     let custom = model.theme.is_custom();
-    let applied = model.config.settings.theme == model.theme.original;
     let dirty = model.theme.is_dirty();
     row()
         .w_full()
         .gap(8.0)
         .flex_wrap()
         .child(
-            Button::new("Apply")
-                .variant(ButtonVariant::Contrast)
-                .control_size(ControlSize::Small)
-                .disabled(applied)
-                .on_press(apply_theme)
-                .build(kit)
-                .key("theme-apply"),
-        )
-        .child(
             Button::new("Save")
-                .variant(ButtonVariant::Neutral)
+                .variant(ButtonVariant::Contrast)
                 .control_size(ControlSize::Small)
                 .disabled(!custom || !dirty)
                 .on_press(save_theme)
@@ -471,14 +479,6 @@ fn actions(kit: &Kit, model: &SettingsModel) -> El {
                 .on_press(delete_theme)
                 .build(kit)
                 .key("theme-delete"),
-        )
-        .child(
-            Button::new("New theme")
-                .variant(ButtonVariant::Ghost)
-                .control_size(ControlSize::Small)
-                .on_press(create_theme)
-                .build(kit)
-                .key("theme-new"),
         )
 }
 
@@ -514,6 +514,7 @@ pub fn apply_theme(model: &mut SettingsModel) {
         return;
     }
     model.config.set_theme(name);
+    model.previewed = Some(model.theme.palette(&model.config));
     if super::write_config(model) {
         super::push(model);
     }
