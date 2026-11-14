@@ -7,6 +7,8 @@
 pub mod profiles;
 pub mod themes;
 
+use std::sync::Arc;
+
 use rune::{
     col, el, icon, row, text, AppHandle, AppSpec, Color, Cx, El, Key, KeyEvent, ScrollSpec, Tx,
     WindowOptions, WindowSpec,
@@ -40,6 +42,9 @@ pub struct SettingsModel {
     pub profile: profiles::ProfileDraft,
     pub theme: themes::ThemeDraft,
     pub status: Option<String>,
+    /// The theme the terminal and this window are showing, while the editor
+    /// previews one that is not saved yet.
+    pub previewed: Option<String>,
     /// The terminal window. The spec's own initializer has no terminal to
     /// talk to; the window the terminal opens always has one.
     pub terminal: Option<AppHandle<Model>>,
@@ -60,6 +65,7 @@ impl SettingsModel {
             tab: Tab::default(),
             selected: 0,
             status: None,
+            previewed: None,
             terminal,
         }
     }
@@ -87,6 +93,15 @@ pub fn window(terminal: AppHandle<Model>) -> WindowSpec<SettingsModel> {
 /// which the spec cannot build, so the window sets the state instead.
 fn init() -> SettingsModel {
     SettingsModel::with_config(ConfigFile::load(), None)
+}
+
+/// The palette the window draws with: the theme it is previewing, else the
+/// one the config holds.
+fn previewed_palette(model: &SettingsModel) -> Arc<Palette> {
+    match &model.previewed {
+        Some(name) => themes::palette(&model.config, name),
+        None => model.config.resolve_palette(),
+    }
 }
 
 /// The draft for the first profile in the config.
@@ -196,7 +211,7 @@ pub fn show_tab(model: &mut SettingsModel, tab: Tab) {
 }
 
 pub fn view(model: &SettingsModel, cx: &mut Cx<SettingsModel>) -> El {
-    let kit = kit(&model.config.resolve_palette());
+    let kit = kit(&previewed_palette(model));
     let mut overlays = Vec::new();
     // The window's own controls (the macOS traffic lights) sit over the
     // content's top-left, so the bar keeps clear of them.
@@ -402,14 +417,17 @@ fn editor(kit: &Kit, model: &SettingsModel, overlays: &mut Vec<El>) -> El {
 /// The kit the window draws with: the terminal's own palette, so the settings
 /// window looks like the terminal it configures.
 pub fn kit(palette: &Palette) -> Kit {
-    let mut kit = Kit::neutral(true);
+    let dark = luminance(palette.bg) < 0.5;
+    // The neutral tokens the palette does not override (the contrast button,
+    // the danger colour) follow the appearance the palette is.
+    let mut kit = Kit::neutral(dark);
     let bg = theme::linear(palette.bg);
     let fg = theme::linear(palette.fg);
     let muted = theme::linear(palette.muted);
     let accent = theme::linear(palette.accent);
     let surface = theme::linear(palette.tab_bg);
     let border = theme::linear(palette.active_border);
-    kit.dark = luminance(palette.bg) < 0.5;
+    kit.dark = dark;
     kit.c.page = bg;
     kit.c.bg_base = bg;
     kit.c.bg_deep = bg;
@@ -449,6 +467,19 @@ pub fn kit(palette: &Palette) -> Kit {
 fn luminance(rgb: u32) -> f32 {
     let [r, g, b] = theme::hex(rgb);
     (0.2126 * f32::from(r) + 0.7152 * f32::from(g) + 0.0722 * f32::from(b)) / 255.0
+}
+
+/// Shows a theme in the terminal as it is picked, without saving it.
+pub fn preview(model: &mut SettingsModel, theme: &str) {
+    let palette = themes::palette(&model.config, theme);
+    model.previewed = Some(theme.to_owned());
+    let Some(terminal) = model.terminal.clone() else {
+        return;
+    };
+    terminal.update(move |model: &mut Model, _tx: &mut Tx| {
+        model.palette = palette.clone();
+        model.terminal.invalidate_theme();
+    });
 }
 
 /// Writes the config back and hands it to the terminal window.

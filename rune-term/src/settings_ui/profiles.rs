@@ -281,6 +281,7 @@ fn theme_select(kit: &Kit, model: &SettingsModel, overlays: &mut Vec<El>) -> El 
         .on_choose(|m: &mut SettingsModel, value: &str, _tx| {
             m.profile.theme = value.to_owned();
             m.profile.theme_open = false;
+            super::preview(m, value);
         })
         .build(kit, overlays)
 }
