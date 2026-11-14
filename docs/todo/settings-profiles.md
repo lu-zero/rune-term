@@ -26,11 +26,14 @@ native format.
 
 ## Paths (v1)
 
-Platform config directory, file name `rune-term.toml`:
+The XDG config directory, file name `rune-term.toml`:
 
-- macOS: `~/Library/Application Support/rune-term/rune-term.toml`
-- Linux/BSD: `${XDG_CONFIG_HOME:-~/.config}/rune-term/rune-term.toml`
-- Windows: `%APPDATA%\rune-term\rune-term.toml`
+`${XDG_CONFIG_HOME:-~/.config}/rune-term/rune-term.toml`
+
+The XDG base directories apply on every platform. `etcetera`'s XDG
+strategy reads `XDG_CONFIG_HOME` and falls back to `~/.config` under the
+home directory, on macOS and Windows too; there is no native macOS or
+Windows config path.
 
 Missing file: built-in defaults. Parse/load errors: keep running with
 defaults and log/report the error (do not overwrite the user's file).
