@@ -304,42 +304,35 @@ pub fn preview_theme(model: &mut SettingsModel) {
     super::preview(model, palette);
 }
 
-pub fn actions(kit: &Kit, model: &SettingsModel) -> El {
+pub fn actions(kit: &Kit, model: &SettingsModel) -> Vec<El> {
     let dirty = model.profile.is_dirty();
-    row()
-        .gap(4.0)
-        .child(super::action(
-            kit,
-            "profile-save",
-            &super::SAVE,
-            "Save",
-            dirty,
-            save,
-        ))
-        .child(super::action(
+    vec![
+        super::action(kit, "profile-save", &super::SAVE, "Save", dirty, save),
+        super::action(
             kit,
             "profile-revert",
             &super::REVERT,
             "Revert",
             dirty,
             revert,
-        ))
-        .child(super::action(
+        ),
+        super::action(
             kit,
             "profile-duplicate",
             kit.glyph.copy,
             "Duplicate",
             true,
             duplicate,
-        ))
-        .child(super::action(
+        ),
+        super::action(
             kit,
             "profile-delete",
             kit.glyph.close,
             "Delete",
             model.config.profiles.len() > 1,
             delete,
-        ))
+        ),
+    ]
 }
 
 /// Writes the draft into the config, renaming the profile when its name
@@ -406,7 +399,9 @@ pub fn duplicate(model: &mut SettingsModel) {
 
 /// Removes the selected profile.
 pub fn delete(model: &mut SettingsModel) {
+    eprintln!("DELETE called, selected={}", model.selected);
     let Some(name) = selected_name(model) else {
+        eprintln!("DELETE: no name");
         return;
     };
     if !model.config.remove_profile(&name) {

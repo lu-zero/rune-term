@@ -289,62 +289,96 @@ pub fn editor(kit: &Kit, model: &SettingsModel) -> El {
         .scroll(ScrollSpec {
             stick_bottom: false,
         })
-        .child(credit(kit, model))
-        .child(color_list(kit, model));
+        .child(colours_row(kit, model));
+
     if custom {
-        body = body
-            .child(
-                Field::new()
-                    .label("Name")
-                    .control(
-                        TextInput::new(&draft.name)
-                            .placeholder("Theme name")
-                            .width(None)
-                            .on_edit(|m: &mut SettingsModel| &mut m.theme.name)
-                            .build(kit),
-                    )
-                    .build(kit),
-            )
-            .child(
-                row()
-                    .w_full()
-                    .gap(12.0)
-                    .child(
-                        Field::new()
-                            .label("Author")
-                            .control(
-                                TextInput::new(&draft.author)
-                                    .placeholder("Who made it")
-                                    .width(None)
-                                    .on_edit(|m: &mut SettingsModel| &mut m.theme.author)
-                                    .build(kit),
-                            )
-                            .build(kit)
-                            .grow(1.0)
-                            .min_w(0.0),
-                    )
-                    .child(
-                        Field::new()
-                            .label("Source")
-                            .control(
-                                TextInput::new(&draft.url)
-                                    .placeholder("https://")
-                                    .width(None)
-                                    .on_edit(|m: &mut SettingsModel| &mut m.theme.url)
-                                    .build(kit),
-                            )
-                            .build(kit)
-                            .grow(1.0)
-                            .min_w(0.0),
-                    ),
-            )
-            .child(color_editor(kit, model));
+        body = body.child(fields(kit, model));
+    } else {
+        body = body.child(credit(kit, model));
     }
     body
 }
 
-/// Who made the theme, and where to read more about it. A built-in theme
-/// cannot be changed, and says so.
+/// The colours and the picker for the one the list has selected.
+fn colours_row(kit: &Kit, model: &SettingsModel) -> El {
+    let mut picker = col().w(240.0).gap(8.0);
+    if model.theme.is_custom() {
+        let slot = model.theme.slot;
+        let color = model.theme.colors.get(slot);
+        let hsv = color_picker::Hsv::from_rgb_u32(color);
+        let style = color_picker::Style {
+            track: kit.c.surface_raised,
+            track_border: kit.c.border_muted,
+            thumb: kit.c.white,
+            thumb_border: kit.c.border_strong,
+            label: kit.c.text_muted,
+            text: kit.c.text_base,
+        };
+        picker = picker
+            .child(
+                text(slot.label())
+                    .font(kit.ty.small_medium)
+                    .color(kit.c.text_muted),
+            )
+            .child(color_picker::hsv_editor::<SettingsModel, _>(
+                "theme-color",
+                hsv,
+                |m: &mut SettingsModel, hsv: color_picker::Hsv| {
+                    m.theme.colors.set(m.theme.slot, hsv.to_rgb_u32());
+                    preview_selected(m);
+                },
+                style,
+            ));
+    }
+    row()
+        .w_full()
+        .gap(20.0)
+        .child(colour_list(kit, model))
+        .child(picker)
+}
+
+/// The theme's colors, each one a target for the editor.
+fn colour_list(kit: &Kit, model: &SettingsModel) -> El {
+    let mut list = col().grow(1.0).min_w(0.0).gap(2.0);
+    for slot in Slot::ALL {
+        let selected = model.theme.slot == slot;
+        let color = model.theme.colors.get(slot);
+        list = list.child(
+            row()
+                .key(format!("slot-{}", slot.label()))
+                .role("option")
+                .w_full()
+                .h(28.0)
+                .px(6.0)
+                .gap(10.0)
+                .center_y()
+                .radius(kit.radius.sm)
+                .fill(if selected {
+                    kit.c.surface_raised
+                } else {
+                    Color::TRANSPARENT
+                })
+                .hover(kit.c.hover)
+                .focusable(true)
+                .focus_selected(selected)
+                .on_press(move |m: &mut SettingsModel| {
+                    m.theme.slot = slot;
+                    preview_selected(m);
+                })
+                .child(swatch(kit, color))
+                .child(
+                    text(slot.label())
+                        .font(kit.ty.ui)
+                        .color(kit.c.text_base)
+                        .grow(1.0)
+                        .min_w(0.0),
+                ),
+        );
+    }
+    list
+}
+
+/// Who made the theme, and where to read more about it.
 fn credit(kit: &Kit, model: &SettingsModel) -> El {
     let palette = model.theme.palette(&model.config);
     let author = palette.author.clone();
@@ -353,27 +387,61 @@ fn credit(kit: &Kit, model: &SettingsModel) -> El {
         .w_full()
         .gap(6.0)
         .center_y()
-        .child(
-            text(format!("Palette by {author}"))
-                .font(kit.ty.small)
-                .color(kit.c.text_muted),
-        )
+        .child(text(author).font(kit.ty.small).color(kit.c.text_muted))
         .child(super::link(kit, url))
-        .child(el().grow(1.0))
-        .child(read_only(kit, model))
 }
 
-/// The lock on a built-in theme.
-fn read_only(kit: &Kit, model: &SettingsModel) -> El {
-    if model.theme.is_custom() {
-        return el().w(0.0).h(0.0);
-    }
-    el().key("theme-read-only")
-        .w(22.0)
-        .h(22.0)
-        .center()
-        .help("A built-in theme is read-only. Duplicate it to change it.")
-        .child(rune::icon(kit.glyph.lock, 16.0).color(kit.c.text_faint))
+/// The theme's fields, for a theme the user owns.
+fn fields(kit: &Kit, model: &SettingsModel) -> El {
+    let draft = &model.theme;
+    col()
+        .w_full()
+        .gap(14.0)
+        .child(
+            Field::new()
+                .label("Name")
+                .control(
+                    TextInput::new(&draft.name)
+                        .placeholder("Theme name")
+                        .width(None)
+                        .on_edit(|m: &mut SettingsModel| &mut m.theme.name)
+                        .build(kit),
+                )
+                .build(kit),
+        )
+        .child(
+            row()
+                .w_full()
+                .gap(12.0)
+                .child(
+                    Field::new()
+                        .label("Author")
+                        .control(
+                            TextInput::new(&draft.author)
+                                .placeholder("Who made it")
+                                .width(None)
+                                .on_edit(|m: &mut SettingsModel| &mut m.theme.author)
+                                .build(kit),
+                        )
+                        .build(kit)
+                        .grow(1.0)
+                        .min_w(0.0),
+                )
+                .child(
+                    Field::new()
+                        .label("Source")
+                        .control(
+                            TextInput::new(&draft.url)
+                                .placeholder("https://")
+                                .width(None)
+                                .on_edit(|m: &mut SettingsModel| &mut m.theme.url)
+                                .build(kit),
+                        )
+                        .build(kit)
+                        .grow(1.0)
+                        .min_w(0.0),
+                ),
+        )
 }
 
 /// The theme's colors, each one a target for the editor.
@@ -459,43 +527,43 @@ fn color_editor(kit: &Kit, model: &SettingsModel) -> El {
 }
 
 /// The actions the selected theme has.
-pub fn actions(kit: &Kit, model: &SettingsModel) -> El {
+pub fn actions(kit: &Kit, model: &SettingsModel) -> Vec<El> {
     let custom = model.theme.is_custom();
     let dirty = model.theme.is_dirty();
-    row()
-        .gap(4.0)
-        .child(super::action(
+    vec![
+        super::action(
             kit,
             "theme-save",
             &super::SAVE,
             "Save",
             custom && dirty,
             save_theme,
-        ))
-        .child(super::action(
+        ),
+        super::action(
             kit,
             "theme-revert",
             &super::REVERT,
             "Revert",
             dirty,
             revert_theme,
-        ))
-        .child(super::action(
+        ),
+        super::action(
             kit,
             "theme-duplicate",
             kit.glyph.copy,
             "Duplicate",
             true,
             duplicate_theme,
-        ))
-        .child(super::action(
+        ),
+        super::action(
             kit,
             "theme-delete",
             kit.glyph.close,
             "Delete",
             custom,
             delete_theme,
-        ))
+        ),
+    ]
 }
 
 /// Writes the draft into the config, renaming the theme when its name changed.

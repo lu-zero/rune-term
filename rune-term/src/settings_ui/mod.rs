@@ -40,6 +40,24 @@ pub(crate) static SAVE: Icon = Icon {
     body: r#"<path d="M8 2.5V9M4.5 6L8 9.5L11.5 6M3 12.5H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>"#,
 };
 
+/// The button that opens where a theme came from.
+pub(crate) fn link(kit: &Kit, url: String) -> El {
+    let mut button = el()
+        .key(format!("theme-url-{url}"))
+        .w(22.0)
+        .h(22.0)
+        .center()
+        .radius(4.0)
+        .hover(kit.c.hover)
+        .child(text("↗").font(kit.ty.small).color(kit.c.text_muted));
+    if !url.is_empty() {
+        button = button.on_press(move |_m: &mut SettingsModel| {
+            let _ = crate::hyperlink::open_uri(&url);
+        });
+    }
+    button
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Tab {
     #[default]
@@ -324,83 +342,10 @@ fn sidebar(kit: &Kit, model: &SettingsModel) -> El {
         .px(8.0)
         .gap(2.0)
         .child(list(kit, model))
-        .child(foot(kit, model))
+        .child(foot(kit))
 }
 
-/// The foot of the list: the button that adds a row, and the row's actions.
-fn foot(kit: &Kit, model: &SettingsModel) -> El {
-    row()
-        .w_full()
-        .h(30.0)
-        .gap(4.0)
-        .center_y()
-        .child(add_row(kit))
-        .child(el().grow(1.0))
-        .child(actions(kit, model))
-}
-
-/// The button that adds a row to the list.
-fn add_row(kit: &Kit) -> El {
-    row()
-        .key("add-row")
-        .w(26.0)
-        .h(26.0)
-        .center()
-        .radius(kit.radius.sm)
-        .hover(kit.c.hover)
-        .focusable(true)
-        .on_press(move |m: &mut SettingsModel| match m.tab {
-            Tab::Profiles => profiles::create(m),
-            Tab::Themes => themes::create_theme(m),
-        })
-        .child(text("+").font(kit.ty.ui_medium).color(kit.c.text_muted))
-}
-
-/// The actions the selected row has, as square buttons.
-fn actions(kit: &Kit, model: &SettingsModel) -> El {
-    match model.tab {
-        Tab::Profiles => profiles::actions(kit, model),
-        Tab::Themes => themes::actions(kit, model),
-    }
-}
-
-/// A square button that runs one of the row's actions.
-pub(crate) fn action(
-    kit: &Kit,
-    key: &str,
-    glyph: &'static Icon,
-    label: &str,
-    enabled: bool,
-    press: impl Fn(&mut SettingsModel) + 'static,
-) -> El {
-    let mut button = el()
-        .key(key)
-        .w(26.0)
-        .h(26.0)
-        .center()
-        .radius(kit.radius.sm)
-        .fill(if enabled {
-            kit.c.surface_raised
-        } else {
-            Color::TRANSPARENT
-        })
-        .hover(if enabled {
-            kit.c.hover
-        } else {
-            Color::TRANSPARENT
-        })
-        .help(label)
-        .child(icon(glyph, 16.0).color(if enabled {
-            kit.c.text_base
-        } else {
-            kit.c.text_faint
-        }));
-    if enabled {
-        button = button.on_press(press);
-    }
-    button
-}
-
+/// The list of rows, with a marker on the one the editor is showing.
 fn list(kit: &Kit, model: &SettingsModel) -> El {
     let mut list = col()
         .w_full()
@@ -427,10 +372,32 @@ fn list(kit: &Kit, model: &SettingsModel) -> El {
     list
 }
 
+/// The foot of the list: the button that adds a row.
+fn foot(kit: &Kit) -> El {
+    row().w_full().h(30.0).center_y().child(add_row(kit))
+}
+
+/// The button that adds a row to the list.
+fn add_row(kit: &Kit) -> El {
+    row()
+        .key("add-row")
+        .w(26.0)
+        .h(26.0)
+        .center()
+        .radius(kit.radius.sm)
+        .hover(kit.c.hover)
+        .focusable(true)
+        .on_press(move |m: &mut SettingsModel| match m.tab {
+            Tab::Profiles => profiles::create(m),
+            Tab::Themes => themes::create_theme(m),
+        })
+        .child(text("+").font(kit.ty.ui_medium).color(kit.c.text_muted))
+}
+
 fn profile_row(kit: &Kit, model: &SettingsModel, index: usize, name: &str, default: bool) -> El {
     let selected = model.selected == index;
     let profile = name.to_owned();
-    row()
+    let mut row = row()
         .key(format!("profile-{index}"))
         .role("option")
         .w_full()
@@ -462,28 +429,16 @@ fn profile_row(kit: &Kit, model: &SettingsModel, index: usize, name: &str, defau
                 .min_w(0.0)
                 .truncate(),
         )
-        .child(make_default(kit, profile, default))
-}
-
-/// The button that makes a profile the one new sessions use.
-fn make_default(kit: &Kit, name: String, default: bool) -> El {
-    el().key(format!("profile-default-{name}"))
-        .w(22.0)
-        .h(22.0)
-        .center()
-        .radius(4.0)
-        .hover(kit.c.hover)
-        .on_press(move |m: &mut SettingsModel| profiles::set_default(m, &name))
-        .child(icon(kit.glyph.check_small, 16.0).color(if default {
-            kit.c.text_accent
-        } else {
-            kit.c.text_faint
-        }))
+        .child(make_default(kit, profile, default));
+    for a in profiles::actions(kit, model) {
+        row = row.child(a);
+    }
+    row
 }
 
 fn theme_row(kit: &Kit, model: &SettingsModel, index: usize, name: &str) -> El {
     let selected = model.selected == index;
-    row()
+    let mut row = row()
         .key(format!("theme-{index}"))
         .role("option")
         .w_full()
@@ -514,25 +469,30 @@ fn theme_row(kit: &Kit, model: &SettingsModel, index: usize, name: &str) -> El {
                 .grow(1.0)
                 .min_w(0.0)
                 .truncate(),
-        )
+        );
+    // The row's actions sit on the row the editor is showing.
+    if selected {
+        for a in themes::actions(kit, model) {
+            row = row.child(a);
+        }
+    }
+    row
 }
 
-/// The button that opens where a theme came from.
-pub(crate) fn link(kit: &Kit, url: String) -> El {
-    let mut button = el()
-        .key(format!("theme-url-{url}"))
+/// The button that makes a profile the one new sessions use.
+fn make_default(kit: &Kit, name: String, default: bool) -> El {
+    el().key(format!("profile-default-{name}"))
         .w(22.0)
         .h(22.0)
         .center()
         .radius(4.0)
         .hover(kit.c.hover)
-        .child(text("↗").font(kit.ty.small).color(kit.c.text_muted));
-    if !url.is_empty() {
-        button = button.on_press(move |_m: &mut SettingsModel| {
-            let _ = crate::hyperlink::open_uri(&url);
-        });
-    }
-    button
+        .on_press(move |m: &mut SettingsModel| profiles::set_default(m, &name))
+        .child(icon(kit.glyph.check_small, 16.0).color(if default {
+            kit.c.text_accent
+        } else {
+            kit.c.text_faint
+        }))
 }
 
 /// The tick on the selected row.
@@ -542,6 +502,33 @@ fn marker(kit: &Kit, selected: bool) -> El {
     } else {
         el().w(16.0).h(16.0)
     }
+}
+
+/// A square button that runs one of the row's actions. `ink` is transparent
+/// for the rows that are not the editor's, so their buttons stay out of the
+/// way without leaving the row.
+pub(crate) fn action(
+    kit: &Kit,
+    key: &'static str,
+    glyph: &'static Icon,
+    _label: &str,
+    enabled: bool,
+    press: impl Fn(&mut SettingsModel) + 'static,
+) -> El {
+    let mut button = el()
+        .key(key)
+        .w(24.0)
+        .h(24.0)
+        .center()
+        .radius(kit.radius.sm)
+        .child(icon(glyph, 16.0).color(kit.c.text_base));
+    if enabled {
+        button = button
+            .fill(kit.c.surface_raised)
+            .hover(kit.c.hover)
+            .on_press(press);
+    }
+    button
 }
 
 /// The editor column.
@@ -728,7 +715,21 @@ mod tests {
         let mut rt = runtime(model("delete"));
         rt.frame(0.0);
         press(&mut rt, "add-row");
+        eprintln!(
+            "before: selected={} keys={:?}",
+            rt.state.selected,
+            rt.state.config.profiles.keys().collect::<Vec<_>>()
+        );
+        eprintln!(
+            "delete: presented={:?} find={:?}",
+            rt.presented("profile-delete"),
+            rt.find("profile-delete")
+        );
         press(&mut rt, "profile-delete");
+        eprintln!(
+            "after: keys={:?}",
+            rt.state.config.profiles.keys().collect::<Vec<_>>()
+        );
         assert!(!rt.state.config.profiles.contains_key("Profile"));
         assert!(rt.find("profile-1").is_none());
     }
