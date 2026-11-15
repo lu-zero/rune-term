@@ -2,7 +2,7 @@
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-use rune::{col, el, row, text, Color, Cx, El};
+use rune::{col, el, row, text, text_input, Color, Cx, El, TextEdit, TextStyle};
 
 use crate::chrome_view;
 use crate::model::Model;
@@ -108,7 +108,77 @@ pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
     if let Some(uri) = &model.pending_link_open {
         root = root.child(confirm_open_link(uri, p));
     }
+    if let Some(name) = &model.session_name {
+        root = root.child(name_session(name, p));
+    }
     root
+}
+
+fn name_session(name: &TextEdit, p: &Palette) -> El {
+    let field = text_input(name, TextStyle::new(13.0, 400.0))
+        .key("session-name")
+        .single_line()
+        .h(28.0)
+        .w_full()
+        .fill(theme::linear(p.bg))
+        .color(theme::linear(p.fg))
+        .on_edit(|model: &mut Model| model.session_name.as_mut().expect("the prompt is open"))
+        .on_submit(|model: &mut Model, _tx| crate::mux::submit_name(model));
+    let card = col()
+        .key("name-session")
+        .w(320.0)
+        .fill(theme::linear(p.tab_bg))
+        .border(1.0, theme::linear(p.active_border))
+        .radius(8.0)
+        .gap(12.0)
+        .pl(16.0)
+        .pr(16.0)
+        .pt(14.0)
+        .pb(14.0)
+        .modal(true, |model: &mut Model| {
+            model.session_name = None;
+        })
+        .child(text("New tmux session").color(text_color(p)))
+        .child(field)
+        .child(
+            row()
+                .w_full()
+                .gap(8.0)
+                .justify_center()
+                .child(
+                    el().key("cancel-name-session")
+                        .pl(12.0)
+                        .pr(12.0)
+                        .pt(6.0)
+                        .pb(6.0)
+                        .radius(6.0)
+                        .border(1.0, theme::linear(p.active_border))
+                        .focusable(true)
+                        .on_press_tx(|model: &mut Model, _tx| {
+                            model.session_name = None;
+                        })
+                        .child(text("Cancel").color(theme::linear(p.muted))),
+                )
+                .child(
+                    el().key("create-session")
+                        .pl(12.0)
+                        .pr(12.0)
+                        .pt(6.0)
+                        .pb(6.0)
+                        .radius(6.0)
+                        .fill(theme::linear(p.accent))
+                        .focusable(true)
+                        .on_press_tx(|model: &mut Model, _tx| crate::mux::submit_name(model))
+                        .child(text("Create").color(text_color(p))),
+                ),
+        );
+    rune::el()
+        .key("name-session-overlay")
+        .absolute(0.0, 0.0)
+        .w_full()
+        .h_full()
+        .center()
+        .child(card)
 }
 
 fn confirm_open_link(uri: &str, p: &Palette) -> El {

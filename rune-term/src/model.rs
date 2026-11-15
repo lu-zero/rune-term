@@ -24,6 +24,8 @@ pub struct Model {
     pub palette: Arc<Palette>,
     pub search: SearchUi,
     pub pending_link_open: Option<String>,
+    /// The name prompt for a new tmux session, while it is open.
+    pub session_name: Option<rune::TextEdit>,
     /// The settings window. It is the terminal's to open.
     pub settings: Option<AppHandle<SettingsModel>>,
     pub(crate) shared: Arc<Shared>,
@@ -74,6 +76,7 @@ pub fn init() -> Model {
         palette,
         search: SearchUi::default(),
         pending_link_open: None,
+        session_name: None,
         settings: None,
         shared: std::sync::Arc::clone(&shared),
         pending_inject,

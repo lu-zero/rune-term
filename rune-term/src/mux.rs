@@ -91,24 +91,45 @@ pub(crate) fn sessions(server: &[&str]) -> Option<Vec<String>> {
     )
 }
 
-/// Attach the session `name`, or start one that tmux names.
-fn session_args(name: Option<&str>) -> Vec<String> {
-    match name {
+pub(crate) enum Session<'a> {
+    /// tmux picks the name.
+    New,
+    /// Attaches the session instead when one has this name.
+    Named(&'a str),
+    Attach(&'a str),
+}
+
+fn session_args(session: Session) -> Vec<String> {
+    let args = match session {
+        Session::New => vec!["new-session".to_owned()],
+        Session::Named(name) => ["new-session", "-A", "-s", name].map(String::from).to_vec(),
         // `=` matches the name exactly, not as a prefix.
-        Some(name) => vec![
-            "-C".into(),
-            "attach-session".into(),
-            "-t".into(),
-            format!("={name}"),
-        ],
-        None => vec!["-C".into(), "new-session".into()],
-    }
+        Session::Attach(name) => vec!["attach-session".into(), "-t".into(), format!("={name}")],
+    };
+    [vec!["-C".to_owned()], args].concat()
 }
 
 /// From the menu. The session's windows arrive as tabs once tmux lists them.
-pub(crate) fn open_session(model: &mut Model, name: Option<&str>) {
-    if let Err(err) = attach(model, &session_args(name)) {
+pub(crate) fn open_session(model: &mut Model, session: Session) {
+    if let Err(err) = attach(model, &session_args(session)) {
         eprintln!("rune-term: tmux: {err}");
+    }
+}
+
+pub(crate) fn ask_name(model: &mut Model) {
+    let mut edit = rune::TextEdit::new("");
+    edit.focused = true;
+    model.session_name = Some(edit);
+}
+
+/// The name the prompt holds. An empty name starts nothing.
+pub(crate) fn submit_name(model: &mut Model) {
+    let Some(edit) = model.session_name.take() else {
+        return;
+    };
+    let name = edit.text.trim();
+    if !name.is_empty() {
+        open_session(model, Session::Named(name));
     }
 }
 
@@ -764,7 +785,8 @@ pub(crate) fn menu(model: &Model, mut menu: PopupMenu) -> PopupMenu {
     };
     menu = menu
         .separator()
-        .item(PopupItem::new("tmux-new", "New tmux Session"));
+        .item(PopupItem::new("tmux-new", "New tmux Session"))
+        .item(PopupItem::new("tmux-named", "New Named tmux Session…"));
     for name in sessions.iter().filter(|name| !attached_here(model, name)) {
         menu = menu.item(PopupItem::new(
             format!("tmux-attach:{name}"),
@@ -1071,7 +1093,7 @@ mod tests {
         assert!(listed.iter().any(|name| name == "work"), "{listed:?}");
         let args = [
             vec!["-L".to_owned(), server.0.clone()],
-            session_args(Some("work")),
+            session_args(Session::Attach("work")),
         ]
         .concat();
         let second = attach(&mut model, &args).expect("tmux");
@@ -1082,5 +1104,34 @@ mod tests {
         );
         assert_eq!(model.tabs[model.active].group, Some(second));
         assert!(model.tabs.iter().any(|tab| tab.group == Some(first)));
+    }
+
+    #[test]
+    fn a_named_session_that_exists_is_attached_not_duplicated() {
+        let Some((server, mut model, _first)) = attached("named") else {
+            return;
+        };
+        assert!(until(&mut model, |model| model.tabs.len() == 2));
+        let args = [
+            vec!["-L".to_owned(), server.0.clone()],
+            session_args(Session::Named("named")),
+        ]
+        .concat();
+        attach(&mut model, &args).expect("tmux");
+        assert!(
+            until(&mut model, |model| model.tabs.len() == 3),
+            "the second client did not come in"
+        );
+        assert_eq!(sessions(&["-L", &server.0]).unwrap(), ["named"]);
+    }
+
+    #[test]
+    fn a_blank_name_closes_the_prompt_and_starts_nothing() {
+        let mut model = crate::model::init();
+        ask_name(&mut model);
+        model.session_name.as_mut().unwrap().text = "  ".to_owned();
+        submit_name(&mut model);
+        assert!(model.session_name.is_none());
+        assert!(model.muxes.is_empty());
     }
 }
