@@ -312,12 +312,13 @@ fn divider(
 }
 
 /// The press records the cells on the divider's left or top. The travel since
-/// then, in whole cells, sets them.
+/// then, in whole cells, sets them. tmux owns its windows' layout: a tmux
+/// pane is resized there, and the tree follows the layout tmux reports.
 fn drag_divider(model: &mut Model, path: &[bool], drag: &mut Drag, tx: &mut Tx) {
     let Some(tab) = model.tabs.get(model.active) else {
         return;
     };
-    let Some((axis, cells, _)) = crate::split::divider(&tab.root, path) else {
+    let Some((axis, cells, surface)) = crate::split::divider(&tab.root, path) else {
         return;
     };
     if drag.phase == Phase::Down {
@@ -330,6 +331,10 @@ fn drag_divider(model: &mut Model, path: &[bool], drag: &mut Drag, tx: &mut Tx) 
     };
     let target = (drag.data + (travel / pitch).round()).clamp(0.0, f32::from(u16::MAX)) as u16;
     if target == cells {
+        tx.live_only();
+        return;
+    }
+    if crate::mux::resize(model, surface, axis, target) {
         tx.live_only();
         return;
     }
@@ -385,11 +390,12 @@ fn layout_leaf(
     tx: &mut Tx,
 ) {
     let cell_points = model.cell_points;
+    let remote = crate::mux::owns(model, surface);
     let Some(host) = model.terminal.get_mut(surface) else {
         tx.live_only();
         return;
     };
-    let effect = resize::apply(ResizeRequest::Layout {
+    let mut effect = resize::apply(ResizeRequest::Layout {
         slot_points: slot,
         scale,
         cell_points,
@@ -404,6 +410,7 @@ fn layout_leaf(
         host.rows = effect.rows;
         host.cell_px = effect.cell_px;
     }
+    effect.resize_surface &= !remote;
     app::perform_resize(tx, host, effect);
 }
 

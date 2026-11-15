@@ -173,7 +173,11 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       `select-pane`. A new tab in the group is `new-window`, and the menu
       splits. Closing a tab hides its window, and the menu shows it again.
       tmux exiting closes the group, and a split window draws every
-      pane. The pane answers queries tmux
+      pane. Dragging a divider sends `resize-pane`, and the tree follows
+      the layout tmux reports. A pane takes tmux's size in stream order,
+      never from layout, and a resized pane is redrawn from
+      `capture-pane`, since this copy's reflow pulls back history tmux
+      does not. The pane answers queries tmux
       already answered ([`rio/replies.md`](./rio/replies.md)). ssh is not
       wired. Design:
       [`multiplexer-sessions.md`](./multiplexer-sessions.md).

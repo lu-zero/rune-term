@@ -100,13 +100,37 @@ pub fn fit_layout(model: &mut Model, slot: (f32, f32), scale: f32) -> Option<Res
         model.scale = scale;
     }
     let cell_points = model.cell_points;
+    let remote = model
+        .terminal
+        .primary()
+        .is_some_and(|host| crate::mux::owns(model, host.surface.id()));
     let host = model.terminal.primary_mut()?;
-    Some(rune_term_core::resize::fit_layout_host(
-        host,
-        slot,
+    if !remote {
+        return Some(rune_term_core::resize::fit_layout_host(
+            host,
+            slot,
+            scale,
+            cell_points,
+        ));
+    }
+    // tmux sizes its panes. The fitted size is what gets reported to it.
+    let effect = resize::apply(resize::ResizeRequest::Layout {
+        slot_points: slot,
         scale,
         cell_points,
-    ))
+        current: resize::GridMetrics {
+            cols: host.cols,
+            rows: host.rows,
+            cell_px: host.cell_px,
+        },
+    });
+    host.cols = effect.cols;
+    host.rows = effect.rows;
+    host.cell_px = effect.cell_px;
+    Some(ResizeEffect {
+        resize_surface: false,
+        ..effect
+    })
 }
 
 /// One pane's grid, kept while its mark is on screen.

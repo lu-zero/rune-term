@@ -106,7 +106,19 @@ impl Client {
             Event::WindowRenamed { window, name } => {
                 self.change(window, updates, |w| w.name = name);
             }
-            Event::Layout { window, layout } => self.change(window, updates, |w| w.layout = layout),
+            Event::Layout { window, layout } => {
+                // A resized pane is redrawn from tmux: this copy's own reflow can
+                // pull back history tmux does not.
+                if let Some(old) = self.windows.iter().find(|one| one.id == window) {
+                    let before = sizes(&old.layout);
+                    for (pane, size) in sizes(&layout) {
+                        if before.iter().any(|(id, was)| *id == pane && *was != size) {
+                            self.commands.push_str(&capture(pane));
+                        }
+                    }
+                }
+                self.change(window, updates, |w| w.layout = layout);
+            }
             Event::WindowPaneChanged { window, pane } => {
                 self.change(window, updates, |w| w.active_pane = pane);
             }
@@ -159,9 +171,10 @@ fn parse_capture(rest: &[u8]) -> Option<(u32, u16, u16)> {
     ))
 }
 
-/// The captured screen, then the cursor where tmux has it.
+/// The captured screen, then the cursor where tmux has it. ED 0 from the
+/// top: ED 2 would push the old screen into this copy's history.
 fn redraw(lines: &[Vec<u8>], x: u16, y: u16) -> Vec<u8> {
-    let mut bytes = b"\x1b[H\x1b[2J".to_vec();
+    let mut bytes = b"\x1b[H\x1b[J".to_vec();
     for (index, line) in lines.iter().enumerate() {
         if index > 0 {
             bytes.extend_from_slice(b"\r\n");
@@ -173,9 +186,14 @@ fn redraw(lines: &[Vec<u8>], x: u16, y: u16) -> Vec<u8> {
 }
 
 pub fn panes(layout: &Layout) -> Vec<u32> {
+    sizes(layout).into_iter().map(|(pane, _)| pane).collect()
+}
+
+/// Each pane and its size in cells.
+pub fn sizes(layout: &Layout) -> Vec<(u32, (u16, u16))> {
     match layout {
-        Layout::Pane { id, .. } => vec![*id],
-        Layout::Split { children, .. } => children.iter().flat_map(panes).collect(),
+        Layout::Pane { id, cols, rows } => vec![(*id, (*cols, *rows))],
+        Layout::Split { children, .. } => children.iter().flat_map(sizes).collect(),
     }
 }
 
@@ -207,6 +225,17 @@ pub fn refresh_client(cols: u16, rows: u16) -> String {
 
 pub fn select(window: u32, pane: u32) -> String {
     format!("select-window -t @{window} ; select-pane -t %{pane}\n")
+}
+
+/// The pane's width for a side-by-side split, or its height for a stacked one.
+/// tmux moves the pane's right or bottom edge, and the column or row it heads
+/// goes with it.
+pub fn resize_pane(pane: u32, axis: Axis, cells: u16) -> String {
+    let flag = match axis {
+        Axis::Horizontal => 'x',
+        Axis::Vertical => 'y',
+    };
+    format!("resize-pane -t %{pane} -{flag} {cells}\n")
 }
 
 pub fn new_window() -> String {
@@ -287,7 +316,7 @@ mod tests {
             updates,
             vec![Update::Output {
                 pane: 0,
-                bytes: b"\x1b[H\x1b[2Ja\tb\r\n\x1b[1mc\x1b[0m\x1b[2;10H".to_vec(),
+                bytes: b"\x1b[H\x1b[Ja\tb\r\n\x1b[1mc\x1b[0m\x1b[2;10H".to_vec(),
             }]
         );
     }
@@ -331,5 +360,23 @@ mod tests {
         let long = send_keys(0, &[b'x'; 300]);
         assert_eq!(long.lines().count(), 2);
         assert_eq!(long.lines().nth(1).unwrap().matches(" 78").count(), 44);
+    }
+
+    #[test]
+    fn a_layout_that_resizes_a_pane_redraws_it_from_tmux() {
+        let mut client = attached();
+        client.feed(
+            b"%begin 1 274 1\nrune-window @0 1 %1 6b8b,100x30,0,0{50x30,0,0,0,49x30,51,0,1} sh\n\
+              %end 1 274 1\n",
+        );
+        client.take_commands();
+        client.feed(b"%layout-change @0 6b8b,100x30,0,0{30x30,0,0,0,69x30,31,0,1} x *\n");
+        assert_eq!(
+            client.take_commands(),
+            format!("{}{}", capture(0), capture(1))
+        );
+        // The same sizes again redraw nothing.
+        client.feed(b"%layout-change @0 6b8b,100x30,0,0{30x30,0,0,0,69x30,31,0,1} x *\n");
+        assert_eq!(client.take_commands(), "");
     }
 }

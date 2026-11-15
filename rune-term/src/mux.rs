@@ -39,6 +39,8 @@ pub(crate) struct Mux {
     slot: Option<(u16, u16)>,
     reported: Option<(u16, u16)>,
     selected: Option<(u32, u32)>,
+    /// The last `resize-pane` sent, so a drag does not repeat it on every move.
+    resized: Option<(u32, Axis, u16)>,
 }
 
 impl Drop for Mux {
@@ -53,6 +55,9 @@ impl Drop for Mux {
 struct Panes {
     live: HashMap<u32, Arc<Surface>>,
     early: HashMap<u32, Vec<u8>>,
+    /// Each live surface's size, which only tmux's layouts change.
+    sizes: HashMap<u32, (u16, u16)>,
+    cell_px: (u16, u16),
 }
 
 /// The arguments `setup` starts tmux with. They include `-C`.
@@ -112,6 +117,7 @@ pub(crate) fn attach(model: &mut Model, args: &[String]) -> io::Result<TabGroupI
         slot: None,
         reported: None,
         selected: None,
+        resized: None,
     });
     Ok(group)
 }
@@ -135,6 +141,10 @@ fn read(
         for update in client.feed(&buf[..n]) {
             match update {
                 Update::Output { pane, bytes } => deliver(panes, shared, pane, &bytes),
+                Update::Windows(windows) => {
+                    follow_sizes(panes, shared, &windows);
+                    shared.push_mux(group, Update::Windows(windows));
+                }
                 Update::Exit(reason) => {
                     shared.push_mux(group, Update::Exit(reason));
                     return;
@@ -164,6 +174,38 @@ fn deliver(panes: &Mutex<Panes>, shared: &Shared, pane: u32, bytes: &[u8]) {
         early.clear();
     }
     early.extend_from_slice(bytes);
+}
+
+/// A pane takes tmux's size here, between the output before the layout and
+/// the output after it, as tmux applied them.
+fn follow_sizes(panes: &Mutex<Panes>, shared: &Shared, windows: &[Window]) {
+    let mut panes = panes.lock().expect("panes");
+    let (cell_w, cell_h) = panes.cell_px;
+    for (pane, (cols, rows)) in windows
+        .iter()
+        .flat_map(|window| tmux::sizes(&window.layout))
+    {
+        let Some(surface) = panes.live.get(&pane).cloned() else {
+            continue;
+        };
+        if panes.sizes.insert(pane, (cols, rows)) != Some((cols, rows)) {
+            surface.resize(
+                cols,
+                rows,
+                cols.saturating_mul(cell_w),
+                rows.saturating_mul(cell_h),
+            );
+            shared.raise(surface.id());
+        }
+    }
+}
+
+/// Whether tmux sizes this surface. The layout must not resize it.
+pub(crate) fn owns(model: &Model, surface: SurfaceId) -> bool {
+    model
+        .muxes
+        .iter()
+        .any(|mux| mux.surfaces.values().any(|id| *id == surface))
 }
 
 pub(crate) fn apply(model: &mut Model, group: TabGroupId, update: Update, tx: &mut Tx) -> bool {
@@ -426,6 +468,7 @@ fn open_pane(
         model.shared.raise(id);
     }
     panes.live.insert(pane, surface);
+    panes.sizes.insert(pane, (cols, rows));
     drop(panes);
     mux.surfaces.insert(pane, id);
     id
@@ -433,7 +476,11 @@ fn open_pane(
 
 fn release(model: &mut Model, index: usize, pane: u32, id: SurfaceId) {
     let mux = &mut model.muxes[index];
-    mux.panes.lock().expect("panes").live.remove(&pane);
+    {
+        let mut held = mux.panes.lock().expect("panes");
+        held.live.remove(&pane);
+        held.sizes.remove(&pane);
+    }
     mux.surfaces.remove(&pane);
     model.shared.forget(id);
     model.terminal.remove(id);
@@ -493,6 +540,7 @@ pub(crate) fn hide(model: &mut Model, index: usize) {
     let mut live = mux.panes.lock().expect("panes");
     for pane in panes {
         live.live.remove(&pane);
+        live.sizes.remove(&pane);
         mux.surfaces.remove(&pane);
     }
 }
@@ -578,6 +626,34 @@ pub(crate) fn split(model: &Model, axis: Axis) {
         .send(tmux::split_window(pane, axis).into_bytes());
 }
 
+/// A divider drag on a session's tab. `surface` heads the side that takes
+/// `cells`. False when the selected tab is not tmux's.
+pub(crate) fn resize(model: &mut Model, surface: SurfaceId, axis: Axis, cells: u16) -> bool {
+    let Some((index, ..)) = focused(model) else {
+        return false;
+    };
+    let mux = &mut model.muxes[index];
+    let Some(pane) = mux
+        .surfaces
+        .iter()
+        .find(|(_, id)| **id == surface)
+        .map(|(pane, _)| *pane)
+    else {
+        return true;
+    };
+    if mux.resized != Some((pane, axis, cells)) {
+        mux.resized = Some((pane, axis, cells));
+        let tmux_axis = match axis {
+            Axis::Horizontal => term_mux::Axis::Horizontal,
+            Axis::Vertical => term_mux::Axis::Vertical,
+        };
+        let _ = mux
+            .input
+            .send(tmux::resize_pane(pane, tmux_axis, cells).into_bytes());
+    }
+    true
+}
+
 /// The cells a split window's area holds, from its layout.
 pub(crate) fn fill(model: &mut Model, group: TabGroupId, cells: (u16, u16)) {
     if let Some(mux) = model.muxes.iter_mut().find(|mux| mux.group == group) {
@@ -590,6 +666,10 @@ pub(crate) fn report(model: &mut Model) {
     let Some((index, window, pane)) = focused(model) else {
         return;
     };
+    let cell_px = crate::tabs::surface_of(&model.tabs[model.active])
+        .and_then(|id| model.terminal.get(id))
+        .map(|host| host.cell_px)
+        .filter(|(w, h)| *w > 0 && *h > 0);
     let size = match &model.tabs[model.active].root {
         Node::Leaf(leaf) => model
             .terminal
@@ -599,6 +679,9 @@ pub(crate) fn report(model: &mut Model) {
         Node::Split { .. } => model.muxes[index].slot,
     };
     let mux = &mut model.muxes[index];
+    if let Some(cell_px) = cell_px {
+        mux.panes.lock().expect("panes").cell_px = cell_px;
+    }
     if let Some((cols, rows)) = size.filter(|size| mux.reported != Some(*size)) {
         mux.reported = Some((cols, rows));
         let _ = mux
@@ -672,6 +755,11 @@ mod tests {
             "-A",
             "-s",
             name,
+            "/bin/sh",
+            ";",
+            "set",
+            "-g",
+            "default-shell",
             "/bin/sh",
         ]
         .iter()
@@ -796,5 +884,90 @@ mod tests {
         assert_eq!(model.tabs[0].group, None);
         assert!(model.tab_groups.iter().all(|g| g.id != group));
         assert_eq!(model.terminal.len(), 1);
+    }
+
+    #[test]
+    fn a_divider_drag_resizes_the_pane_in_tmux() {
+        let (_server, mut model, _group) = attached("resize");
+        assert!(until(&mut model, |model| model.tabs.len() == 2));
+        split(&model, Axis::Horizontal);
+        assert!(until(&mut model, |model| leaves(
+            &model.tabs[model.active].root
+        ) == 2));
+        let Some((Axis::Horizontal, cells, left)) =
+            crate::split::divider(&model.tabs[model.active].root, &[])
+        else {
+            panic!("a side-by-side split");
+        };
+        assert!(resize(&mut model, left, Axis::Horizontal, cells - 10));
+        assert!(
+            until(&mut model, |model| {
+                crate::split::divider(&model.tabs[model.active].root, &[])
+                    .is_some_and(|(_, now, _)| now == cells - 10)
+            }),
+            "tmux did not report the new layout"
+        );
+    }
+
+    /// The far end, not this copy, decides what a resized pane holds.
+    #[test]
+    fn a_pane_dragged_through_every_size_shows_what_tmux_shows() {
+        let (server, mut model, _group) = attached("sweep");
+        assert!(until(&mut model, |model| model.tabs.len() == 2));
+        // A two-line prompt that, like readline's, goes back up and redraws itself
+        // whenever the pane is resized, after history the screen was cleared into.
+        let prompt = r#"p() { printf '\033[1A\r\033[Jprompt\n> '; }; trap p WINCH; printf 'old1\nold2\nold3\n\033[H\033[2Jprompt\n> '; while :; do sleep 0.01; done"#;
+        Command::new("tmux")
+            .args([
+                "-L",
+                &server.0,
+                "split-window",
+                "-v",
+                "-t",
+                "sweep:0.0",
+                prompt,
+            ])
+            .status()
+            .unwrap();
+        assert!(until(&mut model, |model| leaves(
+            &model.tabs[model.active].root
+        ) == 2));
+        let mut ids = Vec::new();
+        crate::tabs::walk(&model.tabs[model.active].root, &mut |leaf| {
+            ids.push(leaf.surface)
+        });
+        let (top, bottom) = (ids[0], ids[1]);
+        let mut rt = rune::Runtime::new(
+            model,
+            crate::chrome::view,
+            (800.0, 500.0),
+            rune::Env::new(true, 1.0),
+        );
+        let pump = |rt: &mut rune::Runtime<Model>, ms: u64| {
+            let end = Instant::now() + Duration::from_millis(ms);
+            while Instant::now() < end {
+                rt.update(|model, tx| {
+                    delegate::poll(model, 0.0, tx);
+                });
+                rt.frame(0.0);
+                thread::sleep(Duration::from_millis(5));
+            }
+        };
+        pump(&mut rt, 300);
+        let sweep: Vec<u16> = (1..=20).chain((1..20).rev()).chain(1..=11).collect();
+        for rows in sweep {
+            rt.update(|model, _| {
+                resize(model, top, Axis::Vertical, rows);
+            });
+            pump(&mut rt, 10);
+        }
+        pump(&mut rt, 500);
+        let out = Command::new("tmux")
+            .args(["-L", &server.0, "capture-pane", "-p", "-t", "sweep:0.1"])
+            .output()
+            .unwrap();
+        let theirs = String::from_utf8_lossy(&out.stdout).trim_end().to_owned();
+        let ours = screen(&mut rt.state, bottom).trim_end().to_owned();
+        assert_eq!(ours, theirs);
     }
 }
