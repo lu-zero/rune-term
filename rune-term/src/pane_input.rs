@@ -206,6 +206,10 @@ fn context_action(model: &mut Model, mark: u32, id: &str, tx: &mut Tx) {
         }
         "split-right" => crate::mux::split(model, crate::split::Axis::Horizontal),
         "split-down" => crate::mux::split(model, crate::split::Axis::Vertical),
+        "tmux-new" => crate::mux::open_session(model, None),
+        _ if id.starts_with("tmux-attach:") => {
+            crate::mux::open_session(model, Some(&id["tmux-attach:".len()..]));
+        }
         _ if id.starts_with("show-window:") => {
             if crate::mux::show(model, &id["show-window:".len()..]) {
                 crate::tabs::reveal(model, tx);

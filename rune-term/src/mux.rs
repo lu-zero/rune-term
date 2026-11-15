@@ -74,6 +74,44 @@ pub(crate) fn attach_queued(model: &mut Model) {
     }
 }
 
+/// The sessions on tmux's server. None when tmux is not installed, and empty when
+/// no server runs. `server` picks a server other than the default one.
+pub(crate) fn sessions(server: &[&str]) -> Option<Vec<String>> {
+    let out = Command::new("tmux")
+        .args(server)
+        .args(["list-sessions", "-F", "#{session_name}"])
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    Some(
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .map(str::to_owned)
+            .collect(),
+    )
+}
+
+/// Attach the session `name`, or start one that tmux names.
+fn session_args(name: Option<&str>) -> Vec<String> {
+    match name {
+        // `=` matches the name exactly, not as a prefix.
+        Some(name) => vec![
+            "-C".into(),
+            "attach-session".into(),
+            "-t".into(),
+            format!("={name}"),
+        ],
+        None => vec!["-C".into(), "new-session".into()],
+    }
+}
+
+/// From the menu. The session's windows arrive as tabs once tmux lists them.
+pub(crate) fn open_session(model: &mut Model, name: Option<&str>) {
+    if let Err(err) = attach(model, &session_args(name)) {
+        eprintln!("rune-term: tmux: {err}");
+    }
+}
+
 pub(crate) fn attach(model: &mut Model, args: &[String]) -> io::Result<TabGroupId> {
     let mut child = Command::new("tmux")
         .args(args)
@@ -721,7 +759,28 @@ pub(crate) fn menu(model: &Model, mut menu: PopupMenu) -> PopupMenu {
             format!("Show {}", window.name),
         ));
     }
+    let Some(sessions) = sessions(&[]) else {
+        return menu;
+    };
+    menu = menu
+        .separator()
+        .item(PopupItem::new("tmux-new", "New tmux Session"));
+    for name in sessions.iter().filter(|name| !attached_here(model, name)) {
+        menu = menu.item(PopupItem::new(
+            format!("tmux-attach:{name}"),
+            format!("Attach tmux: {name}"),
+        ));
+    }
     menu
+}
+
+fn attached_here(model: &Model, name: &str) -> bool {
+    model.muxes.iter().any(|mux| {
+        model
+            .tab_groups
+            .iter()
+            .any(|group| group.id == mux.group && group.label == name)
+    })
 }
 
 #[cfg(test)]
@@ -988,5 +1047,40 @@ mod tests {
         let theirs = String::from_utf8_lossy(&out.stdout).trim_end().to_owned();
         let ours = screen(&mut rt.state, bottom).trim_end().to_owned();
         assert_eq!(ours, theirs);
+    }
+
+    #[test]
+    fn a_listed_session_attaches_as_its_own_group() {
+        let Some((server, mut model, first)) = attached("listed") else {
+            return;
+        };
+        assert!(until(&mut model, |model| model.tabs.len() == 2));
+        Command::new("tmux")
+            .args([
+                "-L",
+                &server.0,
+                "new-session",
+                "-d",
+                "-s",
+                "work",
+                "/bin/sh",
+            ])
+            .status()
+            .unwrap();
+        let listed = sessions(&["-L", &server.0]).expect("tmux is installed");
+        assert!(listed.iter().any(|name| name == "work"), "{listed:?}");
+        let args = [
+            vec!["-L".to_owned(), server.0.clone()],
+            session_args(Some("work")),
+        ]
+        .concat();
+        let second = attach(&mut model, &args).expect("tmux");
+        assert!(
+            until(&mut model, |model| model.tabs.len() == 3
+                && attached_here(model, "work")),
+            "the session did not come in"
+        );
+        assert_eq!(model.tabs[model.active].group, Some(second));
+        assert!(model.tabs.iter().any(|tab| tab.group == Some(first)));
     }
 }

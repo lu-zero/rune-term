@@ -166,7 +166,8 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       (replies, `%output`, window, layout, session and exit notifications,
       and the layout string), tested on tmux 3.4's own output. P3 is
       partial: `rune-term --tmux SESSION` runs `tmux -C new-session -A` on
-      pipes. The session is a tab group, each window a tab, each pane a
+      pipes. The pane menu starts a session or attaches one the default
+      server lists, other than those already attached here. The session is a tab group, each window a tab, each pane a
       surface fed in tmux's order, with panes that predate the client
       redrawn from `capture-pane`. Keys go back as `send-keys -H`. The
       size goes as `refresh-client -C`, and focus as `select-window` and
