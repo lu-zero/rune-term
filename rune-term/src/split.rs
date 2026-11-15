@@ -126,6 +126,72 @@ fn split_detach(axis: Axis, left: Node, right: Node, missing: bool) -> Detach {
     }
 }
 
+/// The split a divider belongs to, reached by `path` from the root: `true` takes
+/// the right or bottom child. Its axis, the cells its left or top child holds,
+/// and the first surface on that side.
+pub(crate) fn divider(node: &Node, path: &[bool]) -> Option<(Axis, u16, SurfaceId)> {
+    let Node::Split { axis, left, right } = node else {
+        return None;
+    };
+    match path.split_first() {
+        Some((true, rest)) => divider(right, rest),
+        Some((false, rest)) => divider(left, rest),
+        None => Some((*axis, measure(left, *axis), first_surface(left))),
+    }
+}
+
+fn first_surface(node: &Node) -> SurfaceId {
+    match node {
+        Node::Leaf(leaf) => leaf.surface,
+        Node::Split { left, .. } => first_surface(left),
+    }
+}
+
+/// Move the divider at `path` so its left or top child holds `cells`. The
+/// split keeps its size, and neither side gives up a leaf's last cell.
+pub(crate) fn move_divider(node: Node, path: &[bool], cells: u16) -> Node {
+    let Node::Split { axis, left, right } = node else {
+        return node;
+    };
+    match path.split_first() {
+        Some((true, rest)) => {
+            return Node::Split {
+                axis,
+                left,
+                right: Box::new(move_divider(*right, rest, cells)),
+            }
+        }
+        Some((false, rest)) => {
+            return Node::Split {
+                axis,
+                left: Box::new(move_divider(*left, rest, cells)),
+                right,
+            }
+        }
+        None => {}
+    }
+    let total = measure(&left, axis) + 1 + measure(&right, axis);
+    let (low, high) = (min_along(&left, axis), total - 1 - min_along(&right, axis));
+    let left_n = cells.clamp(low, high);
+    let right_n = total - 1 - left_n;
+    let (cols, rows) = size(&left);
+    let (left, right) = match axis {
+        Axis::Horizontal => (
+            distribute(left_n, rows, *left),
+            distribute(right_n, rows, *right),
+        ),
+        Axis::Vertical => (
+            distribute(cols, left_n, *left),
+            distribute(cols, right_n, *right),
+        ),
+    };
+    Node::Split {
+        axis,
+        left: Box::new(left),
+        right: Box::new(right),
+    }
+}
+
 /// Resize `tree` so its leaves and dividers sum to `total_cols` by `total_rows`.
 /// A tree that is already that size is returned unchanged. A request smaller
 /// than the tree's minimum stops at one cell per leaf.
@@ -434,5 +500,32 @@ mod tests {
             }
             _ => panic!("expected a horizontal split"),
         }
+    }
+
+    #[test]
+    fn a_moved_divider_keeps_the_split_and_each_leaf_a_cell() {
+        let tree = Node::Split {
+            axis: Axis::Horizontal,
+            left: Box::new(Node::Leaf(pane(1, 40, 24))),
+            right: Box::new(Node::Split {
+                axis: Axis::Vertical,
+                left: Box::new(Node::Leaf(pane(2, 39, 12))),
+                right: Box::new(Node::Leaf(pane(3, 39, 11))),
+            }),
+        };
+        assert_eq!(divider(&tree, &[]), Some((Axis::Horizontal, 40, 1)));
+        assert_eq!(divider(&tree, &[true]), Some((Axis::Vertical, 12, 2)));
+        assert_eq!(divider(&tree, &[false]), None);
+
+        let wider = move_divider(tree.clone(), &[], 60);
+        assert_eq!(size(&wider), (80, 24));
+        assert_eq!(divider(&wider, &[]), Some((Axis::Horizontal, 60, 1)));
+        assert_eq!(divider(&wider, &[true]), Some((Axis::Vertical, 12, 2)));
+
+        let all_the_way = move_divider(tree.clone(), &[], 200);
+        assert_eq!(divider(&all_the_way, &[]), Some((Axis::Horizontal, 78, 1)));
+        let lower = move_divider(tree, &[true], 0);
+        assert_eq!(divider(&lower, &[true]), Some((Axis::Vertical, 1, 2)));
+        assert_eq!(size(&lower), (80, 24));
     }
 }

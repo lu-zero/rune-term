@@ -3,7 +3,7 @@
 
 use std::mem;
 
-use rune::{col, effect, row, Cx, El, Tx};
+use rune::{col, effect, row, Cx, Drag, El, Phase, Tx};
 
 use crate::app;
 use crate::chrome::{self, Leaf, LeafId, Node, PANE_MARK};
@@ -176,33 +176,28 @@ fn split_area(model: &Model, scale: f32) -> El {
         .on_layout_tx(move |model: &mut Model, rect, tx: &mut Tx| {
             layout_tree(model, (rect[2], rect[3]), scale, tx);
         })
-        .child(nodes(root, model, scale, cell))
+        .child(nodes(root, &mut Vec::new(), model, scale, cell))
 }
 
-fn nodes(node: &Node, model: &Model, scale: f32, cell: (f32, f32)) -> El {
-    match node {
-        Node::Leaf(leaf) => leaf_el(leaf, model, scale, cell),
-        Node::Split {
-            axis: Axis::Horizontal,
-            left,
-            right,
-        } => row()
-            .w(span(node_cells(node).0, cell.0, scale))
-            .h_full()
-            .child(nodes(left, model, scale, cell))
-            .child(divider(true, scale, cell, model.palette.as_ref()))
-            .child(nodes(right, model, scale, cell)),
-        Node::Split {
-            axis: Axis::Vertical,
-            left,
-            right,
-        } => col()
-            .h(span(node_cells(node).1, cell.1, scale))
-            .w_full()
-            .child(nodes(left, model, scale, cell))
-            .child(divider(false, scale, cell, model.palette.as_ref()))
-            .child(nodes(right, model, scale, cell)),
-    }
+/// `path` leads from the root to `node`: `true` is a right or bottom child.
+fn nodes(node: &Node, path: &mut Vec<bool>, model: &Model, scale: f32, cell: (f32, f32)) -> El {
+    let (axis, left, right) = match node {
+        Node::Leaf(leaf) => return leaf_el(leaf, model, scale, cell),
+        Node::Split { axis, left, right } => (axis, left, right),
+    };
+    let bar = divider(*axis, path.clone(), scale, cell, model.palette.as_ref());
+    path.push(false);
+    let first = nodes(left, path, model, scale, cell);
+    path.pop();
+    path.push(true);
+    let second = nodes(right, path, model, scale, cell);
+    path.pop();
+    let (cols, rows) = node_cells(node);
+    let split = match axis {
+        Axis::Horizontal => row().w(span(cols, cell.0, scale)).h_full(),
+        Axis::Vertical => col().h(span(rows, cell.1, scale)).w_full(),
+    };
+    split.child(first).child(bar).child(second)
 }
 
 fn leaf_el(leaf: &Leaf, model: &Model, scale: f32, cell: (f32, f32)) -> El {
@@ -278,14 +273,60 @@ fn wire(pane: El, mark: u32, scale: f32) -> El {
     })
 }
 
-fn divider(horizontal: bool, scale: f32, cell: (f32, f32), palette: &crate::theme::Palette) -> El {
-    let thickness = resize::content_points(1, if horizontal { cell.0 } else { cell.1 }, scale);
-    let gap = rune::el().fill(chrome::tab(palette));
-    if horizontal {
-        gap.w(thickness).h_full()
-    } else {
-        gap.h(thickness).w_full()
+/// One cell between two children. A drag moves the split by whole cells.
+fn divider(
+    axis: Axis,
+    path: Vec<bool>,
+    scale: f32,
+    cell: (f32, f32),
+    palette: &crate::theme::Palette,
+) -> El {
+    let key: String = path
+        .iter()
+        .map(|right| if *right { 'r' } else { 'l' })
+        .collect();
+    let gap = rune::el()
+        .key(format!("divider-{key}"))
+        .fill(chrome::tab(palette))
+        .on_drag(move |model: &mut Model, drag: &mut Drag, tx: &mut Tx| {
+            drag_divider(model, &path, drag, tx);
+        });
+    match axis {
+        Axis::Horizontal => gap
+            .w(resize::content_points(1, cell.0, scale))
+            .h_full()
+            .cursor(rune::Cursor::ResizeColumn),
+        Axis::Vertical => gap
+            .h(resize::content_points(1, cell.1, scale))
+            .w_full()
+            .cursor(rune::Cursor::ResizeRow),
     }
+}
+
+/// The press records the cells on the divider's left or top. The travel since
+/// then, in whole cells, sets them.
+fn drag_divider(model: &mut Model, path: &[bool], drag: &mut Drag, tx: &mut Tx) {
+    let Some(tab) = model.tabs.get(model.active) else {
+        return;
+    };
+    let Some((axis, cells, _)) = crate::split::divider(&tab.root, path) else {
+        return;
+    };
+    if drag.phase == Phase::Down {
+        drag.data = f32::from(cells);
+        return;
+    }
+    let (travel, pitch) = match axis {
+        Axis::Horizontal => (drag.dx, model.cell_points.0),
+        Axis::Vertical => (drag.dy, model.cell_points.1),
+    };
+    let target = (drag.data + (travel / pitch).round()).clamp(0.0, f32::from(u16::MAX)) as u16;
+    if target == cells {
+        tx.live_only();
+        return;
+    }
+    let tab = &mut model.tabs[model.active];
+    tab.root = crate::split::move_divider(tab.root.clone(), path, target);
 }
 
 /// `apply` subtracts the content margin, so the element holds the grid plus
@@ -640,5 +681,30 @@ mod tests {
             .unwrap()
             .frame_flag
             .load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn dragging_a_divider_moves_it_by_whole_cells() {
+        let mut model = host();
+        assert!(split_focused(&mut model, Axis::Horizontal));
+        let mut rt = rune::Runtime::new(
+            model,
+            crate::chrome::view,
+            (800.0, 500.0),
+            rune::Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        rt.frame(0.0);
+        let before = leaves(&rt.state.tabs[0].root)[0].cols;
+        let total = node_cells(&rt.state.tabs[0].root);
+        let bar = rt.presented("divider-").expect("the divider is drawn").0;
+        let (x, y) = (bar[0] + bar[2] / 2.0, bar[1] + bar[3] / 2.0);
+        let pitch = rt.state.cell_points.0;
+        rt.pointer_down(x, y);
+        rt.pointer_move(x + pitch * 5.2, y);
+        rt.pointer_up(x + pitch * 5.2, y);
+        rt.frame(0.0);
+        assert_eq!(leaves(&rt.state.tabs[0].root)[0].cols, before + 5);
+        assert_eq!(node_cells(&rt.state.tabs[0].root), total);
     }
 }

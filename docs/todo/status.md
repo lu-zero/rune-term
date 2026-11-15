@@ -31,7 +31,8 @@ The numbers are that plan's.
       leaf moves focus. Injecting into one leaf does not dirty the
       other. The compositor keeps a grid per pane on screen and draws
       each leaf's surface in its own rect. Search, hover, preedit, and
-      images stay on the focused pane.
+      images stay on the focused pane. Dragging a divider moves it by
+      whole cells, and neither side gives up a leaf's last cell.
 - [x] **11. Selection and clipboard.** A drag the program did not take
       selects cells. Two clicks select a word and three select a line.
       The copy chord copies that text, and paste calls `Surface::paste`.
