@@ -276,7 +276,8 @@ fn wire(pane: El, mark: u32, scale: f32) -> El {
     })
 }
 
-/// One cell between two children. A drag moves the split by whole cells.
+/// One cell between two children, drawn as a hairline down its middle. The
+/// whole cell takes the drag, which moves the split by whole cells.
 fn divider(
     axis: Axis,
     path: Vec<bool>,
@@ -288,9 +289,11 @@ fn divider(
         .iter()
         .map(|right| if *right { 'r' } else { 'l' })
         .collect();
+    let line = rune::el().fill(chrome::tab(palette));
     let gap = rune::el()
         .key(format!("divider-{key}"))
-        .fill(chrome::tab(palette))
+        .fill(chrome::slot(palette))
+        .center()
         .on_drag(move |model: &mut Model, drag: &mut Drag, tx: &mut Tx| {
             drag_divider(model, &path, drag, tx);
         });
@@ -298,11 +301,13 @@ fn divider(
         Axis::Horizontal => gap
             .w(resize::content_points(1, cell.0, scale))
             .h_full()
-            .cursor(rune::Cursor::ResizeColumn),
+            .cursor(rune::Cursor::ResizeColumn)
+            .child(line.w(1.0).h_full()),
         Axis::Vertical => gap
             .h(resize::content_points(1, cell.1, scale))
             .w_full()
-            .cursor(rune::Cursor::ResizeRow),
+            .cursor(rune::Cursor::ResizeRow)
+            .child(line.h(1.0).w_full()),
     }
 }
 
