@@ -9,7 +9,7 @@ use rune_term_core::input as core_input;
 use rune_term_core::terminal_input as core_terminal;
 
 use crate::model::Model;
-use crate::surfaces::HostSurface;
+use crate::surfaces::{HostSurface, SHOWN_PANE};
 
 #[cfg(all(test, not(feature = "pty")))]
 pub fn on_physical(model: &mut Model, event: &PhysicalInput, tx: &mut Tx) -> bool {
@@ -37,7 +37,7 @@ pub fn on_physical_mark(model: &mut Model, mark: u32, event: &PhysicalInput, tx:
             tx,
         ),
         PhysicalInput::FocusLost => {
-            if let Some(host) = target_host(model, mark) {
+            if let Some(host) = host_mut(model, mark) {
                 core_terminal::focus_lost(host);
             }
             false
@@ -55,7 +55,7 @@ pub fn on_wheel_mark(
     scale: f32,
     tx: &mut Tx,
 ) -> bool {
-    let Some(host) = model.terminal.by_mark_mut(mark) else {
+    let Some(host) = host_mut(model, mark) else {
         return false;
     };
     let (lines, consumed) = core_terminal::wheel(
@@ -79,7 +79,7 @@ pub fn on_drag_mark(model: &mut Model, mark: u32, drag: &mut Drag, scale: f32, t
     let Some(button) = core_input::button_code(tx.button()) else {
         return;
     };
-    let Some(host) = model.terminal.by_mark_mut(mark) else {
+    let Some(host) = host_mut(model, mark) else {
         return;
     };
     let action = core_terminal::gesture(
@@ -115,7 +115,7 @@ pub fn on_pointer_move_mark(
     scale: f32,
     tx: &mut Tx,
 ) {
-    let Some(host) = model.terminal.by_mark_mut(mark) else {
+    let Some(host) = host_mut(model, mark) else {
         return;
     };
     let outcome = core_terminal::pointer_move(
@@ -137,7 +137,7 @@ pub fn on_secondary_mark(
     scale: f32,
     tx: &mut Tx,
 ) {
-    let Some(host) = model.terminal.by_mark_mut(mark) else {
+    let Some(host) = host_mut(model, mark) else {
         return;
     };
     let mods = core_input::modifiers(tx.mods());
@@ -187,9 +187,7 @@ pub fn on_secondary_mark(
 fn context_action(model: &mut Model, mark: u32, id: &str, tx: &mut Tx) {
     match id {
         "copy" => {
-            let Some(text) = model
-                .terminal
-                .by_mark_mut(mark)
+            let Some(text) = host_mut(model, mark)
                 .and_then(|host| host.surface.selection_text())
                 .filter(|text| !text.is_empty())
             else {
@@ -201,10 +199,12 @@ fn context_action(model: &mut Model, mark: u32, id: &str, tx: &mut Tx) {
         "search" => crate::search::toggle(model),
         "new-tab" => {
             crate::tabs::open(model);
+            crate::tabs::reveal(model, tx);
         }
         _ if id.starts_with("new-tab-profile:") => {
             let name = &id["new-tab-profile:".len()..];
             crate::tabs::open_with_profile(model, name);
+            crate::tabs::reveal(model, tx);
         }
         _ => {}
     }
@@ -252,9 +252,10 @@ pub fn on_key(model: &mut Model, event: &KeyEvent, tx: &mut Tx) -> bool {
     )
 }
 
-fn target_host(model: &mut Model, mark: u32) -> Option<&mut HostSurface> {
-    if model.terminal.by_mark(mark).is_some() {
-        model.terminal.by_mark_mut(mark)
+/// The host a pane event belongs to. Mark 0 is the shell the window shows.
+fn host_mut(model: &mut Model, mark: u32) -> Option<&mut HostSurface> {
+    if model.terminal.host_for_pane_mut(mark, SHOWN_PANE).is_some() {
+        model.terminal.host_for_pane_mut(mark, SHOWN_PANE)
     } else {
         model.terminal.primary_mut()
     }
@@ -277,7 +278,7 @@ fn deliver(
     }
     if let Some(sign) = term_input::scroll_chord(code, mods) {
         if pressed {
-            if let Some(host) = target_host(model, mark) {
+            if let Some(host) = host_mut(model, mark) {
                 core_terminal::scroll_by_lines(host, sign.saturating_mul(i32::from(host.rows)));
             }
             tx.live_only();
@@ -285,7 +286,7 @@ fn deliver(
         return true;
     }
     let mapped = term_input::map_key(code, mods, pressed, repeat, text, consumed);
-    let Some(host) = target_host(model, mark) else {
+    let Some(host) = host_mut(model, mark) else {
         return false;
     };
     let wrote = core_terminal::deliver_mapped_key(host, &mapped);
@@ -1188,6 +1189,110 @@ mod tests {
         let mut model = host();
         crate::selection::on_paste(&mut model, "pasted", &mut Tx::default());
         assert_eq!(model.shared.take_output(), b"pasted");
+    }
+
+    #[test]
+    fn a_key_in_a_second_tab_reaches_that_tab() {
+        let mut rt = Runtime::new(
+            host(),
+            crate::chrome::view,
+            (800.0, 500.0),
+            Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        let (x, y) = rt.find("tab-new").expect("new tab");
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        rt.frame(0.0);
+        let shown = rt
+            .state
+            .terminal
+            .primary()
+            .expect("shown shell")
+            .surface
+            .id();
+        rt.physical_input(PhysicalInput::Key {
+            key: Code::KeyA,
+            mods: rune::Mods::default(),
+            pressed: true,
+            repeat: false,
+            text: Some("a".to_owned()),
+            consumed_mods: rune::Mods::default(),
+        });
+        rt.frame(0.0);
+        assert_eq!(rt.state.shared.take_output(), b"a");
+        assert_eq!(rt.state.shared.take_output_surface(), Some(shown));
+    }
+
+    #[test]
+    fn a_keyboard_tab_switch_leaves_the_pane_focused() {
+        let mut rt = Runtime::new(
+            host(),
+            crate::chrome::view,
+            (800.0, 500.0),
+            Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        let (x, y) = rt.find("pane").expect("pane");
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        rt.frame(0.0);
+        // A key in the pane makes the focus keyboard-driven.
+        rt.physical_input(PhysicalInput::Key {
+            key: Code::KeyA,
+            mods: rune::Mods::default(),
+            pressed: true,
+            repeat: false,
+            text: Some("a".to_owned()),
+            consumed_mods: rune::Mods::default(),
+        });
+        rt.frame(0.0);
+        rt.physical_input(PhysicalInput::Key {
+            key: Code::KeyT,
+            mods: rune::Mods {
+                cmd: true,
+                logo: true,
+                ..rune::Mods::default()
+            },
+            pressed: true,
+            repeat: false,
+            text: None,
+            consumed_mods: rune::Mods::default(),
+        });
+        rt.frame(0.0);
+        assert_eq!(rt.state.active, 1);
+        let panes: Vec<_> = rt
+            .elements()
+            .into_iter()
+            .filter(|el| el.key.as_deref() == Some("pane"))
+            .collect();
+        // A remounted pane would fade the last shell out over the new one.
+        assert_eq!(panes.len(), 1, "the old pane is still drawn");
+        assert!(!panes[0].exiting);
+        assert!(panes[0].focused, "the pane should hold keyboard focus");
+        assert!(!panes[0].focus_visible, "the pane draws no focus ring");
+    }
+
+    #[test]
+    fn the_pane_holds_focus_after_a_tab_switch() {
+        let mut rt = Runtime::new(
+            host(),
+            crate::chrome::view,
+            (800.0, 500.0),
+            Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        let (x, y) = rt.find("tab-new").expect("new tab");
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        rt.frame(0.0);
+        assert_eq!(rt.state.active, 1);
+        let pane = rt
+            .elements()
+            .into_iter()
+            .find(|el| el.key.as_deref() == Some("pane"))
+            .expect("pane");
+        assert!(pane.focused, "the pane should hold keyboard focus");
     }
 
     #[test]

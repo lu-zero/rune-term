@@ -162,6 +162,10 @@ pub fn focus_active(model: &Model, tx: &mut Tx) {
     let Some(tab) = model.tabs.get(model.active) else {
         return;
     };
+    if let Node::Leaf(_) = tab.root {
+        tx.focus(crate::chrome_view::SINGLE_PANE, false);
+        return;
+    }
     let Some(mark) = mark_at(&tab.root, tab.focused).or_else(|| first_mark(&tab.root)) else {
         return;
     };

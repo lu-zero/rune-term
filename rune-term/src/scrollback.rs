@@ -12,7 +12,7 @@ use crate::theme;
 /// Points. Reserved on every pane so history appearing does not resize the grid.
 pub const WIDTH: f32 = 8.0;
 /// The single-pane bar. It follows the selected tab, not a leaf mark.
-pub const SHOWN_PANE: u32 = 0;
+pub use rune_term_core::surfaces::SHOWN_PANE;
 const SCROLL_BIT: u32 = 0x8000_0000;
 const HIDE_DELAY: Duration = Duration::from_millis(400);
 

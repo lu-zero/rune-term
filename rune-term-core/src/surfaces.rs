@@ -12,6 +12,9 @@ use crate::scrollback::ScrollbarState;
 /// Default pane mark used when no shown/focused surface is selected.
 pub const DEFAULT_PANE_MARK: u32 = 1;
 
+/// The pane mark that means the shell the window shows.
+pub const SHOWN_PANE: u32 = 0;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Progress {
     pub state: u8,

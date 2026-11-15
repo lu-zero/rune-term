@@ -71,6 +71,8 @@ pub struct Shared {
     waker: Mutex<Option<Waker>>,
     flags: Mutex<Flags>,
     output: Mutex<Vec<u8>>,
+    /// The shell the last output came from.
+    output_surface: Mutex<Option<SurfaceId>>,
     control: Mutex<
         Vec<(
             term_control::Request,
@@ -100,6 +102,7 @@ impl Shared {
                 pending: HashSet::new(),
             }),
             output: Mutex::new(Vec::new()),
+            output_surface: Mutex::new(None),
             control: Mutex::new(Vec::new()),
             rearms: AtomicUsize::new(0),
         })
@@ -114,6 +117,11 @@ impl Shared {
     #[cfg(all(test, not(feature = "pty")))]
     pub(crate) fn take_output(&self) -> Vec<u8> {
         std::mem::take(&mut *self.output.lock().expect("output"))
+    }
+
+    #[cfg(all(test, not(feature = "pty")))]
+    pub(crate) fn take_output_surface(&self) -> Option<SurfaceId> {
+        self.output_surface.lock().expect("output").take()
     }
 
     pub(crate) fn set_waker(&self, waker: Waker) {
@@ -221,7 +229,8 @@ impl SurfaceDelegate for Delegate {
         self.shared.push(HostEvent::Close(surface));
     }
 
-    fn output(&self, _surface: SurfaceId, bytes: &[u8]) {
+    fn output(&self, surface: SurfaceId, bytes: &[u8]) {
+        *self.shared.output_surface.lock().expect("output") = Some(surface);
         self.shared
             .output
             .lock()
@@ -377,6 +386,7 @@ fn drop_closed(model: &mut Model, id: SurfaceId, tx: &mut Tx) -> bool {
         tx.close_window();
     } else {
         crate::tabs::show_active(model);
+        crate::tabs::focus_active(model, tx);
     }
     true
 }

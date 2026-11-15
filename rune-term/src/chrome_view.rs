@@ -106,16 +106,23 @@ fn leaf_mark(node: &Node, id: LeafId) -> Option<u32> {
     }
 }
 
+/// One key for every tab's lone pane. A key per tab would remount the pane on a
+/// switch, and the old one would fade out over the new shell on the same slot.
+pub const SINGLE_PANE: &str = "pane";
+
 fn single(model: &Model, scale: f32) -> El {
     let hover_active = model.terminal.primary().is_some_and(|host| {
         host.hover_link.is_some() && crate::hyperlink::open_mods_rune(model.terminal.held_mods())
     });
     let mut pane = effect(PANE_MARK)
-        .key("pane")
+        .key(SINGLE_PANE)
         .grow(1.0)
         .min_w(0.0)
         .h_full()
         .focusable(true)
+        // The cursor shows focus, as in a text field. Rune's default ring
+        // would frame the whole pane in the system accent colour.
+        .no_focus_ring()
         .on_layout_tx(move |model: &mut Model, rect, tx: &mut Tx| {
             app::on_pane_layout(model, (rect[2], rect[3]), scale, tx);
         });
@@ -129,7 +136,7 @@ fn single(model: &Model, scale: f32) -> El {
         .min_h(0.0)
         .min_w(0.0)
         .child(ime::mount_caret(
-            wire(pane, PANE_MARK, scale),
+            wire(pane, scrollback::SHOWN_PANE, scale),
             model.terminal.cursor_cell(),
             cell_px,
             scale,
@@ -196,6 +203,8 @@ fn leaf_el(leaf: &Leaf, model: &Model, scale: f32, cell: (f32, f32)) -> El {
         .min_w(0.0)
         .h_full()
         .focusable(true)
+        // The cursor shows focus, as in a text field.
+        .no_focus_ring()
         .on_layout_tx(move |model: &mut Model, rect, tx: &mut Tx| {
             layout_leaf(model, surface, (rect[2], rect[3]), scale, tx);
         })
