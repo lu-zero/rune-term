@@ -4,6 +4,7 @@ members = [
     "term-grid",
     "term-input",
     "term-control",
+    "term-mux",
     "color-picker",
     "font-picker",
     "rune-term-core",

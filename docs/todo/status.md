@@ -159,7 +159,10 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       the P0–P4 order are decided. P0 is in: librio is built without its
       `pty` feature, and rune-term spawns the shell on a teletypewriter PTY,
       reads it into `inject_output` on a thread, and writes the delegate's
-      `output` back to it. The winsize follows the grid. Design:
+      `output` back to it. The winsize follows the grid. P1 is in:
+      `term-mux` holds the layout in cells and the tmux control-mode parser
+      (replies, `%output`, window, layout, session and exit notifications,
+      and the layout string), tested on tmux 3.4's own output. Design:
       [`multiplexer-sessions.md`](./multiplexer-sessions.md).
 - [ ] **24. Backend adapters and composition.** Fat/lean packaging (features
       and/or `rune-term-*` helpers) with progressive adapters: local, rmux

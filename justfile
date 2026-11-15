@@ -10,7 +10,7 @@ fmt-check:
     cargo fmt --all -- --check
 
 clippy:
-    cargo clippy -p term-grid -p term-input -p term-control -p rune-term-ctl --all-targets -- -D warnings
+    cargo clippy -p term-grid -p term-input -p term-control -p term-mux -p rune-term-ctl --all-targets -- -D warnings
     cargo clippy -p rune-term --all-targets --no-default-features --features graphics -- -D warnings
 
 check:
@@ -26,6 +26,7 @@ test-lib:
     cargo test -p term-input --lib
     cargo test -p rune-term --no-default-features --lib
     cargo test -p term-control --lib
+    cargo test -p term-mux --lib
 
 test-grid:
     cargo test -p rune-term --test grid_pipeline

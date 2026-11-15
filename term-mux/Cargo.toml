@@ -1,0 +1,9 @@
+[package]
+name = "term-mux"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "What a terminal multiplexer reports, in cells: tmux control mode."
+
+[dependencies]
