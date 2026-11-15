@@ -69,12 +69,24 @@ pub fn slot_premul(bg: u32, srgb_blend: bool) -> [f32; 4] {
     }
 }
 
+/// Identifies a group of tabs (e.g. one attached tmux session).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct TabGroupId(pub u32);
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TabGroup {
+    pub id: TabGroupId,
+    pub label: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Tab {
     pub title: String,
     pub profile: String,
     pub root: Node,
     pub focused: LeafId,
+    /// Group this tab belongs to, if any.
+    pub group: Option<TabGroupId>,
 }
 
 pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
@@ -175,9 +187,21 @@ fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {
         return strip.child(new_tab_button(tab_h, p));
     }
     for index in 0..model.tabs.len() {
+        let tab_group = model.tabs[index].group;
+        let starts_group =
+            tab_group.is_some() && (index == 0 || model.tabs[index - 1].group != tab_group);
+        if starts_group {
+            if let Some(group) = tab_group.and_then(|id| group_of(model, id)) {
+                strip = strip.child(group_label(&group.label, tab_h, p));
+            }
+        }
+
         let active = index == model.active;
+        let in_group = tab_group.is_some();
         let color = if active {
             text_color(p)
+        } else if in_group {
+            theme::linear(p.accent)
         } else {
             theme::linear(p.muted)
         };
@@ -199,9 +223,16 @@ fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {
                 }
             });
         if active {
-            tab = tab
-                .fill(theme::linear(p.bg))
-                .border(1.0, theme::linear(p.active_border));
+            tab = tab.fill(theme::linear(p.bg)).border(
+                1.0,
+                if in_group {
+                    theme::linear(p.accent)
+                } else {
+                    theme::linear(p.active_border)
+                },
+            );
+        } else if in_group {
+            tab = tab.border(1.0, theme::linear(p.active_border));
         }
         let label = text(tab_caption(model, index))
             .grow(1.0)
@@ -226,6 +257,22 @@ fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {
     strip.child(new_tab_button(tab_h, p))
 }
 
+fn group_label(label: &str, tab_h: f32, p: &Palette) -> El {
+    row()
+        .key(format!("tab-group-{label}"))
+        .h(tab_h)
+        .pl(10.0)
+        .pr(10.0)
+        .center_y()
+        .radius(TAB_RADIUS)
+        .border(1.0, theme::linear(p.accent))
+        .child(
+            text(label.to_string())
+                .color(theme::linear(p.accent))
+                .truncate(),
+        )
+}
+
 fn new_tab_button(tab_h: f32, p: &Palette) -> El {
     let size = tab_h - 8.0;
     row()
@@ -247,6 +294,10 @@ pub(crate) fn hover_overlay(p: &Palette) -> Color {
     let mut c = theme::linear(p.fg);
     c.a = 0.10;
     c
+}
+
+fn group_of(model: &Model, id: TabGroupId) -> Option<&TabGroup> {
+    model.tab_groups.iter().find(|g| g.id == id)
 }
 
 fn tab_caption(model: &Model, index: usize) -> String {
@@ -304,6 +355,23 @@ mod tests {
                 tab[3]
             );
         }
+    }
+
+    #[test]
+    fn a_group_labels_its_tabs() {
+        let mut model = host();
+        let group = TabGroupId(1);
+        model.tab_groups.push(TabGroup {
+            id: group,
+            label: "dev".to_owned(),
+        });
+        crate::tabs::open(&mut model);
+        model.tabs[1].group = Some(group);
+        let mut rt = Runtime::new(model, view, (800.0, 500.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        let label = rect(&rt, "tab-group-dev");
+        let tab = rect(&rt, "tab-1");
+        assert!(label[0] < tab[0], "the group label comes first");
     }
 
     #[test]

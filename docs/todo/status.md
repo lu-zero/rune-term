@@ -138,7 +138,9 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       profiles tab views profiles, sets the default, renames, duplicates,
       creates, edits and deletes them, all persisted. Per-tab/per-pane setting
       application (font/theme are currently model-global) and full
-      creation-time backend semantics remain. Design:
+      creation-time backend semantics remain. A tab group (a labelled group of
+      tabs in the strip) is in the tree, ready for a multiplexer session group.
+      Design:
       [`settings-profiles.md`](./settings-profiles.md),
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
 - [ ] **21. IPC and automation.** Owner-scoped local control plane

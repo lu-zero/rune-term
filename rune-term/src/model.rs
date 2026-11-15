@@ -3,7 +3,7 @@ use std::sync::Arc;
 use librio::Engine;
 use rune::AppHandle;
 
-use crate::chrome::{Leaf, LeafId, Node, Tab, LEAF, PANE_MARK};
+use crate::chrome::{Leaf, LeafId, Node, Tab, TabGroup, LEAF, PANE_MARK};
 use crate::delegate::{self, Shared};
 use crate::metrics;
 use crate::search::SearchUi;
@@ -14,6 +14,7 @@ use crate::theme::Palette;
 pub struct Model {
     pub engine: Engine,
     pub tabs: Vec<Tab>,
+    pub tab_groups: Vec<TabGroup>,
     pub active: usize,
     pub terminal: rune_term_core::terminal::Terminal,
     pub cell_points: (f32, f32),
@@ -59,7 +60,9 @@ pub fn init() -> Model {
                 rows: 24,
             }),
             focused: LeafId(LEAF.0),
+            group: None,
         }],
+        tab_groups: Vec::new(),
         active: 0,
         terminal: rune_term_core::terminal::Terminal::new(palette.name.clone()),
         cell_points: metrics::cell_points_for(font_size),

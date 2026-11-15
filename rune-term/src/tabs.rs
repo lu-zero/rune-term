@@ -42,6 +42,7 @@ pub fn open_with_profile(model: &mut Model, profile: &str) -> bool {
             rows: 24,
         }),
         focused: id,
+        group: None,
     });
     model.active = model.tabs.len() - 1;
     let surface = delegate::open_host(model, mark, 0, 0, Some(&profile));
@@ -103,14 +104,19 @@ pub fn close(model: &mut Model, index: usize, tx: &mut Tx) {
     let Some(tab) = model.tabs.get(index) else {
         return;
     };
+    let group = tab.group;
     let ids = surfaces_of(&tab.root);
     for id in ids {
         model.shared.remove_flag(id);
         model.terminal.remove(id);
     }
     model.tabs.remove(index);
+    if let Some(gid) = group {
+        prune_group(model, gid);
+    }
     if model.tabs.is_empty() {
         model.active = 0;
+        model.tab_groups.clear();
         tx.close_window();
         return;
     }
@@ -121,6 +127,13 @@ pub fn close(model: &mut Model, index: usize, tx: &mut Tx) {
     }
     show_active(model);
     focus_active(model, tx);
+}
+
+/// Remove a group entry when no tabs belong to it.
+pub fn prune_group(model: &mut Model, group: crate::chrome::TabGroupId) {
+    if !model.tabs.iter().any(|t| t.group == Some(group)) {
+        model.tab_groups.retain(|g| g.id != group);
+    }
 }
 
 /// Bring the selected tab back into the strip and focus its pane. Opening one
