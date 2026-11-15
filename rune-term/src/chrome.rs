@@ -1,5 +1,7 @@
 //! One tab strip. The panes are [`crate::chrome_view`]. The cell tree is [`crate::split`].
 
+use std::hash::{DefaultHasher, Hash, Hasher};
+
 use rune::{col, el, row, text, Color, Cx, El};
 
 use crate::chrome_view;
@@ -199,11 +201,14 @@ fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {
         }
 
         let active = index == model.active;
-        let in_group = tab_group.is_some();
+        let hue = tab_group
+            .and_then(|id| group_of(model, id))
+            .map(|group| group_color(&group.label, p));
+        let in_group = hue.is_some();
         let color = if active {
             text_color(p)
-        } else if in_group {
-            theme::linear(p.accent)
+        } else if let Some(hue) = hue {
+            hue
         } else {
             theme::linear(p.muted)
         };
@@ -227,8 +232,8 @@ fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {
         if active {
             tab = tab.fill(theme::linear(p.bg)).border(
                 1.0,
-                if in_group {
-                    theme::linear(p.accent)
+                if let Some(hue) = hue {
+                    hue
                 } else {
                     theme::linear(p.active_border)
                 },
@@ -267,12 +272,26 @@ fn group_label(label: &str, tab_h: f32, p: &Palette) -> El {
         .pr(10.0)
         .center_y()
         .radius(TAB_RADIUS)
-        .border(1.0, theme::linear(p.accent))
+        .border(1.0, group_color(label, p))
         .child(
             text(label.to_string())
-                .color(theme::linear(p.accent))
+                .color(group_color(label, p))
                 .truncate(),
         )
+}
+
+/// A hue from the group's name, so a session keeps its color across runs. A light
+/// background takes a darker value to keep the text readable.
+fn group_color(label: &str, p: &Palette) -> Color {
+    let mut hasher = DefaultHasher::new();
+    label.hash(&mut hasher);
+    let bits = hasher.finish();
+    let h = f64::from((bits >> 32) as u32 ^ bits as u32) / f64::from(u32::MAX);
+    let [r, g, b, _] = theme::channels(p.bg);
+    let light = 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.5;
+    let v = if light { 0.6 } else { 0.9 };
+    let rgb = okhsl::Okhsv { h, s: 0.7, v }.to_srgb();
+    theme::linear(u32::from(rgb.r) << 16 | u32::from(rgb.g) << 8 | u32::from(rgb.b))
 }
 
 fn new_tab_button(tab_h: f32, p: &Palette) -> El {
@@ -320,6 +339,28 @@ fn tab_caption(model: &Model, index: usize) -> String {
 mod tests {
     use super::*;
     use rune::{Env, Runtime};
+
+    #[test]
+    fn a_group_color_stands_out_on_every_builtin_theme() {
+        let luminance = |c: Color| 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+        for palette in theme::builtins() {
+            let bg = luminance(theme::linear(palette.bg));
+            for name in [
+                "0",
+                "1",
+                "work",
+                "tmux",
+                "rune-term",
+                "ssh",
+                "logs",
+                "build",
+            ] {
+                let fg = luminance(group_color(name, palette));
+                let ratio = (fg.max(bg) + 0.05) / (fg.min(bg) + 0.05);
+                assert!(ratio >= 3.0, "{name} on {}: {ratio:.2}", palette.name);
+            }
+        }
+    }
 
     fn tab_h() -> f32 {
         tab_box_height(TITLEBAR_H)
