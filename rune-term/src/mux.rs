@@ -4,7 +4,6 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::{self, Read, Write};
-use std::mem;
 use std::process::{ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
@@ -812,10 +811,10 @@ pub(crate) fn menu(model: &Model, mut menu: PopupMenu) -> PopupMenu {
     menu
 }
 
-/// A submenu per session with hidden windows. A window goes by its index, as tmux
-/// lists it, since windows running the same program share a name.
-fn hidden(model: &Model, mut menu: PopupMenu) -> PopupMenu {
-    let mut first = true;
+/// One Hidden Windows entry. Its windows, or with several sessions a submenu each. A
+/// window goes by its tmux index, since windows running the same program share a name.
+fn hidden(model: &Model, menu: PopupMenu) -> PopupMenu {
+    let mut sessions: Vec<(&str, Vec<PopupItem>)> = Vec::new();
     for mux in &model.muxes {
         let windows: Vec<PopupItem> = mux
             .windows
@@ -831,20 +830,23 @@ fn hidden(model: &Model, mut menu: PopupMenu) -> PopupMenu {
         if windows.is_empty() {
             continue;
         }
-        if mem::take(&mut first) {
-            menu = menu.separator();
-        }
         let session = model
             .tab_groups
             .iter()
             .find(|group| group.id == mux.group)
             .map_or("tmux", |group| group.label.as_str());
-        menu = menu.submenu(
-            format!("Show Window from {session}"),
-            PopupMenu::new().items(windows),
-        );
+        sessions.push((session, windows));
     }
-    menu
+    let list = match sessions.len() {
+        0 => return menu,
+        1 => PopupMenu::new().items(sessions.pop().expect("one session").1),
+        _ => sessions
+            .into_iter()
+            .fold(PopupMenu::new(), |list, (session, windows)| {
+                list.submenu(session, PopupMenu::new().items(windows))
+            }),
+    };
+    menu.separator().submenu("Hidden Windows", list)
 }
 
 fn attached_here(model: &Model, name: &str) -> bool {
