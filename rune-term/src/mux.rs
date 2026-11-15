@@ -4,6 +4,7 @@
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::{self, Read, Write};
+use std::mem;
 use std::process::{ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
@@ -761,25 +762,7 @@ pub(crate) fn menu(model: &Model, mut menu: PopupMenu) -> PopupMenu {
             .item(PopupItem::new("split-right", "Split Right"))
             .item(PopupItem::new("split-down", "Split Down"));
     }
-    let hidden: Vec<(TabGroupId, &Window)> = model
-        .muxes
-        .iter()
-        .flat_map(|mux| {
-            mux.windows
-                .iter()
-                .filter(|window| mux.hidden.contains(&window.id))
-                .map(|window| (mux.group, window))
-        })
-        .collect();
-    if !hidden.is_empty() {
-        menu = menu.separator();
-    }
-    for (group, window) in hidden {
-        menu = menu.item(PopupItem::new(
-            format!("show-window:{}:{}", group.0, window.id),
-            format!("Show {}", window.name),
-        ));
-    }
+    menu = hidden(model, menu);
     let Some(sessions) = sessions(&[]) else {
         return menu;
     };
@@ -792,6 +775,41 @@ pub(crate) fn menu(model: &Model, mut menu: PopupMenu) -> PopupMenu {
             format!("tmux-attach:{name}"),
             format!("Attach tmux: {name}"),
         ));
+    }
+    menu
+}
+
+/// A submenu per session with hidden windows. A window goes by its index, as tmux
+/// lists it, since windows running the same program share a name.
+fn hidden(model: &Model, mut menu: PopupMenu) -> PopupMenu {
+    let mut first = true;
+    for mux in &model.muxes {
+        let windows: Vec<PopupItem> = mux
+            .windows
+            .iter()
+            .filter(|window| mux.hidden.contains(&window.id))
+            .map(|window| {
+                PopupItem::new(
+                    format!("show-window:{}:{}", mux.group.0, window.id),
+                    format!("{}: {}", window.index, window.name),
+                )
+            })
+            .collect();
+        if windows.is_empty() {
+            continue;
+        }
+        if mem::take(&mut first) {
+            menu = menu.separator();
+        }
+        let session = model
+            .tab_groups
+            .iter()
+            .find(|group| group.id == mux.group)
+            .map_or("tmux", |group| group.label.as_str());
+        menu = menu.submenu(
+            format!("Show Window from {session}"),
+            PopupMenu::new().items(windows),
+        );
     }
     menu
 }
@@ -949,6 +967,14 @@ mod tests {
         assert_eq!(model.tabs.len(), 1);
         assert!(model.terminal.get(first).is_none());
         let menu = format!("{}:{}", group.0, window.unwrap());
+        let item = hidden(&model, PopupMenu::new())
+            .find(&format!("show-window:{menu}"))
+            .map(|item| item.title().to_owned());
+        // `/bin/sh` names the window `sh` or `bash`, depending on the system.
+        assert!(
+            item.as_ref().is_some_and(|title| title.starts_with("0: ")),
+            "{item:?}"
+        );
         assert!(show(&mut model, &menu));
         assert_eq!(model.tabs[model.active].window, window);
         assert_eq!(leaves(&model.tabs[model.active].root), 2);

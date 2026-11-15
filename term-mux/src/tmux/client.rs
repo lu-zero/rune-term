@@ -10,12 +10,15 @@ const WINDOW: &str = "rune-window ";
 /// Announces the `capture-pane` reply that follows it on the same line.
 const CAPTURE: &str = "rune-capture ";
 
-pub const LIST_WINDOWS: &str = "list-windows -F \"rune-window #{window_id} #{window_active} \
+pub const LIST_WINDOWS: &str =
+    "list-windows -F \"rune-window #{window_id} #{window_index} #{window_active} \
                                 #{pane_id} #{window_layout} #{window_name}\"\n";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Window {
     pub id: u32,
+    /// The number tmux shows for the window, which the user can change.
+    pub index: u32,
     pub name: String,
     /// The session's current window.
     pub active: bool,
@@ -144,14 +147,16 @@ impl Client {
 /// `@0 1 %0 a87d,100x30,0,0,0 vim notes.md` after the marker.
 fn parse_window(line: &[u8]) -> Option<Window> {
     let text = std::str::from_utf8(line.strip_prefix(WINDOW.as_bytes())?).ok()?;
-    let mut words = text.splitn(5, ' ');
+    let mut words = text.splitn(6, ' ');
     let id = words.next()?.strip_prefix('@')?.parse().ok()?;
+    let index = words.next()?.parse().ok()?;
     let active = words.next()? == "1";
     let active_pane = words.next()?.strip_prefix('%')?.parse().ok()?;
     let layout = parse_layout(words.next()?)?;
     let name = words.next().unwrap_or("").to_owned();
     Some(Window {
         id,
+        index,
         name,
         active,
         active_pane,
@@ -279,11 +284,12 @@ mod tests {
     fn attaching_lists_the_windows_and_redraws_every_pane_once() {
         let mut client = attached();
         let windows = client.feed(
-            b"%begin 1 274 1\nrune-window @0 1 %1 6b8b,100x30,0,0{50x30,0,0,0,49x30,51,0,1} vim a b\n\
+            b"%begin 1 274 1\nrune-window @0 0 1 %1 6b8b,100x30,0,0{50x30,0,0,0,49x30,51,0,1} vim a b\n\
               %end 1 274 1\n",
         );
         let first = Window {
             id: 0,
+            index: 0,
             name: "vim a b".to_owned(),
             active: true,
             active_pane: 1,
@@ -300,8 +306,9 @@ mod tests {
             format!("{}{}", capture(0), capture(1))
         );
         // The second listing the attach asked for redraws nothing.
-        client
-            .feed(b"%begin 1 275 1\nrune-window @0 1 %1 6b8b,100x30,0,0,0 vim a b\n%end 1 275 1\n");
+        client.feed(
+            b"%begin 1 275 1\nrune-window @0 0 1 %1 6b8b,100x30,0,0,0 vim a b\n%end 1 275 1\n",
+        );
         assert_eq!(client.take_commands(), "");
     }
 
@@ -334,13 +341,14 @@ mod tests {
     #[test]
     fn a_new_window_waits_for_its_listing_and_a_close_drops_it() {
         let mut client = attached();
-        client.feed(b"%begin 1 274 1\nrune-window @0 1 %0 a87d,80x24,0,0,0 sh\n%end 1 274 1\n");
+        client.feed(b"%begin 1 274 1\nrune-window @0 0 1 %0 a87d,80x24,0,0,0 sh\n%end 1 274 1\n");
         client.take_commands();
         // No layout is reported for a new window, and a change to it waits too.
         assert_eq!(
             client.feed(b"%session-window-changed $0 @1\n%window-add @1\n%window-renamed @1 top\n"),
             vec![Update::Windows(vec![Window {
                 id: 0,
+                index: 0,
                 name: "sh".to_owned(),
                 active: false,
                 active_pane: 0,
@@ -366,7 +374,7 @@ mod tests {
     fn a_layout_that_resizes_a_pane_redraws_it_from_tmux() {
         let mut client = attached();
         client.feed(
-            b"%begin 1 274 1\nrune-window @0 1 %1 6b8b,100x30,0,0{50x30,0,0,0,49x30,51,0,1} sh\n\
+            b"%begin 1 274 1\nrune-window @0 0 1 %1 6b8b,100x30,0,0{50x30,0,0,0,49x30,51,0,1} sh\n\
               %end 1 274 1\n",
         );
         client.take_commands();

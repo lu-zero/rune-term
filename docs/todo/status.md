@@ -173,7 +173,8 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       redrawn from `capture-pane`. Keys go back as `send-keys -H`. The
       size goes as `refresh-client -C`, and focus as `select-window` and
       `select-pane`. A new tab in the group is `new-window`, and the menu
-      splits. Closing a tab hides its window, and the menu shows it again.
+      splits. Closing a tab hides its window, and the menu shows it again
+      from a submenu per session, by window index.
       tmux exiting closes the group, and a split window draws every
       pane. Dragging a divider sends `resize-pane`, and the tree follows
       the layout tmux reports. A pane takes tmux's size in stream order,
