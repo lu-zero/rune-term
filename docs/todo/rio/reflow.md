@@ -1,33 +1,52 @@
-# rio-vt: column reflow can leave the cursor's line in scrollback and the screen blank
+# Comment on #2058: two shrink cases the PR leaves
 
-## Problem
+Checked against #2058 at `58b5568b`. The patch is
+[`patches/rio-2058-cursor-reflow.patch`](./patches/rio-2058-cursor-reflow.patch),
+on top of the PR. Not sent.
 
-`Grid::resize` reflows by shuffling cells between neighbouring rows, one pair at a time. When the cursor is on a wrapped line, a narrow-then-wide round trip rejoins the line into scrollback: the rejoined row is in history with a stale wrap flag on its last cell, and the screen is left blank. The shrink alone already moves the cursor off its character.
+## Comment
 
-## Reproduction
+Thanks, this fixes the round trip we hit with the cursor after the line's last
+character. Running our reproductions against the branch turned up two more,
+both in `shrink_columns`:
 
-```rust
-// 3 lines, "abcdefghij" on line 0, cursor on 'd' at (0, 3)
-grid.resize(true, 3, 4);
-// [-2: abcd~] [-1: efgh~] [0: ij..]   cursor (0, 3): a blank cell past "ij", not on 'd'
-grid.resize(true, 3, 10);
-// [-1: abcdefghij~] [0..2: blank]     the line is in history, still marked wrapped;
-//                                      the screen is blank, cursor (0, 1)
-```
+**A cursor in the middle of its line leaves the screen.** Three rows,
+`abcdefghij` on the top one, the cursor on `d`, and a shrink to 4 columns.
+The cursor's char is now in `abcd` in history, but the cursor stays on
+`Line(0)`, which holds `ij`: `max(row - 1, Line(0))` clamps it there. The grow
+back then rejoins the line in history, with its wrap flag still set. The screen
+is blank and the cursor is at `(0, 1)`. The two blank rows below the line
+could have taken the wrap instead. A shell's line editor puts the cursor there
+whenever you move back through a long command.
 
-The same happens on a one-line screen with the cursor anywhere on the line. With the cursor on a later line, the round trip is fine.
+**A displaced wide char is not counted in the cursor column.** `abc中def`, the
+cursor on `f` (column 7), and a shrink to 4 columns. The spacer pushes `中` to
+the next row, so that push keeps 3 cells, not 4. The cursor moves back by 4
+and lands at `(0, 3)`, after `f`.
 
-Two smaller ones, in the same function:
+A fix at the same level, on top of the branch:
 
-- shrinking `"hello   "` (explicit space cells) from 8 to 6 columns wraps the spaces into a second row;
-- with a wide character ahead of the cursor, a shrink misplaces it: on `"abc中def"` with the cursor on `f`, shrinking to 4 columns leaves the cursor on the blank cell after `f`.
+- When the cursor is on the top row and a row would push it up, count the rows
+  (`cursor_above`) instead of clamping. After the loop, drop that many clear
+  rows from the bottom, while the grid still has more rows than the screen.
+  That pulls the line back down under the cursor. With no blank rows below
+  (a one-row screen, or a full one), nothing changes.
+- Move the cursor back by `columns - displaced`, the cells the push kept,
+  rather than by `columns`.
 
-## Direction
+Two tests cover them: the mid-line round trip and the wide char.
+`shrink_reflow_remap_tracks_displaced_wide_char` now expects `[0, 2, -1]`. Its
+cursor sits at the default `(0, 0)`, on the line being wrapped, so the
+trailing blank row is dropped. `cargo test -p rio-vt` (631) and
+`cargo test -p librio` pass, and clippy with `-D warnings` and fmt are clean.
 
-Reflow whole logical lines: join a line's wrapped rows, split at the new width, and place the cursor by its offset in the logical line, counting wide characters. I have a join-then-split implementation, but it is not ready, and these are the questions I'd like to settle first:
+Happy to open it as a PR against your branch, or leave it for you to fold in.
 
-- where a cursor at column 0 lands (on its own row unless it continues a wrapped line);
-- whether trailing space cells are content (a styled space, a prompt's trailing space) or padding;
-- whether a screen cleared after output should stay blank, or refill from scrollback when it grows;
-- keeping a fast path for a resize with no wrapped rows, and remapping `display_offset`;
-- interaction with #1974 (the cursor over a wide character) and #1707 (resize artifacts).
+## Not in the comment
+
+- Trailing spaces wrap on a shrink (`"hello   "` at 8 to 6 columns). That
+  follows rio-vt's rules: a blank cell is `'\0'`, and a written space is
+  content.
+- With a blank row under the line but not enough of them, the drop moves the
+  screen down without bringing the cursor's char back on screen. The cursor is
+  still on the wrong char, as it is today.

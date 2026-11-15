@@ -23,12 +23,11 @@ this tree.
 - [`replies.md`](./replies.md): the terminal's replies and user input share
   `SurfaceDelegate::output`. A tmux pane gets librio's answers on top of
   tmux's own.
-- [`reflow.md`](./reflow.md): column reflow can leave the cursor's line in
-  scrollback and the screen blank. #2058 (open) fixes it for a cursor after
-  the line's last character, the shell prompt's usual place. A cursor in the
-  middle of the line still ends in a blank screen. Trailing space cells still
-  wrap, and a wide character still moves the cursor. Rewrite the draft as a
-  follow-up to #2058.
+- [`reflow.md`](./reflow.md): a comment for #2058 (open). The PR fixes the
+  round trip for a cursor after the line's last character. A cursor in the
+  middle of the line still leaves the screen on a shrink, and a displaced
+  wide char shifts the cursor column. `patches/rio-2058-cursor-reflow.patch`
+  fixes both on top of the PR.
 
 ## Not verified
 

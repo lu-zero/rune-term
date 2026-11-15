@@ -1,0 +1,179 @@
+diff --git a/rio-vt/src/crosswords/grid/resize.rs b/rio-vt/src/crosswords/grid/resize.rs
+index bcec83bf46..b246d263c5 100644
+--- a/rio-vt/src/crosswords/grid/resize.rs
++++ b/rio-vt/src/crosswords/grid/resize.rs
+@@ -351,16 +351,18 @@ impl Grid<Square> {
+         // Remove the linewrap special case, by moving the cursor outside of the grid.
+         if self.cursor.should_wrap && reflow {
+             self.cursor.should_wrap = false;
+             self.cursor.pos.col += 1;
+         }
+ 
+         let mut new_raw = Vec::with_capacity(self.raw.len());
+         let mut buffered: Option<Vec<Square>> = None;
++        // Rows the cursor would have moved above the top of the screen.
++        let mut cursor_above = 0;
+ 
+         let mut rows = self.raw.take_all();
+         let old_len = rows.len();
+         // See `grow_columns`; `base_abs + position` also survives the
+         // cap truncation below because dropping the N oldest rows
+         // advances the eviction base by the same N.
+         let mut remap = self.track_reflow_remap.then(|| ReflowRemap {
+             base_abs: self.lines_evicted(),
+@@ -506,27 +508,33 @@ impl Grid<Square> {
+ 
+                     // Add removed cells to start of next row.
+                     buffered = Some(wrapped);
+                     break;
+                 } else {
+                     // Reflow cursor if a line below it is deleted.
+                     let cursor_buffer_line =
+                         self.lines - self.cursor.pos.row.0 as usize - 1;
+-                    if (i == cursor_buffer_line && self.cursor.pos.col < columns)
++                    // A wide char displaced by the spacer starts the next row.
++                    let kept = columns - displaced as usize;
++                    if (i == cursor_buffer_line && self.cursor.pos.col < kept)
+                         || i < cursor_buffer_line
+                     {
+-                        self.cursor.pos.row = max(self.cursor.pos.row - 1, Line(0));
++                        if self.cursor.pos.row == 0 {
++                            cursor_above += 1;
++                        } else {
++                            self.cursor.pos.row -= 1;
++                        }
+                     }
+ 
+                     // Reflow the cursor if it is on this line beyond the width.
+-                    if i == cursor_buffer_line && self.cursor.pos.col >= columns {
+-                        // Since only a single new line is created, we subtract only `columns`
++                    if i == cursor_buffer_line && self.cursor.pos.col >= kept {
++                        // Since only a single new line is created, we subtract only `kept`
+                         // from the cursor instead of reflowing it completely.
+-                        self.cursor.pos.col -= columns;
++                        self.cursor.pos.col -= kept;
+                     }
+ 
+                     // Make sure new row is at least as long as new width.
+                     let occ = wrapped.len();
+                     if occ < columns {
+                         wrapped.resize_with(columns, Square::default);
+                     }
+                     row = Row::from_vec(wrapped, occ);
+@@ -534,16 +542,31 @@ impl Grid<Square> {
+                     if i < self.display_offset {
+                         // Since we added a new line, rotate up the viewport.
+                         self.display_offset += 1;
+                     }
+                 }
+             }
+         }
+ 
++        // Keep the cursor on its text: drop blank rows below it to pull the screen
++        // down, rather than leave the cursor on the top row of a later part of its line.
++        while cursor_above > 0
++            && new_raw.len() > self.lines
++            && new_raw.last().is_some_and(|row| row.is_clear())
++        {
++            new_raw.pop();
++            cursor_above -= 1;
++        }
++        if let Some(r) = remap.as_mut() {
++            for pos in r.new_pos.iter_mut().filter(|p| **p >= new_raw.len() as i64) {
++                *pos = -1;
++            }
++        }
++
+         // Restore oldest-first order in place and reuse the buffer as the new
+         // grid storage, avoiding a second full row-buffer allocation.
+         new_raw.reverse();
+         let mut reversed = new_raw;
+         // Reflow can overflow the scrollback cap; the oldest lines
+         // fall off the ring and must advance the absolute row base.
+         let cap = self.max_scroll_limit + self.lines;
+         if reversed.len() > cap {
+diff --git a/rio-vt/src/crosswords/grid/tests.rs b/rio-vt/src/crosswords/grid/tests.rs
+index 27d4ce4851..beddca2849 100644
+--- a/rio-vt/src/crosswords/grid/tests.rs
++++ b/rio-vt/src/crosswords/grid/tests.rs
+@@ -389,18 +389,18 @@ fn shrink_reflow_remap_tracks_displaced_wide_char() {
+     grid.track_reflow_remap = true;
+     grid.resize(true, 3, 4);
+     grid.track_reflow_remap = false;
+ 
+     let remap = grid.reflow_remap.take().expect("remap must be recorded");
+     assert_eq!(remap.base_abs, 0);
+     // Old row 0 lands at 0; the wide-char row's first cell lands at 2
+     // (position 1 holds the buffered "567" tail plus the spacer); the
+-    // trailing blank row lands at 3.
+-    assert_eq!(remap.new_pos, vec![0, 2, 3]);
++    // trailing blank row is dropped to keep the cursor's line on screen.
++    assert_eq!(remap.new_pos, vec![0, 2, -1]);
+ 
+     // Cross-check against where the wide char actually sits.
+     let total = grid.total_lines() as i32;
+     let screen = grid.screen_lines() as i32;
+     let wide_line = Line(2 - (total - screen));
+     assert_eq!(grid[wide_line][Column(0)], wide_cell('W'));
+ }
+ 
+@@ -730,8 +730,59 @@ fn prev_on_a_stale_position_ends_instead_of_panicking() {
+     assert!(grid.iter_from(past_the_screen).next().is_none());
+     assert!(grid.iter_from(past_the_screen).prev().is_none());
+ 
+     // A live position still walks backwards to the start and stops.
+     let mut it = grid.iter_from(Pos::new(Line(0), Column(1)));
+     assert_eq!(it.prev().map(|i| i.pos), Some(Pos::new(Line(0), Column(0))));
+     assert!(it.prev().is_none());
+ }
++
++#[test]
++fn shrink_keeps_a_mid_line_cursor_on_its_char_and_the_grow_rejoins_it() {
++    let mut grid = Grid::<Square>::new(3, 10, 10);
++    for (i, c) in "abcdefghij".chars().enumerate() {
++        grid[Line(0)][Column(i)] = cell(c);
++    }
++    grid.cursor.pos = Pos::new(Line(0), Column(3));
++
++    grid.resize(true, 3, 4);
++
++    // The blank rows below make room, so the line stays on screen.
++    assert_eq!(grid.history_size(), 0);
++    assert_eq!(grid[Line(0)][Column(3)], wrap_cell('d'));
++    assert_eq!(grid[Line(1)][Column(3)], wrap_cell('h'));
++    assert_eq!(grid[Line(2)][Column(1)], cell('j'));
++    assert_eq!(grid.cursor.pos, Pos::new(Line(0), Column(3)));
++
++    grid.resize(true, 3, 10);
++
++    assert_eq!(grid.history_size(), 0);
++    assert_eq!(grid[Line(0)][Column(9)], cell('j'));
++    assert_eq!(grid.cursor.pos, Pos::new(Line(0), Column(3)));
++    assert!(!grid.cursor.should_wrap);
++}
++
++#[test]
++fn shrink_counts_a_displaced_wide_char_in_the_cursor_column() {
++    let mut grid = Grid::<Square>::new(1, 8, 10);
++    let cells = [
++        cell('a'),
++        cell('b'),
++        cell('c'),
++        wide_cell('中'),
++        spacer_cell(),
++        cell('d'),
++        cell('e'),
++        cell('f'),
++    ];
++    for (i, c) in cells.into_iter().enumerate() {
++        grid[Line(0)][Column(i)] = c;
++    }
++    grid.cursor.pos = Pos::new(Line(0), Column(7));
++
++    grid.resize(true, 1, 4);
++
++    // [abc<leading spacer>] [中<spacer>de] [f...]
++    assert_eq!(grid[Line(-1)][Column(0)], wide_cell('中'));
++    assert_eq!(grid[Line(0)][Column(0)], cell('f'));
++    assert_eq!(grid.cursor.pos, Pos::new(Line(0), Column(0)));
++}
