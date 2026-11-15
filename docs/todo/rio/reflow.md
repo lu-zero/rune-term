@@ -15,17 +15,22 @@
 3. `2a0d2f81` performer: an empty input no longer blocks the ones after it.
    Writing zero bytes returns `Ok(0)`, which `pty_write` read as a full PTY;
    the shell never got another key. This one stands apart from #2058.
+4. `5bfcd869` performer: the PTY gets its new size once resizes settle
+   (100 ms, kitty's default). The grid still reflows at once. A drag sent a
+   SIGWINCH per frame, and bash piled a misplaced redraw on the line above
+   for each.
 
 ## Still wrong with bash
 
 After a width change, readline moves up by the rows the input took at the old
 width, and redraws only the last line of a multi-line prompt. Rio has already
 rewrapped those rows, so readline lands too high and erases the line above
-(starship's first line). A drag repeats it once per step. Kitty and Ghostty
+(starship's first line). With 4 that happens once per drag, not per step.
+Kitty and Ghostty
 avoid it with OSC 133 marks from their own shell integration: the prompt and
 input are not rewrapped, and the shell redraws them.
 
 ## Upstreaming
 
-Decide with Raphael: 1 and 3 can go as they are. 2 changes #2058's stated
+Decide with Raphael: 1, 3 and 4 can go as they are. 2 changes #2058's stated
 behaviour, so ask first whether he wants it.
