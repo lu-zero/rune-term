@@ -4,21 +4,29 @@
 
 use std::fs::File;
 use std::io::{self, Read, Write};
-use std::os::fd::FromRawFd;
+use std::os::fd::{AsRawFd, FromRawFd};
 use std::sync::{mpsc, Arc};
 use std::thread;
+use std::time::Duration;
 
 use librio::{Surface, SurfaceDesc};
-use teletypewriter::{Pty, WinsizeBuilder};
+use teletypewriter::Pty;
 
 use crate::delegate::Shared;
 
 pub struct PtyLink {
     // Dropping the Pty hangs up and reaps the shell.
-    pty: Pty,
+    _pty: Pty,
     input: mpsc::Sender<Vec<u8>>,
-    winsize: (u16, u16, u16, u16),
+    sizes: mpsc::Sender<Winsize>,
+    winsize: Winsize,
 }
+
+type Winsize = (u16, u16, u16, u16);
+
+/// A drag resizes on every frame. A shell redraws its line on each SIGWINCH,
+/// and one that has not caught up with the reflow redraws over the line above.
+const RESIZE_SETTLE: Duration = Duration::from_millis(100);
 
 impl PtyLink {
     pub fn spawn(
@@ -45,6 +53,7 @@ impl PtyLink {
         }
         let mut reader = dup(fd)?;
         let mut writer = dup(fd)?;
+        let sized = dup(fd)?;
         let id = surface.id();
         thread::Builder::new()
             .name(format!("pty-read-{id}"))
@@ -74,9 +83,18 @@ impl PtyLink {
                     }
                 }
             })?;
+        let (sizes, pending) = mpsc::channel::<Winsize>();
+        thread::Builder::new()
+            .name(format!("pty-size-{id}"))
+            .spawn(move || {
+                while let Ok(first) = pending.recv() {
+                    set_winsize(&sized, settle(&pending, first, RESIZE_SETTLE));
+                }
+            })?;
         Ok(Self {
-            pty,
+            _pty: pty,
             input,
+            sizes,
             winsize: (desc.cols, desc.rows, desc.pixel_width, desc.pixel_height),
         })
     }
@@ -85,18 +103,33 @@ impl PtyLink {
         let _ = self.input.send(bytes.to_vec());
     }
 
-    pub fn resize(&mut self, winsize: (u16, u16, u16, u16)) {
+    /// The grid has already reflowed; the shell hears of it once resizes settle.
+    pub fn resize(&mut self, winsize: Winsize) {
         if winsize == self.winsize {
             return;
         }
         self.winsize = winsize;
-        let (cols, rows, width, height) = winsize;
-        let _ = self.pty.child.set_winsize(WinsizeBuilder {
-            rows,
-            cols,
-            width,
-            height,
-        });
+        let _ = self.sizes.send(winsize);
+    }
+}
+
+/// The last size sent before `wait` passes with no other.
+fn settle(pending: &mpsc::Receiver<Winsize>, mut size: Winsize, wait: Duration) -> Winsize {
+    while let Ok(next) = pending.recv_timeout(wait) {
+        size = next;
+    }
+    size
+}
+
+fn set_winsize(pty: &File, (cols, rows, width, height): Winsize) {
+    let size = libc::winsize {
+        ws_row: rows,
+        ws_col: cols,
+        ws_xpixel: width,
+        ws_ypixel: height,
+    };
+    unsafe {
+        libc::ioctl(pty.as_raw_fd(), libc::TIOCSWINSZ, &size);
     }
 }
 
@@ -122,4 +155,22 @@ fn env() -> Vec<(String, String)> {
         ("TERM".to_owned(), term.to_owned()),
         ("COLORTERM".to_owned(), "truecolor".to_owned()),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_burst_of_sizes_settles_on_the_last() {
+        let (sizes, pending) = mpsc::channel();
+        for cols in [79, 78] {
+            sizes.send((cols, 24, cols * 8, 384)).unwrap();
+        }
+        let wait = Duration::from_millis(20);
+        assert_eq!(
+            settle(&pending, (80, 24, 640, 384), wait),
+            (78, 24, 624, 384)
+        );
+    }
 }
