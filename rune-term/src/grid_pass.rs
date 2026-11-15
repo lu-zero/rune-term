@@ -1,16 +1,16 @@
-//! Snapshot, compose, and upload the active terminal surface.
+//! Snapshot, compose, and upload the panes on screen.
 
 use std::sync::Arc;
 
 use rune_term_core::images::Images;
-use term_grid::GridRenderer;
+use rune_term_core::terminal::PaneGrid;
 
 use crate::model::Model;
 use crate::search;
 
 pub fn sync(
     model: &mut Model,
-    grid: &mut GridRenderer,
+    panes: &mut [PaneGrid<'_>],
     images: &mut Images,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
@@ -19,7 +19,7 @@ pub fn sync(
     let hover_active_mods = crate::hyperlink::open_mods_rune(model.terminal.held_mods());
     let palette = model.palette.clone();
     let report = model.terminal.sync_render(
-        grid,
+        panes,
         images,
         device,
         queue,

@@ -1,8 +1,12 @@
 //! Window shell. `perform_resize` is frozen; the winsize change does not edit it.
 
+use std::collections::HashMap;
+
+use librio::SurfaceId;
 use rune::compose::DeviceKey;
 use rune::render::{Instance, KIND_EFFECT};
 use rune::{App, AppSpec, Compositor, Frame, Titlebar, Tx};
+use rune_term_core::terminal::PaneGrid;
 use term_grid::images::ImageBucket;
 use term_grid::{DrawSlot, GridRenderer, SolidSlot};
 
@@ -105,10 +109,18 @@ pub fn fit_layout(model: &mut Model, slot: (f32, f32), scale: f32) -> Option<Res
     ))
 }
 
+/// One pane's grid, kept while its mark is on screen.
+struct PaneDraw {
+    surface: SurfaceId,
+    grid: GridRenderer,
+    stale: bool,
+}
+
 #[derive(Default)]
 struct GridCompositor {
     slot: Option<SolidSlot>,
-    grid: Option<GridRenderer>,
+    /// By effect mark.
+    panes: HashMap<u32, PaneDraw>,
     images: Option<Images>,
     bars: Option<Bars>,
     key: Option<DeviceKey>,
@@ -116,24 +128,17 @@ struct GridCompositor {
 }
 
 impl GridCompositor {
-    fn ensure(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        format: wgpu::TextureFormat,
-        key: DeviceKey,
-    ) {
+    fn ensure(&mut self, device: &wgpu::Device, format: wgpu::TextureFormat, key: DeviceKey) {
         let same = self.key == Some(key)
             && self.format == Some(format)
             && self.slot.is_some()
-            && self.grid.is_some()
             && self.images.is_some()
             && self.bars.is_some();
         if same {
             return;
         }
         self.slot = Some(SolidSlot::new(device, format));
-        self.grid = Some(GridRenderer::new(device, queue, format));
+        self.panes.clear();
         self.images = Some(Images::new(device, format));
         self.bars = Some(Bars::new(device, format));
         self.key = Some(key);
@@ -143,20 +148,47 @@ impl GridCompositor {
 
 impl Compositor<Model> for GridCompositor {
     fn render(&mut self, f: &mut Frame<Model>) {
-        self.ensure(f.device, f.queue, f.format, f.device_key());
+        self.ensure(f.device, f.format, f.device_key());
         let srgb_blend = f.srgb_blend();
         let color = chrome::slot_premul(f.rt.state.palette.bg, srgb_blend);
         let blinking = f.rt.state.terminal.primary().is_some_and(|host| host.blink);
         let cursor_on = f.rt.state.terminal.blink_phase_on() || !blinking;
-        let pane = pane_instance(&f.rt.instances);
-        if let Some((rect, scale)) = pane {
-            if scale.is_finite() && scale > 0.0 {
-                fit_layout(&mut f.rt.state, (rect[2] / scale, rect[3] / scale), scale);
+        let visible = crate::chrome_view::visible(&f.rt.state);
+        let rects = pane_rects(&f.rt.instances);
+        // A split's leaves fit themselves on layout. The lone pane is fitted to
+        // the rect it is about to draw, which layout reports a frame late.
+        if let [(chrome::PANE_MARK, _)] = visible.as_slice() {
+            if let Some((rect, scale)) = rects.get(&chrome::PANE_MARK) {
+                if scale.is_finite() && *scale > 0.0 {
+                    fit_layout(&mut f.rt.state, (rect[2] / scale, rect[3] / scale), *scale);
+                }
             }
         }
+        self.panes
+            .retain(|mark, _| visible.iter().any(|(shown, _)| shown == mark));
+        for (mark, surface) in &visible {
+            let pane = self.panes.entry(*mark).or_insert_with(|| PaneDraw {
+                surface: *surface,
+                grid: GridRenderer::new(f.device, f.queue, f.format),
+                stale: true,
+            });
+            if pane.surface != *surface {
+                pane.surface = *surface;
+                pane.stale = true;
+            }
+        }
+        let mut grids: Vec<PaneGrid<'_>> = self
+            .panes
+            .values_mut()
+            .map(|pane| PaneGrid {
+                surface: pane.surface,
+                grid: &mut pane.grid,
+                stale: std::mem::take(&mut pane.stale),
+            })
+            .collect();
         grid_pass::sync(
             &mut f.rt.state,
-            self.grid.as_mut().expect("grid"),
+            &mut grids,
             self.images.as_mut().expect("images"),
             f.device,
             f.queue,
@@ -169,18 +201,27 @@ impl Compositor<Model> for GridCompositor {
             &f.rt.instances,
             f.size,
         );
+        let shown = f.rt.state.terminal.shown_id();
+        let mut shown_mark = None;
         let mut pane_origin = [0.0, 0.0];
-        if let Some((rect, scale)) = pane {
-            let margin = if scale.is_finite() && scale > 0.0 {
-                f32::from(resize::margin_px(scale))
+        for (mark, pane) in &mut self.panes {
+            let Some((rect, scale)) = rects.get(mark) else {
+                continue;
+            };
+            let margin = if scale.is_finite() && *scale > 0.0 {
+                f32::from(resize::margin_px(*scale))
             } else {
                 0.0
             };
-            pane_origin = [rect[0] + margin, rect[1] + margin];
-            self.grid.as_mut().expect("grid").publish(
+            let origin = [rect[0] + margin, rect[1] + margin];
+            if Some(pane.surface) == shown {
+                shown_mark = Some(*mark);
+                pane_origin = origin;
+            }
+            pane.grid.publish(
                 f.queue,
                 DrawSlot {
-                    origin: pane_origin,
+                    origin,
                     size: [
                         (rect[2] - margin * 2.0).max(0.0),
                         (rect[3] - margin * 2.0).max(0.0),
@@ -195,9 +236,8 @@ impl Compositor<Model> for GridCompositor {
         let slot = self.slot.as_ref().expect("solid slot");
         slot.write_color(f.queue, color);
         let bars = self.bars.as_ref().expect("scrollbar");
-        let grid = self.grid.as_ref().expect("grid");
+        let panes = &self.panes;
         let images = self.images.as_mut().expect("images");
-        let mark = chrome::PANE_MARK;
         let queue = f.queue;
         let device = f.device;
         f.ui.draw_with(f.encoder, f.target, clear, &mut |pass, site| {
@@ -205,9 +245,9 @@ impl Compositor<Model> for GridCompositor {
                 bars.draw(queue, srgb_blend, pass, site, &f.rt.state);
                 return;
             }
-            if site.mark != mark {
+            let Some(pane) = panes.get(&site.mark) else {
                 return;
-            }
+            };
             // Rune's scissor is the ancestor clip. With no scroll view that is
             // the window, so a fullscreen triangle would cover the tab strip.
             let Some((x, y, w, h)) = pane_scissor(site) else {
@@ -215,44 +255,47 @@ impl Compositor<Model> for GridCompositor {
             };
             pass.set_scissor_rect(x, y, w, h);
             slot.draw(pass);
-            grid.draw_bg(pass);
-            images.draw_bucket(
-                device,
-                queue,
-                pass,
-                ImageBucket::UnderText,
-                pane_origin,
-                site.origin,
-                site.size,
-                srgb_blend,
-            );
-            grid.draw_text(pass);
-            images.draw_bucket(
-                device,
-                queue,
-                pass,
-                ImageBucket::OverText,
-                pane_origin,
-                site.origin,
-                site.size,
-                srgb_blend,
-            );
+            pane.grid.draw_bg(pass);
+            let shows_images = shown_mark == Some(site.mark);
+            if shows_images {
+                images.draw_bucket(
+                    device,
+                    queue,
+                    pass,
+                    ImageBucket::UnderText,
+                    pane_origin,
+                    site.origin,
+                    site.size,
+                    srgb_blend,
+                );
+            }
+            pane.grid.draw_text(pass);
+            if shows_images {
+                images.draw_bucket(
+                    device,
+                    queue,
+                    pass,
+                    ImageBucket::OverText,
+                    pane_origin,
+                    site.origin,
+                    site.size,
+                    srgb_blend,
+                );
+            }
         });
     }
 }
 
-fn pane_instance(instances: &[Instance]) -> Option<([f32; 4], f32)> {
-    instances.iter().find_map(|inst| {
-        if inst.params[1] != KIND_EFFECT {
-            return None;
-        }
-        let mark = (inst.border[0] as u32 & 0xFFFF) | ((inst.border[1] as u32 & 0xFFFF) << 16);
-        if mark == chrome::PANE_MARK {
-            Some((inst.rect, inst.params[3]))
-        } else {
-            None
-        }
-    })
+/// Each effect's rect and scale, by mark.
+fn pane_rects(instances: &[Instance]) -> HashMap<u32, ([f32; 4], f32)> {
+    instances
+        .iter()
+        .filter(|inst| inst.params[1] == KIND_EFFECT)
+        .map(|inst| {
+            let mark = (inst.border[0] as u32 & 0xFFFF) | ((inst.border[1] as u32 & 0xFFFF) << 16);
+            (mark, (inst.rect, inst.params[3]))
+        })
+        .collect()
 }
 
 /// Device-pixel scissor of the pane rect cut by its clip, in this pass's target.

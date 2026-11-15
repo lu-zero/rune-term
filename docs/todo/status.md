@@ -29,8 +29,9 @@ The numbers are that plan's.
       leaf has a surface and an effect mark. A split sizes the leaves
       from `distribute`, and the divider costs one cell. A click on a
       leaf moves focus. Injecting into one leaf does not dirty the
-      other. One leaf still fills the window. Keys, the wheel, and the
-      compositor still address the first pane.
+      other. The compositor keeps a grid per pane on screen and draws
+      each leaf's surface in its own rect. Search, hover, preedit, and
+      images stay on the focused pane.
 - [x] **11. Selection and clipboard.** A drag the program did not take
       selects cells. Two clicks select a word and three select a line.
       The copy chord copies that text, and paste calls `Surface::paste`.
@@ -170,8 +171,8 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       size goes as `refresh-client -C`, and focus as `select-window` and
       `select-pane`. A new tab in the group is `new-window`, and the menu
       splits. Closing a tab hides its window, and the menu shows it again.
-      tmux exiting closes the group. A split window does not draw: the
-      compositor paints one pane (item 10). The pane answers queries tmux
+      tmux exiting closes the group, and a split window draws every
+      pane. The pane answers queries tmux
       already answered ([`rio/replies.md`](./rio/replies.md)). ssh is not
       wired. Design:
       [`multiplexer-sessions.md`](./multiplexer-sessions.md).

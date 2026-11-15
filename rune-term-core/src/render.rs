@@ -26,7 +26,7 @@ pub struct SyncResult {
 pub fn sync_active_host(
     host: &mut HostSurface,
     grid: &mut GridRenderer,
-    images: &mut Images,
+    images: Option<&mut Images>,
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     palette: Arc<Palette>,
@@ -76,7 +76,9 @@ pub fn sync_active_host(
         host.cell_px,
         resized || flagged || force_upload,
     );
-    images.sync(device, queue, &host.render, host.cell_px);
+    if let Some(images) = images {
+        images.sync(device, queue, &host.render, host.cell_px);
+    }
     SyncResult {
         drew: true,
         rearmed,

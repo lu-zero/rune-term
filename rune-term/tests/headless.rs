@@ -121,7 +121,7 @@ fn an_unsized_shell_leaves_the_pane_empty() {
     rune_term_core::render::sync_active_host(
         &mut host,
         &mut grid,
-        &mut images,
+        Some(&mut images),
         &gpu.device,
         &gpu.queue,
         palette.clone(),
@@ -138,7 +138,7 @@ fn an_unsized_shell_leaves_the_pane_empty() {
     rune_term_core::render::sync_active_host(
         &mut host,
         &mut grid,
-        &mut images,
+        Some(&mut images),
         &gpu.device,
         &gpu.queue,
         palette,
@@ -148,6 +148,70 @@ fn an_unsized_shell_leaves_the_pane_empty() {
         true,
     );
     assert!(grid.is_empty(), "the pane kept the last shell's cells");
+}
+
+#[test]
+fn every_pane_on_screen_fills_its_own_grid() {
+    let gpu = rune::render::Gpu::headless();
+    let format = wgpu::TextureFormat::Rgba8Unorm;
+    let mut images = rune_term_core::images::Images::new(&gpu.device, format);
+    let engine = librio::Engine::new(std::sync::Arc::new(NullDelegate));
+    let mut terminal = rune_term_core::terminal::Terminal::new(String::new());
+    let mut ids = Vec::new();
+    for mark in 1..=2 {
+        let surface = engine
+            .create_surface(&librio::SurfaceDesc::default())
+            .expect("surface");
+        surface.inject_output(b"pane");
+        let render = librio::RenderState::new(&surface);
+        ids.push(surface.id());
+        terminal.insert(rune_term_core::surfaces::HostSurface {
+            surface: std::sync::Arc::new(surface),
+            render,
+            mark,
+            title: String::new(),
+            bell: false,
+            progress: None,
+            blink: true,
+            frame_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            resized: std::sync::atomic::AtomicBool::new(false),
+            cols: 80,
+            rows: 24,
+            cell_px: (10, 20),
+            wheel_remainder: 0.0,
+            pointer_button: None,
+            selecting: false,
+            scrollbar: rune_term_core::scrollback::ScrollbarState::default(),
+            hover_link: None,
+            hover_probe: None,
+        });
+    }
+    terminal.show(ids[0]);
+    let mut shown = term_grid::GridRenderer::new(&gpu.device, &gpu.queue, format);
+    let mut beside = term_grid::GridRenderer::new(&gpu.device, &gpu.queue, format);
+    let mut panes = [
+        rune_term_core::terminal::PaneGrid {
+            surface: ids[0],
+            grid: &mut shown,
+            stale: true,
+        },
+        rune_term_core::terminal::PaneGrid {
+            surface: ids[1],
+            grid: &mut beside,
+            stale: true,
+        },
+    ];
+    terminal.sync_render(
+        &mut panes,
+        &mut images,
+        &gpu.device,
+        &gpu.queue,
+        rune_term_core::theme::default_palette(),
+        "",
+        false,
+    );
+    assert!(!shown.is_empty(), "the shown pane has its cells");
+    assert!(!beside.is_empty(), "the pane beside it has its own");
 }
 
 struct NullDelegate;

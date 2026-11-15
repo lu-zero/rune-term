@@ -19,6 +19,14 @@ pub struct RenderReport {
     pub rearms: usize,
 }
 
+/// A pane on screen and the grid it draws into.
+pub struct PaneGrid<'a> {
+    pub surface: SurfaceId,
+    pub grid: &'a mut GridRenderer,
+    /// The grid is new, or last drew another surface.
+    pub stale: bool,
+}
+
 #[derive(Default)]
 pub struct State {
     surfaces: Surfaces,
@@ -151,10 +159,13 @@ impl State {
         self.primary().and_then(|host| host.hover_link.clone())
     }
 
+    /// Fill each pane's grid from its surface. Search, hover, preedit, and
+    /// images belong to the shown surface. A surface no pane shows still has
+    /// its damage consumed.
     #[allow(clippy::too_many_arguments)]
     pub fn sync_render(
         &mut self,
-        grid: &mut GridRenderer,
+        panes: &mut [PaneGrid<'_>],
         images: &mut Images,
         device: &wgpu::Device,
         queue: &wgpu::Queue,
@@ -173,33 +184,51 @@ impl State {
             || preedit != self.grid_draw.preedit
             || palette.name != self.grid_draw.theme
             || self.grid_draw.shown != active;
+        let theme_changed = palette.name != self.grid_draw.theme;
 
         let mut report = RenderReport::default();
         let mut cursor_cell = self.cursor_cell;
         for host in self.surfaces.iter_mut() {
-            let is_active = Some(host.surface.id()) == active;
-            if is_active {
-                let result = render::sync_active_host(
+            let id = host.surface.id();
+            let Some(pane) = panes.iter_mut().find(|pane| pane.surface == id) else {
+                if render::rearm_background(host) {
+                    report.rearms += 1;
+                }
+                continue;
+            };
+            let result = if Some(id) == active {
+                render::sync_active_host(
                     host,
-                    grid,
-                    images,
+                    pane.grid,
+                    Some(&mut *images),
                     device,
                     queue,
                     palette.clone(),
                     search_pattern,
                     hover.as_ref(),
                     preedit.as_ref(),
-                    force_upload,
-                );
-                if result.rearmed {
-                    report.rearms += 1;
-                }
-                if result.drew {
-                    cursor_cell = result.cursor_cell;
-                    report.drew = true;
-                }
-            } else if render::rearm_background(host) {
+                    force_upload || pane.stale,
+                )
+            } else {
+                render::sync_active_host(
+                    host,
+                    pane.grid,
+                    None,
+                    device,
+                    queue,
+                    palette.clone(),
+                    "",
+                    None,
+                    None,
+                    theme_changed || pane.stale,
+                )
+            };
+            if result.rearmed {
                 report.rearms += 1;
+            }
+            if result.drew && Some(id) == active {
+                cursor_cell = result.cursor_cell;
+                report.drew = true;
             }
         }
         if report.drew {

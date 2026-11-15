@@ -26,6 +26,21 @@ pub fn area(model: &Model, cx: &mut Cx<Model>) -> El {
     search::mount(model, pane)
 }
 
+/// Each pane on screen: its effect mark and the surface it shows. A lone leaf
+/// is the one pane at [`PANE_MARK`], showing the selected shell.
+pub fn visible(model: &Model) -> Vec<(u32, librio::SurfaceId)> {
+    let Some(root @ Node::Split { .. }) = model.tabs.get(model.active).map(|tab| &tab.root) else {
+        return model
+            .terminal
+            .primary()
+            .map(|host| vec![(PANE_MARK, host.surface.id())])
+            .unwrap_or_default();
+    };
+    let mut panes = Vec::new();
+    crate::tabs::walk(root, &mut |leaf| panes.push((leaf.mark, leaf.surface)));
+    panes
+}
+
 /// The surface created at startup belongs to the one leaf.
 pub fn attach_initial(model: &mut Model, id: librio::SurfaceId) {
     let Some(tab) = model.tabs.get_mut(model.active) else {
