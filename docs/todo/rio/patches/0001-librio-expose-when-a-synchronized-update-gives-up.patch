@@ -1,0 +1,91 @@
+From e2381b150897fb6047adbaed03d62408a7266346 Mon Sep 17 00:00:00 2001
+From: Luca Barbato <lu_zero@gentoo.org>
+Date: Sun, 15 Nov 2026 12:40:44 +0100
+Subject: [PATCH] librio: expose when a synchronized update gives up
+
+A synchronized update (mode 2026) holds RenderState::update on the last
+snapshot until the program ends it, or until SYNC_UPDATE_TIMEOUT. With
+a PTY, the IO loop wakes at that deadline. A host that feeds
+inject_output itself, such as librio-wasm or an embedder that owns its
+transport, has no such loop: a program that never ends its update sends
+nothing more to cause a wakeup, so the pane stays on the old frame.
+
+Surface::sync_update_deadline returns the instant the hold gives up, so
+the host can schedule an update for it.
+
+Assisted-by: Claude:claude-opus-5-5
+---
+ librio/src/lib.rs | 30 ++++++++++++++++++++++++++++++
+ 1 file changed, 30 insertions(+)
+
+diff --git a/librio/src/lib.rs b/librio/src/lib.rs
+index 6db8c8e7b2..1fc9fe80cd 100644
+--- a/librio/src/lib.rs
++++ b/librio/src/lib.rs
+@@ -1060,16 +1060,24 @@ impl Surface {
+     pub fn foreground_process_name(&self) -> String {
+         #[cfg(target_os = "windows")]
+         return String::new();
+ 
+         #[cfg(not(target_os = "windows"))]
+         teletypewriter::foreground_process_name(self.main_fd, self.shell_pid)
+     }
+ 
++    /// When the active synchronized update (mode 2026) gives up, if one is
++    /// active. Until then [`RenderState::update`] keeps the last snapshot. A
++    /// host that feeds [`Surface::inject_output`] itself updates again at this
++    /// instant: a program that never ends its update sends nothing to wake it.
++    pub fn sync_update_deadline(&self) -> Option<rio_vt::time::Instant> {
++        self.terminal.lock().sync_update_deadline()
++    }
++
+     /// Inject bytes into the terminal's DISPLAY (the VT parser), as if they
+     /// came from the child process — NOT into the PTY input. Used to replay
+     /// saved scrollback on restore; the shell never sees these bytes, so it
+     /// can't execute them. Bytes are plain output (convert `\n` to `\r\n`
+     /// upstream if you want proper line starts).
+     ///
+     /// The parser is persistent: an escape sequence split across two
+     /// calls resumes where it left off, exactly like PTY chunking.
+@@ -1403,16 +1411,38 @@ mod tests {
+         assert_eq!(row_10(&state), Some('a'));
+ 
+         expire_hold(&surface);
+         state.update();
+         assert_eq!(row_10(&state), Some('b'));
+         assert!(!surface.terminal().lock().synchronized_output());
+     }
+ 
++    /// The deadline a host waits for is the one `RenderState` gives up at.
++    #[test]
++    fn sync_update_deadline_is_when_the_hold_gives_up() {
++        let (_engine, surface, mut state) = hold_fixture();
++        assert_eq!(surface.sync_update_deadline(), None);
++
++        surface.inject_output(b"\x1b[10;1Ha");
++        state.update();
++        surface.inject_output(b"\x1b[?2026h\x1b[10;1Hb");
++        let deadline = surface.sync_update_deadline().expect("held");
++        assert!(deadline > rio_vt::time::Instant::now());
++
++        expire_hold(&surface);
++        assert!(
++            surface.sync_update_deadline().expect("still held")
++                <= rio_vt::time::Instant::now()
++        );
++        state.update();
++        assert_eq!(row_10(&state), Some('b'));
++        assert_eq!(surface.sync_update_deadline(), None, "the update ended");
++    }
++
+     /// Every BSU re-arms the limit, so a stream of back-to-back updates is
+     /// not cut off mid-frame.
+     #[test]
+     fn render_state_hold_limit_rearms_on_bsu() {
+         let (_engine, surface, mut state) = hold_fixture();
+ 
+         surface.inject_output(b"\x1b[10;1Ha");
+         state.update();
+-- 
+2.48.1
+

@@ -1,0 +1,67 @@
+--- a/rune-term/src/delegate.rs
++++ b/rune-term/src/delegate.rs
+@@ -411,12 +411,29 @@
+     }
+     #[cfg(feature = "pty")]
+     model.shared.resize_links(&mut model.terminal);
++    end_stuck_updates(model, tx);
+     if crate::scrollback::refresh(model, now, tx) {
+         chrome = true;
+     }
+     chrome
+ }
+ 
++/// A synchronized update a program never ends gives up at its deadline, but
++/// only an update notices that. No output may come to cause one, so wake for it.
++fn end_stuck_updates(model: &mut Model, tx: &mut Tx) {
++    let now = std::time::Instant::now();
++    for host in model.terminal.iter_mut() {
++        let Some(deadline) = host.surface.sync_update_deadline() else {
++            continue;
++        };
++        if deadline <= now {
++            host.frame_flag.store(true, Ordering::Release);
++        } else {
++            tx.wake_after(deadline - now);
++        }
++    }
++}
++
+ fn apply(model: &mut Model, event: HostEvent, tx: &mut Tx) -> bool {
+     match event {
+         HostEvent::Action { id, action } => apply_action(model, id, action),
+@@ -571,6 +588,34 @@
+     }
+ 
+     #[test]
++    fn an_update_the_program_never_ends_redraws_at_its_deadline() {
++        let model = host();
++        let host = model.terminal.primary().unwrap();
++        host.surface.inject_output(b"\x1b[?2026hheld");
++        host.frame_flag.store(false, Ordering::Release);
++        let mut rt = latch(model, false);
++        let flag = |rt: &Runtime<Model>| {
++            rt.state
++                .terminal
++                .primary()
++                .unwrap()
++                .frame_flag
++                .load(Ordering::Acquire)
++        };
++        assert!(!flag(&rt), "the update is still held");
++        // A poll's wakes are scheduled by the frame that follows it.
++        rt.frame(0.0);
++        let wake = rt.wake_deadline().expect("a wake for the deadline");
++        assert!((0.5..=1.0).contains(&wake), "woke at {wake}");
++
++        std::thread::sleep(std::time::Duration::from_millis(1050));
++        rt.update(|model, tx| {
++            poll(model, 0.0, tx);
++        });
++        assert!(flag(&rt), "the held pane was not redrawn");
++    }
++
++    #[test]
+     fn the_last_shell_closes_the_window() {
+         let model = host();
+         let id = model.terminal.primary().unwrap().surface.id();
