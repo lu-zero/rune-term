@@ -43,6 +43,9 @@ pub fn sync_active_host(
         host.hover_probe = None;
     }
     if host.cell_px.0 == 0 || host.cell_px.1 == 0 {
+        // The shell has no size yet, so it has no cells. The pane must not
+        // keep the last shell's cells.
+        grid.clear();
         return SyncResult {
             drew: false,
             rearmed,

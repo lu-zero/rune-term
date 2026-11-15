@@ -136,6 +136,9 @@ impl GridRenderer {
         };
         self.cursor = source.cursor();
         if cols == 0 || rows == 0 || cell_px.0 == 0 || cell_px.1 == 0 {
+            // No cells to draw. The old ones belong to the last shell, so the
+            // pane must not keep them.
+            self.clear();
             source.reset_dirty();
             return;
         }
@@ -193,6 +196,21 @@ impl GridRenderer {
         }
         self.ready = true;
         source.reset_dirty();
+    }
+
+    /// Drop the packed cells. The pane shows its background until the next
+    /// upload. A shell with no size yet leaves the last shell's cells behind
+    /// otherwise.
+    pub fn clear(&mut self) {
+        self.bg.clear();
+        self.text.clear();
+        self.text_count = 0;
+        self.ready = false;
+    }
+
+    /// Whether any cell is packed.
+    pub fn is_empty(&self) -> bool {
+        self.bg.is_empty()
     }
 
     /// Write this frame's copy. Call before the render pass that [`draw`]s it.

@@ -83,6 +83,88 @@ fn chrome_and_a_solid_slot() {
     let _ = std::fs::remove_file(&path);
 }
 
+#[test]
+fn an_unsized_shell_leaves_the_pane_empty() {
+    let gpu = rune::render::Gpu::headless();
+    let format = wgpu::TextureFormat::Rgba8Unorm;
+    let mut grid = term_grid::GridRenderer::new(&gpu.device, &gpu.queue, format);
+    let mut images = rune_term_core::images::Images::new(&gpu.device, format);
+    let palette = rune_term_core::theme::default_palette();
+
+    let engine = librio::Engine::new(std::sync::Arc::new(NullDelegate));
+    let surface = engine
+        .create_surface(&librio::SurfaceDesc::default())
+        .expect("surface");
+    let render = librio::RenderState::new(&surface);
+    let mut host = rune_term_core::surfaces::HostSurface {
+        surface,
+        render,
+        mark: 1,
+        title: String::new(),
+        bell: false,
+        progress: None,
+        blink: true,
+        frame_flag: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
+        resized: std::sync::atomic::AtomicBool::new(false),
+        cols: 80,
+        rows: 24,
+        cell_px: (10, 20),
+        wheel_remainder: 0.0,
+        pointer_button: None,
+        selecting: false,
+        scrollbar: rune_term_core::scrollback::ScrollbarState::default(),
+        hover_link: None,
+        hover_probe: None,
+    };
+
+    host.render.update();
+    rune_term_core::render::sync_active_host(
+        &mut host,
+        &mut grid,
+        &mut images,
+        &gpu.device,
+        &gpu.queue,
+        palette.clone(),
+        "",
+        None,
+        None,
+        true,
+    );
+    assert!(!grid.is_empty(), "the shell's cells are in the pane");
+
+    // A shell with no size yet has no cells. The pane must not keep the last
+    // shell's cells.
+    host.cell_px = (0, 0);
+    rune_term_core::render::sync_active_host(
+        &mut host,
+        &mut grid,
+        &mut images,
+        &gpu.device,
+        &gpu.queue,
+        palette,
+        "",
+        None,
+        None,
+        true,
+    );
+    assert!(grid.is_empty(), "the pane kept the last shell's cells");
+}
+
+struct NullDelegate;
+
+impl librio::SurfaceDelegate for NullDelegate {
+    fn wakeup(&self, _surface: librio::SurfaceId) {}
+    fn action(&self, _surface: librio::SurfaceId, _action: librio::Action) {}
+    fn clipboard_write(
+        &self,
+        _surface: librio::SurfaceId,
+        _kind: librio::ClipboardType,
+        _text: String,
+    ) {
+    }
+    fn close_surface(&self, _surface: librio::SurfaceId) {}
+}
+
 fn bytes(color: Color) -> [u8; 3] {
     [
         (srgb_encode(color.r) * 255.0).round() as u8,
