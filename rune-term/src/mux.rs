@@ -1076,7 +1076,7 @@ mod tests {
         // A two-line prompt that, like readline's, goes back up and redraws itself
         // whenever the pane is resized, after history the screen was cleared into.
         let prompt = r#"p() { printf '\033[1A\r\033[Jprompt\n> '; }; trap p WINCH; printf 'old1\nold2\nold3\n\033[H\033[2Jprompt\n> '; while :; do sleep 0.01; done"#;
-        Command::new("tmux")
+        let out = Command::new("tmux")
             .args([
                 "-L",
                 &server.0,
@@ -1086,11 +1086,20 @@ mod tests {
                 "sweep:0.0",
                 prompt,
             ])
-            .status()
+            .output()
             .unwrap();
-        assert!(until(&mut model, |model| leaves(
-            &model.tabs[model.active].root
-        ) == 2));
+        assert!(
+            out.status.success(),
+            "split-window: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert!(
+            until(&mut model, |model| leaves(&model.tabs[model.active].root)
+                == 2),
+            "the split did not reach the tree: {} tabs, active {}",
+            model.tabs.len(),
+            model.active
+        );
         let mut ids = Vec::new();
         crate::tabs::walk(&model.tabs[model.active].root, &mut |leaf| {
             ids.push(leaf.surface)
