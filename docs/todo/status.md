@@ -143,6 +143,11 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       creation-time backend semantics remain. A tab group (a labelled group of
       tabs in the strip) is in the tree, ready for a multiplexer session group.
       Pressing its label collapses it to `name | count` and the selected tab.
+      Dragging a tab reorders the strip: a group's tab moves only among that
+      group's tabs, and dragging the label moves the group as one block. The
+      order is the strip's own, not tmux's. Tearing a tab off into a window
+      of its own is not built: one `Model` owns the window's surfaces, PTY
+      routes and muxes.
       Design:
       [`settings-profiles.md`](./settings-profiles.md),
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).

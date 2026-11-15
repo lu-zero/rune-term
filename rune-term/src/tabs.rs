@@ -1,10 +1,12 @@
 //! Tabs in one window. Each tab is one shell. The strip selects one,
 //! and that shell is the pane keys and the grid follow.
 
+use std::ops::Range;
+
 use librio::SurfaceId;
 use rune::Tx;
 
-use crate::chrome::{Leaf, LeafId, Node, Tab};
+use crate::chrome::{Leaf, LeafId, Node, Tab, TabGroupId};
 use crate::delegate;
 use crate::model::Model;
 
@@ -138,6 +140,93 @@ pub fn prune_group(model: &mut Model, group: crate::chrome::TabGroupId) {
     if !attached && !model.tabs.iter().any(|t| t.group == Some(group)) {
         model.tab_groups.retain(|g| g.id != group);
     }
+}
+
+/// A drag along the strip. `group` is the group whose tabs it reorders, or `None` for the
+/// strip's blocks; `from` and `to` count within that.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct StripDrag {
+    pub group: Option<TabGroupId>,
+    pub from: usize,
+    pub to: usize,
+    pub dx: f32,
+}
+
+/// What the strip moves as one: a group with its tabs, or a tab in no group.
+pub(crate) fn blocks(tabs: &[Tab]) -> Vec<Range<usize>> {
+    let mut blocks: Vec<Range<usize>> = Vec::new();
+    for (index, tab) in tabs.iter().enumerate() {
+        match blocks.last_mut() {
+            Some(last) if tab.group.is_some() && tabs[last.start].group == tab.group => {
+                last.end = index + 1;
+            }
+            _ => blocks.push(index..index + 1),
+        }
+    }
+    blocks
+}
+
+/// Where an item dragged `dx` points from slot `from` lands: past a neighbour once it has
+/// covered half of it.
+pub(crate) fn landing(widths: &[f32], from: usize, dx: f32) -> usize {
+    let (mut to, mut travel) = (from, dx);
+    while to + 1 < widths.len() && travel > widths[to + 1] / 2.0 {
+        travel -= widths[to + 1];
+        to += 1;
+    }
+    while to > 0 && travel < -widths[to - 1] / 2.0 {
+        travel += widths[to - 1];
+        to -= 1;
+    }
+    to
+}
+
+/// Move block `from` to `to`. The selected tab stays selected.
+pub(crate) fn move_block(model: &mut Model, from: usize, to: usize) {
+    let mut blocks = blocks(&model.tabs);
+    if from >= blocks.len() || to >= blocks.len() {
+        return;
+    }
+    let moved = blocks.remove(from);
+    blocks.insert(to, moved);
+    reorder(model, blocks.into_iter().flatten().collect());
+}
+
+/// Move the tab at `from` among `group`'s tabs to `to`.
+pub(crate) fn move_in_group(model: &mut Model, group: TabGroupId, from: usize, to: usize) {
+    let Some(range) = blocks(&model.tabs)
+        .into_iter()
+        .find(|range| model.tabs[range.start].group == Some(group))
+    else {
+        return;
+    };
+    let mut inside: Vec<usize> = range.clone().collect();
+    if from >= inside.len() || to >= inside.len() {
+        return;
+    }
+    let moved = inside.remove(from);
+    inside.insert(to, moved);
+    let order = (0..range.start)
+        .chain(inside)
+        .chain(range.end..model.tabs.len())
+        .collect();
+    reorder(model, order);
+}
+
+/// `order` lists the old index of each tab in its new place.
+fn reorder(model: &mut Model, order: Vec<usize>) {
+    let mut old: Vec<Option<Tab>> = std::mem::take(&mut model.tabs)
+        .into_iter()
+        .map(Some)
+        .collect();
+    model.tabs = order
+        .iter()
+        .map(|index| old[*index].take().expect("each tab once"))
+        .collect();
+    model.active = order
+        .iter()
+        .position(|index| *index == model.active)
+        .unwrap_or(0);
 }
 
 /// Bring the selected tab back into the strip and focus its pane. Opening one

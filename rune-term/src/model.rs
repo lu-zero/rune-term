@@ -26,6 +26,9 @@ pub struct Model {
     pub pending_link_open: Option<String>,
     /// The name prompt for a new tmux session, while it is open.
     pub session_name: Option<rune::TextEdit>,
+    pub(crate) strip_drag: Option<crate::tabs::StripDrag>,
+    /// A drop just ended on the strip. Rune runs the press its release also makes after it.
+    pub(crate) strip_dropped: bool,
     /// The settings window. It is the terminal's to open.
     pub settings: Option<AppHandle<SettingsModel>>,
     pub(crate) shared: Arc<Shared>,
@@ -77,6 +80,8 @@ pub fn init() -> Model {
         search: SearchUi::default(),
         pending_link_open: None,
         session_name: None,
+        strip_drag: None,
+        strip_dropped: false,
         settings: None,
         shared: std::sync::Arc::clone(&shared),
         pending_inject,

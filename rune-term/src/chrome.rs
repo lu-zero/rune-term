@@ -2,11 +2,15 @@
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-use rune::{col, el, row, text, Color, Cx, El, PopupItem, PopupMenu, TextEdit, Tx};
+use std::ops::Range;
+use std::rc::Rc;
+
+use rune::{col, el, row, text, Color, Cx, Drag, El, Phase, PopupItem, PopupMenu, TextEdit, Tx};
 use rune_kit::{Button, ButtonVariant, Dialog, Kit, TextInput};
 
 use crate::chrome_view;
 use crate::model::Model;
+use crate::tabs::StripDrag;
 use crate::theme::{self, Palette};
 
 pub const PANE_MARK: u32 = 1;
@@ -18,6 +22,8 @@ pub use crate::split::{Leaf, LeafId, Node};
 pub const TITLEBAR_H: f32 = 38.0;
 /// One hit target. A short title and a long one use this same box.
 const TAB_W: f32 = 132.0;
+/// Between the strip's items.
+const STRIP_GAP: f32 = 6.0;
 pub(crate) const TAB_PAD_X: f32 = 14.0;
 pub(crate) const TAB_RADIUS: f32 = 7.0;
 
@@ -45,7 +51,7 @@ pub(crate) fn title_strip(band: f32, leading: f32, trailing: f32, fill: Color) -
         .center_y()
         .pl(leading + 10.0)
         .pr(trailing + 10.0)
-        .gap(6.0)
+        .gap(STRIP_GAP)
         .window_drag()
 }
 
@@ -244,87 +250,227 @@ fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {
     if model.tabs.is_empty() {
         return strip.child(new_tab_button(tab_h, p));
     }
-    for index in 0..model.tabs.len() {
+    let pitch = TAB_W + STRIP_GAP;
+    let blocks = crate::tabs::blocks(&model.tabs);
+    let widths: Rc<[f32]> = blocks
+        .iter()
+        .map(|block| block_width(model, block, pitch, cx))
+        .collect();
+    let drag = model.strip_drag.as_ref();
+    let moved = drag
+        .filter(|drag| drag.group.is_none())
+        .and_then(|drag| widths.get(drag.from))
+        .copied()
+        .unwrap_or(0.0);
+    for (at, block) in blocks.iter().enumerate() {
+        let index = block.start;
         let tab_group = model.tabs[index].group;
-        let starts_group =
-            tab_group.is_some() && (index == 0 || model.tabs[index - 1].group != tab_group);
         let group = tab_group.and_then(|id| group_of(model, id));
-        if let Some(group) = group.filter(|_| starts_group) {
-            let count = model
-                .tabs
-                .iter()
-                .filter(|tab| tab.group == Some(group.id))
-                .count();
-            strip = strip.child(group_label(group, count, tab_h, p));
-        }
-
-        let active = index == model.active;
-        if group.is_some_and(|group| group.collapsed) && !active {
-            continue;
-        }
-        let hue = tab_group
-            .and_then(|id| group_of(model, id))
-            .map(|group| group_color(&group.label, p));
-        let color = if active {
-            text_color(p)
-        } else if let Some(hue) = hue {
-            hue
-        } else {
-            theme::linear(p.muted)
+        let block_dx = slide(drag, None, at, moved);
+        let block_dragged = dragged(drag, None, at);
+        let lane = Rc::clone(&widths);
+        let on_block = move |model: &mut Model, drag: &mut Drag, tx: &mut Tx| {
+            drag_strip(model, None, at, &lane, drag, tx);
         };
-        let mut tab = row()
-            .key(format!("tab-{index}"))
-            .h(tab_h)
-            .w(TAB_W)
-            .pl(TAB_PAD_X)
-            .pr(4.0)
-            .gap(6.0)
-            .center_y()
-            .radius(TAB_RADIUS)
-            .preserve_focus_on_press(true)
-            .on_press_tx(move |model: &mut Model, tx| {
-                if crate::tabs::select(model, index) {
-                    crate::tabs::focus_active(model, tx);
-                } else {
-                    tx.live_only();
-                }
-            })
-            .on_secondary_press_local(move |model: &mut Model, point, tx| {
-                tab_menu(model, index, point.window(), tx);
-            });
-        if active {
-            tab = tab.fill(theme::linear(p.bg)).border(
-                1.0,
-                if let Some(hue) = hue {
-                    hue
-                } else {
-                    theme::linear(p.active_border)
-                },
-            );
-        } else if let Some(hue) = hue {
-            tab = tab.fill(wash(hue)).border(1.0, hue);
+        if let Some(group) = group {
+            let label = group_label(group, block.len(), tab_h, p).on_drag(on_block.clone());
+            strip = strip.child(follow(label, block_dx, block_dragged));
         }
-        let label = text(tab_caption(model, index))
-            .grow(1.0)
-            .min_w(0.0)
-            .color(color)
-            .truncate();
-        let close = row()
-            .key(format!("tab-close-{index}"))
-            .w(tab_h - 8.0)
-            .h(tab_h - 8.0)
-            .center()
-            .radius(TAB_RADIUS)
-            .hover(hover_overlay(p))
-            .preserve_focus_on_press(true)
-            .on_press_tx(move |model: &mut Model, tx| {
-                crate::tabs::close(model, index, tx);
-                crate::tabs::focus_active(model, tx);
-            })
-            .child(text("×").color(theme::linear(p.muted)));
-        strip = strip.child(tab.child(label).child(close));
+        let inside: Rc<[f32]> = vec![pitch; block.len()].into();
+        for index in block.clone() {
+            let active = index == model.active;
+            if group.is_some_and(|group| group.collapsed) && !active {
+                continue;
+            }
+            let at_in = index - block.start;
+            let tab = tab_el(model, index, tab_h, p);
+            let tab = match tab_group {
+                // A collapsed group shows one tab, which has nowhere to go.
+                Some(id) if group.is_some_and(|group| group.collapsed) => {
+                    let tab =
+                        tab.on_drag(move |model: &mut Model, drag: &mut Drag, tx: &mut Tx| {
+                            drag_strip(model, Some(id), 0, &[pitch], drag, tx);
+                        });
+                    follow(tab, block_dx, block_dragged)
+                }
+                Some(id) => {
+                    let lane = Rc::clone(&inside);
+                    let dx = block_dx + slide(drag, Some(id), at_in, pitch);
+                    let held = block_dragged || dragged(drag, Some(id), at_in);
+                    let tab =
+                        tab.on_drag(move |model: &mut Model, drag: &mut Drag, tx: &mut Tx| {
+                            drag_strip(model, Some(id), at_in, &lane, drag, tx);
+                        });
+                    follow(tab, dx, held)
+                }
+                None => follow(tab.on_drag(on_block.clone()), block_dx, block_dragged),
+            };
+            strip = strip.child(tab);
+        }
     }
     strip.child(new_tab_button(tab_h, p))
+}
+
+fn tab_el(model: &Model, index: usize, tab_h: f32, p: &Palette) -> El {
+    let tab_group = model.tabs[index].group;
+    let active = index == model.active;
+    let hue = tab_group
+        .and_then(|id| group_of(model, id))
+        .map(|group| group_color(&group.label, p));
+    let color = if active {
+        text_color(p)
+    } else if let Some(hue) = hue {
+        hue
+    } else {
+        theme::linear(p.muted)
+    };
+    let mut tab = row()
+        .key(format!("tab-{index}"))
+        .h(tab_h)
+        .w(TAB_W)
+        .pl(TAB_PAD_X)
+        .pr(4.0)
+        .gap(6.0)
+        .center_y()
+        .radius(TAB_RADIUS)
+        .preserve_focus_on_press(true)
+        .on_press_tx(move |model: &mut Model, tx| {
+            if std::mem::take(&mut model.strip_dropped) {
+                return;
+            }
+            if crate::tabs::select(model, index) {
+                crate::tabs::focus_active(model, tx);
+            } else {
+                tx.live_only();
+            }
+        })
+        .on_secondary_press_local(move |model: &mut Model, point, tx| {
+            tab_menu(model, index, point.window(), tx);
+        });
+    if active {
+        tab = tab.fill(theme::linear(p.bg)).border(
+            1.0,
+            if let Some(hue) = hue {
+                hue
+            } else {
+                theme::linear(p.active_border)
+            },
+        );
+    } else if let Some(hue) = hue {
+        tab = tab.fill(wash(hue)).border(1.0, hue);
+    }
+    let label = text(tab_caption(model, index))
+        .grow(1.0)
+        .min_w(0.0)
+        .color(color)
+        .truncate();
+    let close = row()
+        .key(format!("tab-close-{index}"))
+        .w(tab_h - 8.0)
+        .h(tab_h - 8.0)
+        .center()
+        .radius(TAB_RADIUS)
+        .hover(hover_overlay(p))
+        .preserve_focus_on_press(true)
+        .on_press_tx(move |model: &mut Model, tx| {
+            crate::tabs::close(model, index, tx);
+            crate::tabs::focus_active(model, tx);
+        })
+        .child(text("×").color(theme::linear(p.muted)));
+    tab.child(label).child(close)
+}
+
+/// Points a block takes in the strip, its trailing gap included.
+fn block_width(model: &Model, block: &Range<usize>, pitch: f32, cx: &mut Cx<Model>) -> f32 {
+    let Some(group) = model.tabs[block.start]
+        .group
+        .and_then(|id| group_of(model, id))
+    else {
+        return pitch;
+    };
+    let label = cx
+        .layout_size(&format!("tab-group-{}", group.label))
+        .map_or(0.0, |size| size[0] + STRIP_GAP);
+    let shown = if group.collapsed {
+        usize::from(block.contains(&model.active))
+    } else {
+        block.len()
+    };
+    label + shown as f32 * pitch
+}
+
+/// How far item `me` of the drag's lane slides: the dragged one with the pointer, the ones
+/// it passed by its width the other way.
+fn slide(drag: Option<&StripDrag>, group: Option<TabGroupId>, me: usize, moved: f32) -> f32 {
+    let Some(drag) = drag.filter(|drag| drag.group == group) else {
+        return 0.0;
+    };
+    if me == drag.from {
+        drag.dx
+    } else if drag.from < me && me <= drag.to {
+        -moved
+    } else if drag.to <= me && me < drag.from {
+        moved
+    } else {
+        0.0
+    }
+}
+
+fn dragged(drag: Option<&StripDrag>, group: Option<TabGroupId>, me: usize) -> bool {
+    drag.is_some_and(|drag| drag.group == group && drag.from == me)
+}
+
+/// The dragged item follows the pointer at once, above the rest; the others spring aside.
+fn follow(el: El, dx: f32, dragged: bool) -> El {
+    let el = el.offset(dx, 0.0);
+    if dragged {
+        el.raise().offset_motion(rune::Anim::INSTANT)
+    } else {
+        el
+    }
+}
+
+/// A press and release without travel stays a click: only a move starts the drag.
+fn drag_strip(
+    model: &mut Model,
+    group: Option<TabGroupId>,
+    from: usize,
+    widths: &[f32],
+    drag: &mut Drag,
+    tx: &mut Tx,
+) {
+    match drag.phase {
+        Phase::Down => {
+            model.strip_dropped = false;
+            tx.live_only();
+        }
+        Phase::Move => {
+            // Held inside its lane, as a group's tab cannot leave the group.
+            let before: f32 = widths[..from].iter().sum();
+            let after: f32 = widths[from + 1..].iter().sum();
+            let dx = drag.dx.clamp(-before, after);
+            model.strip_drag = Some(StripDrag {
+                group,
+                from,
+                to: crate::tabs::landing(widths, from, dx),
+                dx,
+            });
+        }
+        Phase::Up => {
+            let Some(done) = model.strip_drag.take() else {
+                return;
+            };
+            model.strip_dropped = true;
+            if drag.cancelled() {
+                return;
+            }
+            match done.group {
+                None => crate::tabs::move_block(model, done.from, done.to),
+                Some(group) => crate::tabs::move_in_group(model, group, done.from, done.to),
+            }
+            crate::tabs::focus_active(model, tx);
+        }
+    }
 }
 
 /// A press collapses the group to this label, or opens it again.
@@ -340,6 +486,9 @@ fn group_label(group: &TabGroup, count: usize, tab_h: f32, p: &Palette) -> El {
         .key(format!("tab-group-{label}"))
         .preserve_focus_on_press(true)
         .on_press_tx(move |model: &mut Model, tx| {
+            if std::mem::take(&mut model.strip_dropped) {
+                return;
+            }
             if let Some(group) = model.tab_groups.iter_mut().find(|group| group.id == id) {
                 group.collapsed = !group.collapsed;
             }
@@ -520,6 +669,86 @@ mod tests {
         let label = rect(&rt, "tab-group-dev");
         let tab = rect(&rt, "tab-1");
         assert!(label[0] < tab[0], "the group label comes first");
+    }
+
+    fn order(rt: &Runtime<Model>) -> Vec<librio::SurfaceId> {
+        rt.state
+            .tabs
+            .iter()
+            .map(|tab| crate::tabs::surface_of(tab).unwrap())
+            .collect()
+    }
+
+    fn drag(rt: &mut Runtime<Model>, key: &str, dx: f32) {
+        let (x, y) = rt.find(key).expect(key);
+        rt.pointer_down(x, y);
+        for step in 1..=4 {
+            rt.pointer_move(x + dx * step as f32 / 4.0, y);
+            rt.frame(0.0);
+        }
+        rt.pointer_up(x + dx, y);
+        rt.frame(0.0);
+    }
+
+    #[test]
+    fn a_dropped_tab_lands_past_the_neighbours_it_half_covered() {
+        assert_eq!(crate::tabs::landing(&[100.0, 40.0, 100.0], 0, 30.0), 1);
+        assert_eq!(crate::tabs::landing(&[100.0, 40.0, 100.0], 0, 19.0), 0);
+        assert_eq!(crate::tabs::landing(&[100.0, 40.0, 100.0], 0, 500.0), 2);
+        assert_eq!(crate::tabs::landing(&[100.0, 40.0, 100.0], 2, -71.0), 1);
+    }
+
+    #[test]
+    fn dragging_a_tab_reorders_the_strip_and_a_click_still_selects() {
+        let mut model = host();
+        crate::tabs::open(&mut model);
+        crate::tabs::open(&mut model);
+        let mut rt = Runtime::new(model, view, (900.0, 500.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        let [a, b, c] = order(&rt)[..] else {
+            panic!("three tabs")
+        };
+        drag(&mut rt, "tab-0", (TAB_W + STRIP_GAP) * 1.2);
+        assert_eq!(order(&rt), [b, a, c]);
+        assert_eq!(rt.state.active, 2, "the selected tab stays selected");
+        let (x, y) = rt.find("tab-0").unwrap();
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        rt.frame(0.0);
+        assert_eq!(rt.state.active, 0);
+        assert_eq!(order(&rt), [b, a, c]);
+    }
+
+    #[test]
+    fn a_group_moves_as_one_and_its_tabs_stay_inside_it() {
+        let mut model = host();
+        let group = TabGroupId(1);
+        model.tab_groups.push(TabGroup {
+            id: group,
+            label: "dev".to_owned(),
+            collapsed: false,
+        });
+        crate::tabs::open(&mut model);
+        crate::tabs::open(&mut model);
+        model.tabs[1].group = Some(group);
+        model.tabs[2].group = Some(group);
+        let mut rt = Runtime::new(model, view, (900.0, 500.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.frame(0.0);
+        let [a, b, c] = order(&rt)[..] else {
+            panic!("three tabs")
+        };
+        let pitch = TAB_W + STRIP_GAP;
+        drag(&mut rt, "tab-2", -pitch * 4.0);
+        assert_eq!(
+            order(&rt),
+            [a, c, b],
+            "the tab stops at its group's first place"
+        );
+        drag(&mut rt, "tab-group-dev", -pitch);
+        assert_eq!(order(&rt), [c, b, a], "the label takes its tabs along");
+        assert_eq!(rt.state.tabs[0].group, Some(group));
+        assert_eq!(rt.state.tabs[1].group, Some(group));
     }
 
     #[test]
