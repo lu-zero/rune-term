@@ -677,44 +677,78 @@ mod tests {
 #[cfg(all(test, feature = "pty"))]
 mod pty_tests {
     use super::*;
+    use std::time::{Duration, Instant};
 
-    #[test]
-    fn a_shell_answers_through_the_link_and_its_exit_closes_the_pane() {
+    fn shell(script: &str) -> (Arc<Shared>, librio::Engine, Arc<librio::Surface>) {
         let shared = Shared::new();
         let engine = librio::Engine::new(shared.delegate());
         let desc = SurfaceDesc {
             shell: Some("/bin/sh".to_owned()),
-            args: vec![
-                "-c".to_owned(),
-                r#"read line; printf 'got:%s' "$line""#.to_owned(),
-            ],
+            args: vec!["-c".to_owned(), script.to_owned()],
             ..SurfaceDesc::default()
         };
         let surface = Arc::new(engine.create_surface(&desc).expect("surface"));
-        let id = surface.id();
         let link = crate::link::PtyLink::spawn(Arc::clone(&surface), &desc, Arc::clone(&shared))
             .expect("spawn");
-        shared.insert_link(id, link);
-        // A key leaves through the delegate's output, which the link writes to the shell.
-        surface.text("hi\r");
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        let closed = loop {
-            if shared
+        shared.insert_link(surface.id(), link);
+        (shared, engine, surface)
+    }
+
+    fn within(secs: u64, mut done: impl FnMut() -> bool) -> bool {
+        let deadline = Instant::now() + Duration::from_secs(secs);
+        while Instant::now() < deadline {
+            if done() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        false
+    }
+
+    fn closes(shared: &Shared, id: SurfaceId) -> bool {
+        within(5, || {
+            shared
                 .take_events()
                 .iter()
                 .any(|event| matches!(event, HostEvent::Close(closed) if *closed == id))
-            {
-                break true;
-            }
-            if std::time::Instant::now() > deadline {
-                break false;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        };
-        assert!(closed, "the shell's exit did not close the pane");
+        })
+    }
+
+    #[test]
+    fn a_shell_answers_through_the_link_and_its_exit_closes_the_pane() {
+        let (shared, _engine, surface) = shell(r#"read line; printf 'got:%s' "$line""#);
+        // A key leaves through the delegate's output, which the link writes to the shell.
+        surface.text("hi\r");
+        assert!(
+            closes(&shared, surface.id()),
+            "the shell's exit did not close the pane"
+        );
         let mut render = RenderState::new(&surface);
         render.update();
         let shown = (0..render.lines()).any(|line| render.text_row(line).contains("got:hi"));
         assert!(shown, "the shell's answer did not reach the grid");
+    }
+
+    /// macOS revokes the terminal when the shell, its session leader, exits.
+    #[test]
+    fn a_job_that_outlives_the_shell_does_not_keep_the_pane() {
+        let (shared, _engine, surface) =
+            shell(r#"set -m; (trap '' HUP; exec sleep 10) & printf done"#);
+        assert!(
+            closes(&shared, surface.id()),
+            "the pane waited for the background job"
+        );
+    }
+
+    #[test]
+    fn closing_the_pane_ends_its_reader_while_the_shell_runs() {
+        let (shared, _engine, surface) =
+            shell(r#"set -m; (trap '' HUP; exec sleep 10) & sleep 30"#);
+        shared.forget(surface.id());
+        // The reader holds the other reference to the surface until it ends.
+        assert!(
+            within(5, || Arc::strong_count(&surface) == 1),
+            "the reader outlived its pane"
+        );
     }
 }
