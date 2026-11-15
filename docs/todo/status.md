@@ -150,7 +150,8 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       routes and muxes.
       Design:
       [`settings-profiles.md`](./settings-profiles.md),
-      [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
+      [`profiles-ipc-cli.md`](./profiles-ipc-cli.md),
+      [`tear-out.md`](./tear-out.md).
 - [ ] **21. IPC and automation.** Owner-scoped local control plane
       (versioned, capability-gated): query/events, then create-from-profile /
       focus / close / resize, then input/capture, targeting `it2`-like
