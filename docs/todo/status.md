@@ -162,7 +162,18 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       `output` back to it. The winsize follows the grid. P1 is in:
       `term-mux` holds the layout in cells and the tmux control-mode parser
       (replies, `%output`, window, layout, session and exit notifications,
-      and the layout string), tested on tmux 3.4's own output. Design:
+      and the layout string), tested on tmux 3.4's own output. P3 is
+      partial: `rune-term --tmux SESSION` runs `tmux -C new-session -A` on
+      pipes. The session is a tab group, each window a tab, each pane a
+      surface fed in tmux's order, with panes that predate the client
+      redrawn from `capture-pane`. Keys go back as `send-keys -H`. The
+      size goes as `refresh-client -C`, and focus as `select-window` and
+      `select-pane`. A new tab in the group is `new-window`, and the menu
+      splits. Closing a tab hides its window, and the menu shows it again.
+      tmux exiting closes the group. A split window does not draw: the
+      compositor paints one pane (item 10). The pane answers queries tmux
+      already answered ([`rio/replies.md`](./rio/replies.md)). ssh is not
+      wired. Design:
       [`multiplexer-sessions.md`](./multiplexer-sessions.md).
 - [ ] **24. Backend adapters and composition.** Fat/lean packaging (features
       and/or `rune-term-*` helpers) with progressive adapters: local, rmux
@@ -172,6 +183,8 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
 
 ## Outside this repository
+
+What Rio still needs, sent and drafted, is [`rio/`](./rio/README.md).
 
 - [x] **4. Rune paired text.** `PhysicalInput::Key` carries `text` and
       `consumed_mods` on `lu-zero/rune` branch `physical-key-text`.

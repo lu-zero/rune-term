@@ -66,6 +66,9 @@ struct Flags {
     pending: HashSet<SurfaceId>,
 }
 
+/// A multiplexer pane's input, and the pane it is for.
+type MuxInput = (mpsc::Sender<Vec<u8>>, u32);
+
 pub struct Shared {
     events: Mutex<Vec<HostEvent>>,
     waker: Mutex<Option<Waker>>,
@@ -75,6 +78,7 @@ pub struct Shared {
     output_surface: Mutex<Option<SurfaceId>>,
     #[cfg(feature = "pty")]
     links: Mutex<HashMap<SurfaceId, crate::link::PtyLink>>,
+    mux_input: Mutex<HashMap<SurfaceId, MuxInput>>,
     control: Mutex<
         Vec<(
             term_control::Request,
@@ -85,9 +89,19 @@ pub struct Shared {
 }
 
 enum HostEvent {
-    Action { id: SurfaceId, action: Action },
+    Action {
+        id: SurfaceId,
+        action: Action,
+    },
     Close(SurfaceId),
-    Clipboard { kind: ClipboardType, len: usize },
+    Clipboard {
+        kind: ClipboardType,
+        len: usize,
+    },
+    Mux {
+        group: crate::chrome::TabGroupId,
+        update: term_mux::tmux::Update,
+    },
 }
 
 struct Delegate {
@@ -107,6 +121,7 @@ impl Shared {
             output_surface: Mutex::new(None),
             #[cfg(feature = "pty")]
             links: Mutex::new(HashMap::new()),
+            mux_input: Mutex::new(HashMap::new()),
             control: Mutex::new(Vec::new()),
             rearms: AtomicUsize::new(0),
         })
@@ -146,6 +161,7 @@ impl Shared {
         flags.live.remove(&id);
         flags.pending.remove(&id);
         drop(flags);
+        self.mux_input.lock().expect("mux input").remove(&id);
         #[cfg(feature = "pty")]
         {
             // Not dropped under the lock: the reader may be writing a reply.
@@ -181,6 +197,21 @@ impl Shared {
     #[cfg(feature = "pty")]
     pub(crate) fn closed(&self, id: SurfaceId) {
         self.push(HostEvent::Close(id));
+    }
+
+    pub(crate) fn route_to_mux(&self, id: SurfaceId, input: mpsc::Sender<Vec<u8>>, pane: u32) {
+        self.mux_input
+            .lock()
+            .expect("mux input")
+            .insert(id, (input, pane));
+    }
+
+    pub(crate) fn push_mux(
+        &self,
+        group: crate::chrome::TabGroupId,
+        update: term_mux::tmux::Update,
+    ) {
+        self.push(HostEvent::Mux { group, update });
     }
 
     pub(crate) fn note_rearm(&self) {
@@ -271,6 +302,16 @@ impl SurfaceDelegate for Delegate {
     }
 
     fn output(&self, surface: SurfaceId, bytes: &[u8]) {
+        if let Some((input, pane)) = self
+            .shared
+            .mux_input
+            .lock()
+            .expect("mux input")
+            .get(&surface)
+        {
+            let _ = input.send(term_mux::tmux::send_keys(*pane, bytes).into_bytes());
+            return;
+        }
         #[cfg(feature = "pty")]
         if let Some(link) = self.shared.links.lock().expect("links").get(&surface) {
             link.write(bytes);
@@ -294,6 +335,7 @@ pub fn setup(model: &mut Model, waker: Waker) {
         .unwrap_or_else(|| model.config.default_profile_name().to_owned());
     let id = open_host(model, PANE_MARK, 0, 0, Some(&profile));
     crate::chrome_view::attach_initial(model, id);
+    crate::mux::attach_queued(model);
 }
 
 pub(crate) fn surface_desc_for(
@@ -345,20 +387,33 @@ pub(crate) fn open_host(
     let profile = profile.unwrap_or_else(|| model.config.default_profile_name());
     let resolved = model.config.resolve_profile(profile);
     let desc = surface_desc_for(&resolved, cols, rows);
-    let flag = Arc::new(AtomicBool::new(false));
-    let surface = Arc::new(model.engine.create_surface(&desc).expect("create surface"));
+    let surface = open_bare(model, mark, cols, rows, &desc);
     let id = surface.id();
-    model.shared.insert_flag(id, Arc::clone(&flag));
     #[cfg(feature = "pty")]
     {
-        let link =
-            crate::link::PtyLink::spawn(Arc::clone(&surface), &desc, Arc::clone(&model.shared))
-                .expect("spawn shell");
+        let link = crate::link::PtyLink::spawn(surface, &desc, Arc::clone(&model.shared))
+            .expect("spawn shell");
         model.shared.insert_link(id, link);
     }
+    id
+}
+
+/// A surface with nothing on the far end yet. The caller connects it. A zero
+/// size is unsized until the first layout.
+pub(crate) fn open_bare(
+    model: &mut Model,
+    mark: u32,
+    cols: u16,
+    rows: u16,
+    desc: &SurfaceDesc,
+) -> Arc<librio::Surface> {
+    let flag = Arc::new(AtomicBool::new(false));
+    let surface = Arc::new(model.engine.create_surface(desc).expect("create surface"));
+    let id = surface.id();
+    model.shared.insert_flag(id, Arc::clone(&flag));
     let render = RenderState::new(&surface);
     model.terminal.insert(HostSurface {
-        surface,
+        surface: Arc::clone(&surface),
         render,
         mark,
         title: "rune-term".to_string(),
@@ -377,7 +432,7 @@ pub(crate) fn open_host(
         hover_link: None,
         hover_probe: None,
     });
-    id
+    surface
 }
 
 pub fn poll(model: &mut Model, now: f64, tx: &mut Tx) -> bool {
@@ -411,6 +466,7 @@ pub fn poll(model: &mut Model, now: f64, tx: &mut Tx) -> bool {
     }
     #[cfg(feature = "pty")]
     model.shared.resize_links(&mut model.terminal);
+    crate::mux::report(model);
     if crate::scrollback::refresh(model, now, tx) {
         chrome = true;
     }
@@ -421,6 +477,7 @@ fn apply(model: &mut Model, event: HostEvent, tx: &mut Tx) -> bool {
     match event {
         HostEvent::Action { id, action } => apply_action(model, id, action),
         HostEvent::Close(id) => drop_closed(model, id, tx),
+        HostEvent::Mux { group, update } => crate::mux::apply(model, group, update, tx),
         HostEvent::Clipboard { kind, len, .. } => {
             eprintln!("clipboard write dropped ({kind:?}, {len} bytes)");
             #[cfg(all(test, not(feature = "pty")))]

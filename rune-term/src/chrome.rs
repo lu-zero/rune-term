@@ -87,6 +87,8 @@ pub struct Tab {
     pub focused: LeafId,
     /// Group this tab belongs to, if any.
     pub group: Option<TabGroupId>,
+    /// The multiplexer window this tab shows. Its group's backend owns the layout.
+    pub window: Option<u32>,
 }
 
 pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {

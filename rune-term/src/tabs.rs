@@ -43,6 +43,7 @@ pub fn open_with_profile(model: &mut Model, profile: &str) -> bool {
         }),
         focused: id,
         group: None,
+        window: None,
     });
     model.active = model.tabs.len() - 1;
     let surface = delegate::open_host(model, mark, 0, 0, Some(&profile));
@@ -105,7 +106,8 @@ pub fn close(model: &mut Model, index: usize, tx: &mut Tx) {
         return;
     };
     let group = tab.group;
-    let ids = surfaces_of(&tab.root);
+    crate::mux::hide(model, index);
+    let ids = surfaces_of(&model.tabs[index].root);
     for id in ids {
         model.shared.forget(id);
         model.terminal.remove(id);
@@ -129,9 +131,11 @@ pub fn close(model: &mut Model, index: usize, tx: &mut Tx) {
     focus_active(model, tx);
 }
 
-/// Remove a group entry when no tabs belong to it.
+/// Remove a group entry when no tabs belong to it. A session's group stays
+/// while every window is hidden.
 pub fn prune_group(model: &mut Model, group: crate::chrome::TabGroupId) {
-    if !model.tabs.iter().any(|t| t.group == Some(group)) {
+    let attached = model.muxes.iter().any(|mux| mux.group == group);
+    if !attached && !model.tabs.iter().any(|t| t.group == Some(group)) {
         model.tab_groups.retain(|g| g.id != group);
     }
 }
@@ -200,7 +204,7 @@ pub fn set_title(model: &mut Model, surface: SurfaceId, title: String) {
     }
 }
 
-fn next_ids(model: &Model) -> (u32, u32) {
+pub(crate) fn next_ids(model: &Model) -> (u32, u32) {
     let mut leaf = 0;
     let mut mark = 0;
     for tab in &model.tabs {
@@ -253,7 +257,7 @@ fn contains(node: &Node, surface: SurfaceId) -> bool {
     }
 }
 
-fn surfaces_of(node: &Node) -> Vec<SurfaceId> {
+pub(crate) fn surfaces_of(node: &Node) -> Vec<SurfaceId> {
     let mut ids = Vec::new();
     walk(node, &mut |leaf| {
         if leaf.surface != 0 {
@@ -263,7 +267,7 @@ fn surfaces_of(node: &Node) -> Vec<SurfaceId> {
     ids
 }
 
-fn walk(node: &Node, f: &mut dyn FnMut(&Leaf)) {
+pub(crate) fn walk(node: &Node, f: &mut dyn FnMut(&Leaf)) {
     match node {
         Node::Leaf(leaf) => f(leaf),
         Node::Split { left, right, .. } => {

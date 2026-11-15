@@ -31,6 +31,7 @@ pub struct Model {
     /// Child output from `RUNE_TERM_INJECT`, held until the pane has a size so a line is not wrapped at the default 80 columns.
     pub(crate) inject_when_sized: Option<Vec<u8>>,
     pub(crate) _ipc: Option<crate::ipc::Server>,
+    pub(crate) muxes: Vec<crate::mux::Mux>,
 }
 
 pub fn init() -> Model {
@@ -61,6 +62,7 @@ pub fn init() -> Model {
             }),
             focused: LeafId(LEAF.0),
             group: None,
+            window: None,
         }],
         tab_groups: Vec::new(),
         active: 0,
@@ -77,5 +79,6 @@ pub fn init() -> Model {
         pending_inject,
         inject_when_sized,
         _ipc: Some(crate::ipc::start(shared)),
+        muxes: Vec::new(),
     }
 }

@@ -16,6 +16,7 @@ mod ime;
 mod ipc;
 pub mod metrics;
 mod model;
+mod mux;
 mod pane_input;
 mod resize;
 mod scheme;

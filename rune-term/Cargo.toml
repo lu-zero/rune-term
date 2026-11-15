@@ -17,6 +17,7 @@ path = "src/main.rs"
 [dependencies]
 rune-term-core = { path = "../rune-term-core", default-features = false }
 term-control = { path = "../term-control" }
+term-mux = { path = "../term-mux" }
 rune.workspace = true
 rune-kit.workspace = true
 librio.workspace = true

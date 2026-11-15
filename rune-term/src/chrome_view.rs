@@ -300,6 +300,11 @@ fn layout_tree(model: &mut Model, slot: (f32, f32), scale: f32, tx: &mut Tx) {
             cell_px: (0, 0),
         },
     });
+    if let Some(group) = tab.group.filter(|_| tab.window.is_some()) {
+        crate::mux::fill(model, group, (effect.cols, effect.rows));
+        tx.live_only();
+        return;
+    }
     let next = crate::split::distribute(effect.cols, effect.rows, tab.root.clone());
     let changed = next != tab.root;
     tab.root = next;

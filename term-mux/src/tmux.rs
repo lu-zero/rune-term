@@ -4,6 +4,13 @@
 
 use crate::layout::{Axis, Layout};
 
+mod client;
+
+pub use client::{
+    capture, new_window, panes, refresh_client, select, send_keys, split_window, Client, Update,
+    Window, LIST_WINDOWS,
+};
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Event {
     /// The answer to one command, in the order the commands were sent.

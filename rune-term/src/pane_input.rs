@@ -156,6 +156,7 @@ pub fn on_secondary_mark(
         .separator()
         .item(rune::PopupItem::new("search", "Search"))
         .item(rune::PopupItem::new("new-tab", "New Tab"));
+    menu = crate::mux::menu(model, menu);
     let default_name = model.config.default_profile_name().to_owned();
     let mut names: Vec<String> = model.config.profile_names().map(str::to_owned).collect();
     names.sort();
@@ -198,8 +199,17 @@ fn context_action(model: &mut Model, mark: u32, id: &str, tx: &mut Tx) {
         "paste" => tx.request_paste(),
         "search" => crate::search::toggle(model),
         "new-tab" => {
-            crate::tabs::open(model);
+            if !crate::mux::open_window(model) {
+                crate::tabs::open(model);
+            }
             crate::tabs::reveal(model, tx);
+        }
+        "split-right" => crate::mux::split(model, crate::split::Axis::Horizontal),
+        "split-down" => crate::mux::split(model, crate::split::Axis::Vertical),
+        _ if id.starts_with("show-window:") => {
+            if crate::mux::show(model, &id["show-window:".len()..]) {
+                crate::tabs::reveal(model, tx);
+            }
         }
         _ if id.starts_with("new-tab-profile:") => {
             let name = &id["new-tab-profile:".len()..];
@@ -324,7 +334,9 @@ fn handle_app_chord(
         return true;
     }
     if code == term_input::PhysicalKeyCode::KeyT {
-        crate::tabs::open(model);
+        if !crate::mux::open_window(model) {
+            crate::tabs::open(model);
+        }
         crate::tabs::reveal(model, tx);
         return true;
     }

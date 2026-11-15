@@ -24,6 +24,11 @@ struct Gui {
     #[arg(long = "rune-help")]
     rune_help: bool,
 
+    /// Attach the tmux session SESSION, creating it if it does not exist. Its
+    /// windows are a group of tabs.
+    #[arg(long = "tmux", value_name = "SESSION")]
+    tmux: Option<String>,
+
     /// Arguments forwarded to Rune's tooling layer.
     ///
     /// Everything after this flag is passed through, including flags like
@@ -51,6 +56,10 @@ impl Gui {
             // Rune prints help and exits.
             rune::tooling::Args::parse_from(vec!["--help".to_owned()]);
             return;
+        }
+        if let Some(session) = self.tmux {
+            let args = ["-C", "new-session", "-A", "-s", &session];
+            crate::mux::queue(args.iter().map(|arg| (*arg).to_owned()).collect());
         }
         crate::app::run_with_rune_args(self.rune_args);
     }
