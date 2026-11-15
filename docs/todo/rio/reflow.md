@@ -19,18 +19,20 @@
    (100 ms, kitty's default). The grid still reflows at once. A drag sent a
    SIGWINCH per frame, and bash piled a misplaced redraw on the line above
    for each.
+5. `ff85480e` crosswords: between OSC 133 `A` and `C`, a column resize clears
+   the input from the last prompt mark to the cursor and puts the cursor back
+   at its old row offset below that mark. After a width change readline moves
+   up by the rows its old layout put the cursor below the input's start, and
+   redraws only the last prompt line; rewrapped, that landed on the line
+   above and erased it. It needs a mark at the last prompt line: `P;k=s`.
 
-## Still wrong with bash
+## Shell integration
 
-After a width change, readline moves up by the rows the input took at the old
-width, and redraws only the last line of a multi-line prompt. Rio has already
-rewrapped those rows, so readline lands too high and erases the line above
-(starship's first line). With 4 that happens once per drag, not per step.
-Kitty and Ghostty
-avoid it with OSC 133 marks from their own shell integration: the prompt and
-input are not rewrapped, and the shell redraws them.
+bash and starship send no OSC 133. rune-term has to add the marks to the
+prompt itself, as kitty and Ghostty do. Without them, 5 does nothing and a
+multi-line bash prompt loses a line per drag.
 
 ## Upstreaming
 
-Decide with Raphael: 1, 3 and 4 can go as they are. 2 changes #2058's stated
+Decide with Raphael: 1, 3, 4 and 5 can go as they are. 2 changes #2058's stated
 behaviour, so ask first whether he wants it.

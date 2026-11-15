@@ -209,8 +209,8 @@ What Rio still needs, sent and drafted, is [`rio/`](./rio/README.md).
       flag before `RenderState::update` (#2053), and `Surface::set_focus`
       reports focus (#2051).
 - [~] **3. Reflow.** `lu-zero/rio` branch `reflow-cursor-on-2058`: Rio #2058
-      plus our fixes. bash still redraws a multi-line prompt one row too
-      high after a width change; that needs prompt marks.
+      plus our fixes. A multi-line bash prompt survives a width change only
+      with OSC 133 marks, which rune-term does not send yet.
       `preserve_scrollback` is still false on macOS in the plan.
 
 The design header still records an empty workspace. This page is the status.

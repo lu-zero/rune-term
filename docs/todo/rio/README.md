@@ -34,5 +34,5 @@ this tree.
 ## On the fork
 
 rune-term builds against `lu-zero/rio` branch `reflow-cursor-on-2058`: #2058
-(open) and four commits of ours on top. Everything the old
+(open) and five commits of ours on top. Everything the old
 `librio-update-rearm-reflow` branch carried is upstream or replaced.
