@@ -7,7 +7,7 @@ use crate::layout::{Axis, Layout};
 mod client;
 
 pub use client::{
-    capture, new_window, panes, refresh_client, resize_pane, select, send_keys, sizes,
+    capture, kill_window, new_window, panes, refresh_client, resize_pane, select, send_keys, sizes,
     split_window, Client, Update, Window, LIST_WINDOWS,
 };
 
@@ -120,7 +120,10 @@ impl Parser {
                 None
             }
             "%window-add" => Some(Event::WindowAdd(id(args.next()?.as_bytes(), b'@')?)),
-            "%window-close" => Some(Event::WindowClose(id(args.next()?.as_bytes(), b'@')?)),
+            // A killed window can be unlinked from the session before it closes.
+            "%window-close" | "%unlinked-window-close" => {
+                Some(Event::WindowClose(id(args.next()?.as_bytes(), b'@')?))
+            }
             "%window-renamed" => {
                 let (window, name) = rest.split_once(' ').unwrap_or((rest, ""));
                 Some(Event::WindowRenamed {

@@ -663,6 +663,32 @@ fn focused(model: &Model) -> Option<(usize, u32, u32)> {
 }
 
 /// A new tab on a session's tab is a new tmux window. tmux reports it back.
+/// The session behind tab `index` and the tmux window it shows.
+pub(crate) fn window_of(model: &Model, index: usize) -> Option<(usize, u32)> {
+    let tab = model.tabs.get(index)?;
+    let mux = model
+        .muxes
+        .iter()
+        .position(|mux| Some(mux.group) == tab.group)?;
+    Some((mux, tab.window?))
+}
+
+/// tmux closes the window and its shells. The tab goes when tmux reports it gone.
+pub(crate) fn kill_window(model: &Model, index: usize) {
+    if let Some((mux, window)) = window_of(model, index) {
+        let _ = model.muxes[mux]
+            .input
+            .send(tmux::kill_window(window).into_bytes());
+    }
+}
+
+/// The session keeps running in tmux. Every tab of it goes from here.
+pub(crate) fn detach(model: &mut Model, index: usize, tx: &mut Tx) {
+    if let Some((mux, _)) = window_of(model, index) {
+        end(model, mux, tx);
+    }
+}
+
 pub(crate) fn open_window(model: &Model) -> bool {
     let Some((index, ..)) = focused(model) else {
         return false;
@@ -1159,5 +1185,55 @@ mod tests {
         submit_name(&mut model);
         assert!(model.session_name.is_none());
         assert!(model.muxes.is_empty());
+    }
+
+    #[test]
+    fn detaching_drops_the_tabs_and_leaves_the_session_running() {
+        let Some((server, mut model, group)) = attached("detach") else {
+            return;
+        };
+        assert!(until(&mut model, |model| model.tabs.len() == 2));
+        let index = model.active;
+        detach(&mut model, index, &mut Tx::default());
+        assert_eq!(model.tabs.len(), 1);
+        assert!(model.tab_groups.iter().all(|g| g.id != group));
+        assert!(model.muxes.is_empty());
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let attached_clients = || {
+            Command::new("tmux")
+                .args(["-L", &server.0, "list-clients"])
+                .output()
+                .map(|out| out.stdout.len())
+                .unwrap_or(0)
+        };
+        while attached_clients() > 0 && Instant::now() < deadline {
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert_eq!(attached_clients(), 0, "the client did not detach");
+        assert_eq!(sessions(&["-L", &server.0]).unwrap(), ["detach"]);
+    }
+
+    #[test]
+    fn closing_a_window_kills_it_and_keeps_the_rest() {
+        let Some((server, mut model, group)) = attached("kill") else {
+            return;
+        };
+        assert!(until(&mut model, |model| model.tabs.len() == 2));
+        assert!(open_window(&model));
+        assert!(until(&mut model, |model| model.tabs.len() == 3));
+        let index = model.active;
+        let window = model.tabs[index].window;
+        kill_window(&model, index);
+        assert!(
+            until(&mut model, |model| model.tabs.len() == 2),
+            "the killed window kept its tab"
+        );
+        assert!(model.tabs.iter().all(|tab| tab.window != window));
+        assert!(model.tabs.iter().any(|tab| tab.group == Some(group)));
+        assert!(
+            model.muxes[0].hidden.is_empty(),
+            "a killed window is not hidden"
+        );
+        assert_eq!(sessions(&["-L", &server.0]).unwrap(), ["kill"]);
     }
 }

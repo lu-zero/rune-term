@@ -103,8 +103,11 @@ impl Client {
             }
             Event::SessionRenamed(name) => updates.push(Update::Session(name)),
             Event::WindowClose(id) => {
+                let before = self.windows.len();
                 self.windows.retain(|window| window.id != id);
-                updates.push(Update::Windows(self.windows.clone()));
+                if self.windows.len() != before {
+                    updates.push(Update::Windows(self.windows.clone()));
+                }
             }
             Event::WindowRenamed { window, name } => {
                 self.change(window, updates, |w| w.name = name);
@@ -243,6 +246,10 @@ pub fn resize_pane(pane: u32, axis: Axis, cells: u16) -> String {
     format!("resize-pane -t %{pane} -{flag} {cells}\n")
 }
 
+pub fn kill_window(window: u32) -> String {
+    format!("kill-window -t @{window}\n")
+}
+
 pub fn new_window() -> String {
     "new-window\n".to_owned()
 }
@@ -356,7 +363,10 @@ mod tests {
             }])]
         );
         assert_eq!(client.take_commands(), LIST_WINDOWS);
-        let Some(Update::Windows(windows)) = client.feed(b"%window-close @0\n").pop() else {
+        // Another session's window is not this one's to drop.
+        assert_eq!(client.feed(b"%unlinked-window-close @7\n"), vec![]);
+        let Some(Update::Windows(windows)) = client.feed(b"%unlinked-window-close @0\n").pop()
+        else {
             panic!("a close is a new window list");
         };
         assert!(windows.is_empty());

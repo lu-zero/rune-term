@@ -2,7 +2,9 @@
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-use rune::{col, el, row, text, text_input, Color, Cx, El, TextEdit, TextStyle};
+use rune::{
+    col, el, row, text, text_input, Color, Cx, El, PopupItem, PopupMenu, TextEdit, TextStyle, Tx,
+};
 
 use crate::chrome_view;
 use crate::model::Model;
@@ -297,6 +299,9 @@ fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {
                 } else {
                     tx.live_only();
                 }
+            })
+            .on_secondary_press_local(move |model: &mut Model, point, tx| {
+                tab_menu(model, index, point.window(), tx);
             });
         if active {
             tab = tab.fill(theme::linear(p.bg)).border(
@@ -385,6 +390,29 @@ fn new_tab_button(tab_h: f32, p: &Palette) -> El {
             crate::tabs::reveal(model, tx);
         })
         .child(text("+").color(theme::linear(p.muted)))
+}
+
+/// A tmux tab tells hiding its window, killing it, and leaving the session apart.
+fn tab_menu(model: &Model, index: usize, at: rune::PointerPress, tx: &mut Tx) {
+    let menu = if crate::mux::window_of(model, index).is_some() {
+        PopupMenu::new()
+            .item(PopupItem::new("hide", "Hide Window"))
+            .item(PopupItem::new("kill", "Close Window"))
+            .separator()
+            .item(PopupItem::new("detach", "Detach Session"))
+    } else {
+        PopupMenu::new().item(PopupItem::new("close", "Close Tab"))
+    };
+    tx.popup_menu(
+        menu,
+        at,
+        move |model: &mut Model, picked, tx| match picked {
+            Some("hide" | "close") => crate::tabs::close(model, index, tx),
+            Some("kill") => crate::mux::kill_window(model, index),
+            Some("detach") => crate::mux::detach(model, index, tx),
+            _ => {}
+        },
+    );
 }
 
 pub(crate) fn hover_overlay(p: &Palette) -> Color {
