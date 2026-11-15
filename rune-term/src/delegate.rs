@@ -361,19 +361,20 @@ pub(crate) fn surface_desc_for(
 }
 
 fn expand_tilde(path: &str) -> String {
-    if path == "~" {
-        if let Some(home) = std::env::var_os("HOME") {
-            return home.to_string_lossy().into_owned();
-        }
-    } else if let Some(rest) = path.strip_prefix("~/") {
-        if let Some(home) = std::env::var_os("HOME") {
-            return std::path::Path::new(&home)
-                .join(rest)
-                .to_string_lossy()
-                .into_owned();
-        }
-    }
-    path.to_owned()
+    let rest = match path.strip_prefix('~') {
+        Some("") => None,
+        Some(rest) => match rest.strip_prefix('/') {
+            Some(rest) => Some(rest),
+            None => return path.to_owned(),
+        },
+        None => return path.to_owned(),
+    };
+    let Ok(home) = etcetera::home_dir() else {
+        return path.to_owned();
+    };
+    rest.map_or(home.clone(), |rest| home.join(rest))
+        .to_string_lossy()
+        .into_owned()
 }
 
 /// One surface, one damage flag, one effect mark.

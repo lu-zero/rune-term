@@ -140,39 +140,11 @@ pub struct ProfileInfo {
     pub cwd: Option<String>,
 }
 
-/// Suggested location for the local control socket.
+/// The control socket is runtime state: XDG's runtime directory, or the per-user
+/// temporary directory where none is set, as on macOS.
 pub fn default_socket_path() -> Option<PathBuf> {
-    runtime_dir()
-        .or_else(config_dir)
-        .map(|d| d.join(SOCKET_NAME))
-}
-
-fn runtime_dir() -> Option<PathBuf> {
-    std::env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .map(|p| p.join("rune-term"))
-}
-
-fn config_dir() -> Option<PathBuf> {
-    #[cfg(target_os = "macos")]
-    {
-        if let Some(home) = std::env::var_os("HOME") {
-            return Some(
-                PathBuf::from(home)
-                    .join("Library")
-                    .join("Application Support")
-                    .join("rune-term"),
-            );
-        }
-    }
-    #[cfg(target_os = "windows")]
-    {
-        if let Some(appdata) = std::env::var_os("APPDATA") {
-            return Some(PathBuf::from(appdata).join("rune-term"));
-        }
-    }
-    if let Some(xdg) = std::env::var_os("XDG_CONFIG_HOME") {
-        return Some(PathBuf::from(xdg).join("rune-term"));
-    }
-    std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config").join("rune-term"))
+    use etcetera::BaseStrategy;
+    let xdg = etcetera::base_strategy::Xdg::new().ok()?;
+    let dir = xdg.runtime_dir().unwrap_or_else(std::env::temp_dir);
+    Some(dir.join("rune-term").join(SOCKET_NAME))
 }
