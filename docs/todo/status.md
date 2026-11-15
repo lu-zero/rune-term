@@ -154,7 +154,9 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
 - [ ] **23. Multiplexer-backed sessions.** Explicit session concept and
       backend abstraction (local `librio` vs multiplexer), covering create /
       attach / detach / resume, multi-client policy, and remoting/share
-      capabilities. rmux-first, applicable to tmux-class backends. Design:
+      capabilities. tmux first, then rmux; ssh and mosh are raw links. The
+      layers, the mapping (session → group, window → tab, pane → leaf) and
+      the P0–P4 order are decided. Design:
       [`multiplexer-sessions.md`](./multiplexer-sessions.md).
 - [ ] **24. Backend adapters and composition.** Fat/lean packaging (features
       and/or `rune-term-*` helpers) with progressive adapters: local, rmux
