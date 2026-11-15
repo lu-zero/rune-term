@@ -6,28 +6,27 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
+use crate::scheme::Scheme;
 use crate::theme::{self, Palette};
 
 pub use rune_term_core::font::{clamp_font_size, DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE};
 
 pub const DEFAULT_PROFILE: &str = "Default";
 pub const DEFAULT_THEME: &str = "Flexoki Black";
-const CONFIG_NAME: &str = "rune-term.toml";
+const CONFIG_NAME: &str = "config.toml";
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(default)]
+/// `config.toml`, `profiles/`, and `themes/` under one directory.
+#[derive(Clone, Debug)]
 pub struct ConfigFile {
     pub version: u32,
     pub settings: Settings,
     pub profiles: BTreeMap<String, Profile>,
-    pub custom_themes: BTreeMap<String, CustomTheme>,
-    /// Set when the config file could not be read or parsed. The app runs on
-    /// defaults, but saving would overwrite the file, so saves are refused.
-    #[serde(skip)]
+    pub custom_themes: BTreeMap<String, Scheme>,
+    /// Set when the directory could not be read. The app runs on defaults, and
+    /// saving is refused so the files are not overwritten.
     load_error: Option<String>,
-    /// The file the config is written to. `None` is the platform's.
-    #[serde(skip)]
-    path: Option<PathBuf>,
+    /// The directory the config is written to. `None` is the platform's.
+    dir: Option<PathBuf>,
 }
 
 impl Default for ConfigFile {
@@ -40,7 +39,7 @@ impl Default for ConfigFile {
             profiles,
             custom_themes: BTreeMap::new(),
             load_error: None,
-            path: None,
+            dir: None,
         }
     }
 }
@@ -51,6 +50,9 @@ pub struct Settings {
     pub default_profile: String,
     pub font_size: f32,
     pub theme: String,
+    /// When both names are set, the system appearance picks one instead of [`Self::theme`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adaptive_theme: Option<AdaptiveTheme>,
 }
 
 impl Default for Settings {
@@ -59,7 +61,23 @@ impl Default for Settings {
             default_profile: DEFAULT_PROFILE.to_owned(),
             font_size: DEFAULT_FONT_SIZE,
             theme: DEFAULT_THEME.to_owned(),
+            adaptive_theme: None,
         }
+    }
+}
+
+/// A dark scheme and a light scheme. The names are themes, built in or from `themes/`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AdaptiveTheme {
+    #[serde(default)]
+    pub dark: String,
+    #[serde(default)]
+    pub light: String,
+}
+
+impl AdaptiveTheme {
+    fn ready(&self) -> bool {
+        !self.dark.trim().is_empty() && !self.light.trim().is_empty()
     }
 }
 
@@ -103,69 +121,6 @@ impl Default for Profile {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(default)]
-pub struct CustomTheme {
-    pub author: String,
-    pub url: String,
-    pub bg: u32,
-    pub fg: u32,
-    pub fg_bright: u32,
-    pub muted: u32,
-    pub tab_bg: u32,
-    pub active_border: u32,
-    pub accent: u32,
-    pub ansi16: Vec<[u8; 3]>,
-    pub created_at: u64,
-}
-
-fn now_secs() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs()
-}
-
-impl CustomTheme {
-    pub fn from_palette(p: &Palette) -> Self {
-        Self {
-            author: p.author.clone(),
-            url: p.url.clone(),
-            bg: p.bg,
-            fg: p.fg,
-            fg_bright: p.fg_bright,
-            muted: p.muted,
-            tab_bg: p.tab_bg,
-            active_border: p.active_border,
-            accent: p.accent,
-            ansi16: p.ansi16.to_vec(),
-            created_at: now_secs(),
-        }
-    }
-
-    pub fn to_arc_palette(&self, name: &str) -> Arc<Palette> {
-        let mut ansi16 = [[0u8; 3]; 16];
-        for (i, slot) in ansi16.iter_mut().enumerate() {
-            if let Some(rgb) = self.ansi16.get(i) {
-                *slot = *rgb;
-            }
-        }
-        Arc::new(Palette {
-            name: name.to_owned(),
-            bg: self.bg,
-            fg: self.fg,
-            fg_bright: self.fg_bright,
-            muted: self.muted,
-            tab_bg: self.tab_bg,
-            active_border: self.active_border,
-            accent: self.accent,
-            ansi16,
-            author: self.author.clone(),
-            url: self.url.clone(),
-        })
-    }
-}
-
 #[derive(Clone, Debug)]
 pub struct Resolved {
     pub font_family: String,
@@ -178,38 +133,77 @@ pub struct Resolved {
 
 impl ConfigFile {
     pub fn load() -> Self {
-        let path = config_path();
-        match Self::read(&path) {
+        let dir = config_dir();
+        match Self::open(&dir) {
             Ok(config) => config,
-            Err(err) if err.kind() == io::ErrorKind::NotFound => Self::default().at(path),
             Err(err) => {
-                eprintln!("rune-term: failed to load {}: {err}", path.display());
+                eprintln!("rune-term: failed to load {}: {err}", dir.display());
                 Self {
                     load_error: Some(err.to_string()),
-                    ..Self::default().at(path)
+                    ..Self::default().at_dir(dir)
                 }
             }
         }
     }
 
-    /// Reads a config file. A missing file is an error the caller decides on.
-    pub fn read(path: &Path) -> io::Result<Self> {
-        let text = fs::read_to_string(path)?;
-        let mut config: Self =
-            toml::from_str(&text).map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+    /// Reads `config.toml`, `profiles/`, and `themes/` from `dir`.
+    pub fn open(dir: &Path) -> io::Result<Self> {
+        let root_path = dir.join(CONFIG_NAME);
+        let root_text = match fs::read_to_string(&root_path) {
+            Ok(text) => Some(text),
+            Err(err) if err.kind() == io::ErrorKind::NotFound => None,
+            Err(err) => return Err(err),
+        };
+        if root_text.is_none() && !has_parts(dir) {
+            return Ok(Self::default().at_dir(dir));
+        }
+        let mut config = Self::default();
+        config.profiles.clear();
+        if let Some(text) = root_text {
+            let file: RootFile = toml::from_str(&text)
+                .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+            config.version = file.version;
+            config.settings = file.settings;
+        }
+        config.profiles = read_table(&dir.join("profiles"), |text| {
+            toml::from_str::<Profile>(text).map_err(|err| err.to_string())
+        })?;
+        config.custom_themes = read_table(&dir.join("themes"), Scheme::from_toml)?;
         config.normalize();
-        Ok(config.at(path))
+        Ok(config.at_dir(dir))
     }
 
-    /// Writes the config to this file instead of the platform's.
-    pub fn at(mut self, path: impl Into<PathBuf>) -> Self {
-        self.path = Some(path.into());
+    /// Writes the config to this directory instead of the platform's.
+    pub fn at_dir(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.dir = Some(dir.into());
         self
     }
 
-    /// The file the config is written to.
-    pub fn path(&self) -> PathBuf {
-        self.path.clone().unwrap_or_else(config_path)
+    /// The directory the config is written to.
+    pub fn dir(&self) -> PathBuf {
+        self.dir.clone().unwrap_or_else(config_dir)
+    }
+
+    /// Whether a profile with no theme of its own follows the appearance pair.
+    pub fn follows_appearance(&self) -> bool {
+        self.settings
+            .adaptive_theme
+            .as_ref()
+            .is_some_and(AdaptiveTheme::ready)
+    }
+
+    /// The theme the appearance pair names. Anything incomplete uses [`Settings::theme`].
+    pub fn appearance_theme(&self, dark: bool) -> String {
+        match self.settings.adaptive_theme.as_ref() {
+            Some(pair) if pair.ready() => {
+                if dark {
+                    pair.dark.clone()
+                } else {
+                    pair.light.clone()
+                }
+            }
+            _ => self.settings.theme.clone(),
+        }
     }
 
     pub(crate) fn normalize(&mut self) {
@@ -267,9 +261,7 @@ impl ConfigFile {
         let font_size = profile
             .and_then(|p| p.font_size)
             .unwrap_or(self.settings.font_size);
-        let theme = profile
-            .and_then(|p| p.theme.clone())
-            .unwrap_or_else(|| self.settings.theme.clone());
+        let theme = self.chosen_theme(profile);
         let backend = profile
             .map(|p| p.backend.trim())
             .filter(|b| !b.is_empty())
@@ -300,9 +292,25 @@ impl ConfigFile {
     pub fn resolve_palette_for(&self, profile: &str) -> Arc<Palette> {
         let name = self.resolve_profile(profile).theme;
         if let Some(custom) = self.custom_themes.get(&name) {
-            return custom.to_arc_palette(&name);
+            return custom.to_palette(&name);
         }
         theme::resolve_builtin(&name).unwrap_or_else(theme::default_palette)
+    }
+
+    /// A profile theme wins. Otherwise the appearance pair, when both names are set.
+    fn chosen_theme(&self, profile: Option<&Profile>) -> String {
+        if let Some(name) = profile
+            .and_then(|profile| profile.theme.as_deref())
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+        {
+            return name.to_owned();
+        }
+        if self.follows_appearance() {
+            self.appearance_theme(system_dark())
+        } else {
+            self.settings.theme.clone()
+        }
     }
 
     pub fn set_font_size(&mut self, size: f32) {
@@ -331,9 +339,9 @@ impl ConfigFile {
         let source = if let Some(custom) = self.custom_themes.get(source_name) {
             custom.clone()
         } else if let Some(builtin) = theme::resolve_builtin(source_name) {
-            CustomTheme::from_palette(&builtin)
+            Scheme::from_palette(&builtin)
         } else {
-            CustomTheme::default()
+            Scheme::default()
         };
         let name = self.unique_theme_name(&format!("{source_name} Copy"));
         self.custom_themes.insert(name.clone(), source);
@@ -369,7 +377,7 @@ impl ConfigFile {
     /// themes cannot be renamed.
     pub fn rename_theme(&mut self, from: &str, to: &str) -> bool {
         let to = to.trim();
-        if to.is_empty() || from == to {
+        if to.is_empty() || from == to || !name_ok(to) {
             return false;
         }
         if !self.custom_themes.contains_key(from) {
@@ -385,6 +393,14 @@ impl ConfigFile {
         if self.settings.theme == from {
             self.settings.theme = to.to_owned();
         }
+        if let Some(pair) = &mut self.settings.adaptive_theme {
+            if pair.dark == from {
+                pair.dark = to.to_owned();
+            }
+            if pair.light == from {
+                pair.light = to.to_owned();
+            }
+        }
         for profile in self.profiles.values_mut() {
             if profile.theme.as_deref() == Some(from) {
                 profile.theme = Some(to.to_owned());
@@ -399,8 +415,28 @@ impl ConfigFile {
         if self.custom_themes.remove(name).is_none() {
             return false;
         }
+        // A file that only hid a built-in theme leaves the name meaning that theme.
+        if theme::resolve_builtin(name).is_some() {
+            return true;
+        }
         if self.settings.theme == name {
             self.settings.theme = DEFAULT_THEME.to_owned();
+        }
+        if let Some(pair) = &mut self.settings.adaptive_theme {
+            if pair.dark == name {
+                pair.dark.clear();
+            }
+            if pair.light == name {
+                pair.light.clear();
+            }
+        }
+        if self
+            .settings
+            .adaptive_theme
+            .as_ref()
+            .is_some_and(|pair| pair.dark.trim().is_empty() && pair.light.trim().is_empty())
+        {
+            self.settings.adaptive_theme = None;
         }
         for profile in self.profiles.values_mut() {
             if profile.theme.as_deref() == Some(name) {
@@ -411,8 +447,10 @@ impl ConfigFile {
     }
 
     /// Adds a custom theme, replacing one with the same name.
-    pub fn set_custom_theme(&mut self, name: &str, theme: CustomTheme) {
-        self.custom_themes.insert(name.to_owned(), theme);
+    pub fn set_custom_theme(&mut self, name: &str, theme: Scheme) {
+        if name_ok(name) {
+            self.custom_themes.insert(name.to_owned(), theme);
+        }
     }
 
     pub fn ensure_profile(&mut self, name: &str) -> &mut Profile {
@@ -449,7 +487,7 @@ impl ConfigFile {
 
     pub fn rename_profile(&mut self, from: &str, to: &str) -> bool {
         let to = to.trim();
-        if to.is_empty() || from == to || !self.profiles.contains_key(from) {
+        if to.is_empty() || from == to || !name_ok(to) || !self.profiles.contains_key(from) {
             return false;
         }
         if self.profiles.contains_key(to) {
@@ -484,21 +522,58 @@ impl ConfigFile {
                 format!("config was not loaded: {err}"),
             ));
         }
-        let path = self.path();
-        if let Some(dir) = path.parent() {
-            fs::create_dir_all(dir)?;
+        let dir = self.dir();
+        fs::create_dir_all(&dir)?;
+        let mut profiles = BTreeMap::new();
+        for (name, profile) in &self.profiles {
+            if !name_ok(name) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("'{name}' cannot be a file name"),
+                ));
+            }
+            let text = toml::to_string_pretty(profile)
+                .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+            profiles.insert(name.clone(), text);
         }
-        let text = toml::to_string_pretty(self)
+        let mut themes = BTreeMap::new();
+        for (name, scheme) in &self.custom_themes {
+            if !name_ok(name) {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("'{name}' cannot be a file name"),
+                ));
+            }
+            let text = scheme
+                .to_toml(name)
+                .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
+            themes.insert(name.clone(), text);
+        }
+        write_table(&dir.join("profiles"), &profiles)?;
+        write_table(&dir.join("themes"), &themes)?;
+        let root = RootFile {
+            version: self.version,
+            settings: self.settings.clone(),
+        };
+        let text = toml::to_string_pretty(&root)
             .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;
-        let tmp = path.with_extension("toml.tmp");
-        fs::write(&tmp, text)?;
-        fs::rename(&tmp, path)?;
-        Ok(())
+        write_atomic(&dir.join(CONFIG_NAME), &text)
     }
 }
 
+/// `config.toml` inside the platform config directory.
 pub fn config_path() -> PathBuf {
     config_dir().join(CONFIG_NAME)
+}
+
+/// A name that can be the stem of a `profiles/` or `themes/` file.
+pub fn name_ok(name: &str) -> bool {
+    if name.is_empty() || name == "." || name == ".." || name.starts_with('.') {
+        return false;
+    }
+    !name.chars().any(|ch| {
+        ch.is_control() || matches!(ch, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
+    })
 }
 
 fn config_dir() -> PathBuf {
@@ -507,6 +582,96 @@ fn config_dir() -> PathBuf {
         return xdg.config_dir().join("rune-term");
     }
     PathBuf::from(".").join("rune-term")
+}
+
+#[derive(Serialize, Deserialize)]
+struct RootFile {
+    version: u32,
+    #[serde(default)]
+    settings: Settings,
+}
+
+fn has_parts(dir: &Path) -> bool {
+    dir.join("profiles").is_dir() || dir.join("themes").is_dir()
+}
+
+fn read_table<T>(
+    dir: &Path,
+    parse: impl Fn(&str) -> Result<T, String>,
+) -> io::Result<BTreeMap<String, T>> {
+    let mut out = BTreeMap::new();
+    let entries = match fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(out),
+        Err(err) => return Err(err),
+    };
+    for entry in entries {
+        let path = entry?.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("toml") {
+            continue;
+        }
+        let Some(name) = path.file_stem().and_then(|stem| stem.to_str()) else {
+            continue;
+        };
+        if !name_ok(name) {
+            continue;
+        }
+        let text = fs::read_to_string(&path)?;
+        let value = parse(&text).map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("{}: {err}", path.display()),
+            )
+        })?;
+        out.insert(name.to_owned(), value);
+    }
+    Ok(out)
+}
+
+fn write_table(dir: &Path, files: &BTreeMap<String, String>) -> io::Result<()> {
+    fs::create_dir_all(dir)?;
+    for (name, text) in files {
+        write_atomic(&dir.join(format!("{name}.toml")), text)?;
+    }
+    for entry in fs::read_dir(dir)? {
+        let path = entry?.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("toml") {
+            continue;
+        }
+        let Some(stem) = path.file_stem().and_then(|stem| stem.to_str()) else {
+            continue;
+        };
+        if name_ok(stem) && !files.contains_key(stem) {
+            fs::remove_file(path)?;
+        }
+    }
+    Ok(())
+}
+
+fn write_atomic(path: &Path, text: &str) -> io::Result<()> {
+    let tmp = path.with_extension("toml.tmp");
+    fs::write(&tmp, text)?;
+    fs::rename(&tmp, path)?;
+    Ok(())
+}
+
+/// `defaults` prints `Dark` and fails when the desktop is light. Unknown stays dark.
+fn system_dark() -> bool {
+    if !cfg!(target_os = "macos") {
+        return true;
+    }
+    match std::process::Command::new("defaults")
+        .args(["read", "-g", "AppleInterfaceStyle"])
+        .output()
+    {
+        Ok(output) => {
+            output.status.success()
+                && String::from_utf8_lossy(&output.stdout)
+                    .to_ascii_lowercase()
+                    .contains("dark")
+        }
+        Err(_) => true,
+    }
 }
 
 #[cfg(test)]
@@ -530,10 +695,21 @@ mod tests {
         let mut cfg = ConfigFile::default();
         let copy = cfg.copy_theme("Dracula");
         cfg.ensure_profile("Work").theme = Some(copy.clone());
+        cfg.settings.adaptive_theme = Some(AdaptiveTheme {
+            dark: copy.clone(),
+            light: "Flexoki Light".to_owned(),
+        });
         assert!(cfg.rename_theme(&copy, "Night"));
         assert!(cfg.custom_themes.contains_key("Night"));
         assert!(!cfg.custom_themes.contains_key(&copy));
         assert_eq!(cfg.settings.theme, "Night");
+        assert_eq!(
+            cfg.settings
+                .adaptive_theme
+                .as_ref()
+                .map(|pair| pair.dark.as_str()),
+            Some("Night")
+        );
         assert_eq!(
             cfg.profile("Work").and_then(|p| p.theme.clone()),
             Some("Night".to_owned())
@@ -545,9 +721,14 @@ mod tests {
         let mut cfg = ConfigFile::default();
         let copy = cfg.copy_theme("Dracula");
         cfg.ensure_profile("Work").theme = Some(copy.clone());
+        cfg.settings.adaptive_theme = Some(AdaptiveTheme {
+            dark: copy.clone(),
+            light: copy.clone(),
+        });
         assert!(cfg.remove_theme(&copy));
         assert!(cfg.custom_themes.is_empty());
         assert_eq!(cfg.settings.theme, DEFAULT_THEME);
+        assert!(cfg.settings.adaptive_theme.is_none());
         assert!(cfg.profile("Work").and_then(|p| p.theme.clone()).is_none());
         assert!(!cfg.remove_theme("Dracula"));
     }
@@ -558,21 +739,122 @@ mod tests {
         cfg.ensure_profile("Work");
         assert_eq!(cfg.unique_profile_name("Work"), "Work 2");
         assert_eq!(cfg.unique_theme_name("Dracula"), "Dracula 2");
-        cfg.set_custom_theme("Dracula 2", CustomTheme::default());
+        cfg.set_custom_theme("Dracula 2", Scheme::default());
         assert_eq!(cfg.unique_theme_name("Dracula"), "Dracula 3");
     }
 
     #[test]
-    fn the_config_writes_to_the_file_it_was_read_from() {
-        let dir = std::env::temp_dir().join("rune-term-settings-test");
-        let path = dir.join("rune-term.toml");
-        let _ = fs::remove_file(&path);
-        let mut cfg = ConfigFile::default().at(&path);
+    fn a_name_that_cannot_be_a_file_is_refused() {
+        let mut cfg = ConfigFile::default();
+        cfg.ensure_profile("Work");
+        assert!(!cfg.rename_profile("Work", "a/b"));
+        assert!(cfg.profile("Work").is_some());
+        let copy = cfg.copy_theme("Dracula");
+        assert!(!cfg.rename_theme(&copy, ".hidden"));
+        assert!(cfg.is_custom_theme(&copy));
+    }
+
+    #[test]
+    fn the_config_roundtrips_through_its_directory() {
+        let dir = scratch("roundtrip");
+        let mut cfg = ConfigFile::default().at_dir(&dir);
         cfg.ensure_profile("Work").font_size = Some(18.0);
+        cfg.settings.adaptive_theme = Some(AdaptiveTheme {
+            dark: "Flexoki Black".to_owned(),
+            light: "Flexoki Light".to_owned(),
+        });
+        cfg.set_custom_theme("Night", Scheme::default());
         cfg.save().expect("save");
-        let loaded = ConfigFile::read(&path).expect("read");
+        let loaded = ConfigFile::open(&dir).expect("open");
         assert_eq!(loaded.profile("Work").and_then(|p| p.font_size), Some(18.0));
-        let _ = fs::remove_file(&path);
+        assert_eq!(loaded.settings.adaptive_theme, cfg.settings.adaptive_theme);
+        assert_eq!(loaded.custom_themes.get("Night"), Some(&Scheme::default()));
+        assert!(dir.join("profiles/Work.toml").is_file());
+        assert!(dir.join("themes/Night.toml").is_file());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_missing_config_still_loads_theme_files() {
+        let dir = scratch("dropped");
+        fs::create_dir_all(dir.join("themes")).unwrap();
+        let scheme = Scheme::default();
+        fs::write(
+            dir.join("themes/Night.toml"),
+            scheme.to_toml("Night").unwrap(),
+        )
+        .unwrap();
+        let cfg = ConfigFile::open(&dir).unwrap();
+        assert!(cfg.custom_themes.contains_key("Night"));
+        assert!(cfg.profile(DEFAULT_PROFILE).is_some());
+        cfg.save().unwrap();
+        assert!(dir.join("themes/Night.toml").is_file());
+        assert!(dir.join("config.toml").is_file());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_bad_theme_file_is_refused() {
+        let dir = scratch("bad-theme");
+        fs::create_dir_all(dir.join("themes")).unwrap();
+        fs::write(dir.join("themes/Bad.toml"), "colors = 1\n").unwrap();
+        let err = ConfigFile::open(&dir).expect_err("bad theme");
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn saving_removes_a_profile_file_that_was_deleted() {
+        let dir = scratch("delete-profile");
+        let mut cfg = ConfigFile::default().at_dir(&dir);
+        cfg.ensure_profile("Work");
+        cfg.save().unwrap();
+        assert!(dir.join("profiles/Work.toml").is_file());
+        assert!(cfg.remove_profile("Work"));
+        cfg.save().unwrap();
+        assert!(!dir.join("profiles/Work.toml").exists());
+        assert!(dir
+            .join("profiles")
+            .join(format!("{DEFAULT_PROFILE}.toml"))
+            .is_file());
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_theme_file_hides_the_builtin_until_it_is_removed() {
+        let mut cfg = ConfigFile::default();
+        cfg.set_custom_theme("Dracula", Scheme::default());
+        cfg.set_theme("Dracula".to_owned());
+        assert_eq!(cfg.resolve_palette().bg, Scheme::default().background);
+        assert!(cfg.remove_theme("Dracula"));
+        assert_eq!(cfg.settings.theme, "Dracula");
+        assert!(!cfg.is_custom_theme("Dracula"));
+        assert_ne!(cfg.resolve_palette().bg, Scheme::default().background);
+    }
+
+    #[test]
+    fn the_appearance_pair_is_used_when_the_profile_has_no_theme() {
+        let mut cfg = ConfigFile::default();
+        cfg.settings.adaptive_theme = Some(AdaptiveTheme {
+            dark: "Nord".to_owned(),
+            light: "Flexoki Light".to_owned(),
+        });
+        assert_eq!(cfg.appearance_theme(true), "Nord");
+        assert_eq!(cfg.appearance_theme(false), "Flexoki Light");
+        cfg.ensure_profile("Work").theme = Some("Dracula".to_owned());
+        assert_eq!(cfg.resolve_profile("Work").theme, "Dracula");
+        let chosen = cfg.resolve_profile(DEFAULT_PROFILE).theme;
+        assert!(chosen == "Nord" || chosen == "Flexoki Light");
+
+        cfg.settings.adaptive_theme = Some(AdaptiveTheme {
+            dark: "Nord".to_owned(),
+            light: String::new(),
+        });
+        assert_eq!(cfg.appearance_theme(false), cfg.settings.theme);
+        assert_eq!(
+            cfg.resolve_profile(DEFAULT_PROFILE).theme,
+            cfg.settings.theme
+        );
     }
 
     #[test]
@@ -585,26 +867,36 @@ mod tests {
     }
 
     #[test]
-    fn parses_named_profiles_and_resolves_selected() {
-        let toml = r#"
+    fn profiles_resolve_from_their_files() {
+        let dir = scratch("profiles");
+        fs::write(
+            dir.join("config.toml"),
+            r#"
 version = 1
 
 [settings]
 default_profile = "Work"
 font_size = 14.0
 theme = "Flexoki Black"
-
-[profiles.Default]
-font_family = "Cascadia Code NF"
-font_size = 14.0
-
-[profiles.Work]
+"#,
+        )
+        .unwrap();
+        fs::create_dir_all(dir.join("profiles")).unwrap();
+        fs::write(
+            dir.join("profiles/Default.toml"),
+            "font_family = \"Cascadia Code NF\"\nfont_size = 14.0\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("profiles/Work.toml"),
+            r#"
 font_family = "Cascadia Code NF"
 font_size = 18.0
 theme = "Flexoki Light"
-"#;
-        let mut cfg: ConfigFile = toml::from_str(toml).expect("parse");
-        cfg.normalize();
+"#,
+        )
+        .unwrap();
+        let cfg = ConfigFile::open(&dir).unwrap();
         assert_eq!(cfg.default_profile_name(), "Work");
         let names: Vec<_> = cfg.profile_names().collect();
         assert!(names.contains(&"Default"));
@@ -612,26 +904,30 @@ theme = "Flexoki Light"
         let work = cfg.resolve_profile("Work");
         assert_eq!(work.font_size, 18.0);
         assert_eq!(work.theme, "Flexoki Light");
-        let def = cfg.resolve_profile("Default");
-        assert_eq!(def.font_size, 14.0);
+        assert_eq!(cfg.resolve_profile("Default").font_size, 14.0);
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn missing_default_profile_falls_back() {
-        let toml = r#"
+        let dir = scratch("missing-default");
+        fs::write(
+            dir.join("config.toml"),
+            r#"
 version = 1
 
 [settings]
 default_profile = "Missing"
 font_size = 15.0
-
-[profiles.Only]
-font_size = 12.0
-"#;
-        let mut cfg: ConfigFile = toml::from_str(toml).expect("parse");
-        cfg.normalize();
+"#,
+        )
+        .unwrap();
+        fs::create_dir_all(dir.join("profiles")).unwrap();
+        fs::write(dir.join("profiles/Only.toml"), "font_size = 12.0\n").unwrap();
+        let cfg = ConfigFile::open(&dir).unwrap();
         assert_eq!(cfg.default_profile_name(), "Only");
         assert_eq!(cfg.resolve().font_size, 12.0);
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -645,44 +941,56 @@ font_size = 12.0
 
     #[test]
     fn parses_profile_launch_fields() {
-        let toml = r#"
-version = 1
-
-[settings]
-default_profile = "Dev"
-
-[profiles.Dev]
+        let dir = scratch("launch");
+        fs::write(
+            dir.join("config.toml"),
+            "version = 1\n\n[settings]\ndefault_profile = \"Dev\"\n",
+        )
+        .unwrap();
+        fs::create_dir_all(dir.join("profiles")).unwrap();
+        fs::write(
+            dir.join("profiles/Dev.toml"),
+            r#"
 backend = "local"
 cwd = "/tmp/work"
 
-[profiles.Dev.shell]
+[shell]
 program = "/bin/zsh"
 args = ["-l"]
-"#;
-        let mut cfg: ConfigFile = toml::from_str(toml).expect("parse");
-        cfg.normalize();
+"#,
+        )
+        .unwrap();
+        let cfg = ConfigFile::open(&dir).unwrap();
         let resolved = cfg.resolve_profile("Dev");
         assert_eq!(resolved.backend, "local");
         assert_eq!(resolved.cwd.as_deref(), Some("/tmp/work"));
         let shell = resolved.shell.expect("shell");
         assert_eq!(shell.program.as_deref(), Some("/bin/zsh"));
         assert_eq!(shell.args, vec!["-l".to_string()]);
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn set_default_profile_and_roundtrip() {
-        let mut cfg = ConfigFile::default();
+        let dir = scratch("default-profile");
+        let mut cfg = ConfigFile::default().at_dir(&dir);
         cfg.ensure_profile("Work").font_size = Some(16.0);
         assert!(cfg.set_default_profile("Work"));
         assert_eq!(cfg.default_profile_name(), "Work");
         assert!(!cfg.set_default_profile("Missing"));
-
-        let text = toml::to_string_pretty(&cfg).expect("serialize");
-        let mut loaded: ConfigFile = toml::from_str(&text).expect("parse");
-        loaded.normalize();
+        cfg.save().unwrap();
+        let loaded = ConfigFile::open(&dir).unwrap();
         assert_eq!(loaded.default_profile_name(), "Work");
         assert!(loaded.profile("Default").is_some());
         assert_eq!(loaded.resolve_profile("Work").font_size, 16.0);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("rune-term-settings-{name}"));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("scratch");
+        dir
     }
 
     #[test]

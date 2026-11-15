@@ -15,8 +15,36 @@ pub use crate::split::{Leaf, LeafId, Node};
 pub const TITLEBAR_H: f32 = 38.0;
 /// One hit target. A short title and a long one use this same box.
 const TAB_W: f32 = 132.0;
-const TAB_PAD_X: f32 = 14.0;
-const TAB_RADIUS: f32 = 7.0;
+pub(crate) const TAB_PAD_X: f32 = 14.0;
+pub(crate) const TAB_RADIUS: f32 = 7.0;
+
+/// The title band's height: the window's own when it has one, else [`TITLEBAR_H`].
+pub(crate) fn band_height(insets_height: f32) -> f32 {
+    if insets_height > 0.0 {
+        insets_height
+    } else {
+        TITLEBAR_H
+    }
+}
+
+/// A tab's height inside a band of `band` points.
+pub(crate) fn tab_box_height(band: f32) -> f32 {
+    (band - 10.0).max(22.0)
+}
+
+/// The band across the top of a window. Native controls sit over `leading` and
+/// `trailing`, and the empty part of the band drags the window.
+pub(crate) fn title_strip(band: f32, leading: f32, trailing: f32, fill: Color) -> El {
+    row()
+        .w_full()
+        .h(band)
+        .fill(fill)
+        .center_y()
+        .pl(leading + 10.0)
+        .pr(trailing + 10.0)
+        .gap(6.0)
+        .window_drag()
+}
 
 /// Tab strip. Dark chrome above the black pane.
 pub fn tab(p: &Palette) -> rune::Color {
@@ -137,26 +165,11 @@ fn confirm_open_link(uri: &str, p: &Palette) -> El {
 fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {
     let p = model.palette.as_ref();
     let insets = cx.chrome_insets();
-    let h = if insets.height > 0.0 {
-        insets.height
-    } else {
-        TITLEBAR_H
-    };
-    // Leave room for native window controls (macOS traffic lights / Windows
-    // caption buttons) that sit over the custom titlebar.
+    let h = band_height(insets.height);
     let leading = insets.leading.max(cx.titlebar_inset());
-    let trailing = insets.trailing;
-    let tab_h = (h - 10.0).max(22.0);
-    let mut strip = row()
+    let tab_h = tab_box_height(h);
+    let mut strip = title_strip(h, leading, insets.trailing, theme::linear(p.tab_bg))
         .key("tabs")
-        .w_full()
-        .h(h)
-        .fill(theme::linear(p.tab_bg))
-        .center_y()
-        .pl(leading + 10.0)
-        .pr(trailing + 10.0)
-        .gap(6.0)
-        .window_drag()
         .scroll_x();
     if model.tabs.is_empty() {
         return strip.child(new_tab_button(tab_h, p));
@@ -256,7 +269,7 @@ mod tests {
     use rune::{Env, Runtime};
 
     fn tab_h() -> f32 {
-        (TITLEBAR_H - 10.0).max(22.0)
+        tab_box_height(TITLEBAR_H)
     }
 
     fn host() -> Model {

@@ -157,7 +157,7 @@ impl Bars {
             return;
         };
         self.thumb
-            .write_color(queue, fade(model.palette.muted, srgb_blend, opacity));
+            .write_color(queue, fade(model.palette.scrollbar, srgb_blend, opacity));
         pass.set_scissor_rect(x, y, w, h);
         self.thumb.draw(pass);
     }

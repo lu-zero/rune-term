@@ -1,15 +1,14 @@
-use color_picker::{hex6, hsv_editor, linear_rgb, Hsv};
+use color_picker::{hex6, linear_rgb, rgb_sliders, Style};
 use rune::{col, el, row, text, App, AppSpec, Color, Cx, El, Titlebar};
 
 const TITLEBAR_H: f32 = 38.0;
 
 #[derive(Clone, Copy, Debug)]
 struct State {
-    hsv: Hsv,
+    rgb: u32,
 }
 
 fn view(s: &State, cx: &mut Cx<State>) -> El {
-    let rgb = s.hsv.to_rgb_u32();
     let insets = cx.chrome_insets();
     let h = if insets.height > 0.0 {
         insets.height
@@ -18,6 +17,19 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
     };
     let leading = insets.leading.max(cx.titlebar_inset());
     let trailing = insets.trailing;
+    let ink = Color::WHITE.alpha(0.2);
+    let style = Style {
+        track: Color {
+            r: 0.16,
+            g: 0.16,
+            b: 0.17,
+            a: 1.0,
+        },
+        track_border: ink,
+        thumb: Color::WHITE,
+        thumb_border: ink,
+        label: Color::WHITE.alpha(0.7),
+    };
 
     let header = row()
         .key("titlebar")
@@ -56,17 +68,18 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
                     el().w(48.0)
                         .h(48.0)
                         .radius(6.0)
-                        .fill(linear_rgb(rgb))
-                        .border(1.0, Color::WHITE.alpha(0.2)),
+                        .fill(linear_rgb(s.rgb))
+                        .border(1.0, ink),
                 )
-                .child(text(format!("{}  RRGGBB={:06X}", hex6(rgb), rgb)).color(Color::WHITE)),
+                .child(text(hex6(s.rgb)).color(Color::WHITE)),
         )
-        .child(hsv_editor::<State, _>(
+        .child(rgb_sliders::<State, _>(
             "demo",
-            s.hsv,
-            |s: &mut State, hsv| {
-                s.hsv = hsv;
+            s.rgb,
+            |s: &mut State, rgb| {
+                s.rgb = rgb;
             },
+            style,
         ));
 
     col()
@@ -85,10 +98,8 @@ fn view(s: &State, cx: &mut Cx<State>) -> El {
 fn main() {
     App::new(AppSpec::new(
         "color-picker-demo",
-        (420.0, 300.0),
-        || State {
-            hsv: Hsv::from_rgb_u32(0x33_66_99),
-        },
+        (420.0, 280.0),
+        || State { rgb: 0x33_66_99 },
         view,
     ))
     .titlebar(Titlebar::new(TITLEBAR_H))

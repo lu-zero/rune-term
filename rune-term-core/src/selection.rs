@@ -97,16 +97,9 @@ fn ordered(selection: ViewportSelection) -> (u16, u16, u16, u16) {
     }
 }
 
-/// A transparent cell takes the foreground as its highlight. An opaque cell swaps.
 fn highlight(sample: &mut CellSample, palette: &Palette) {
-    if sample.bg[3] == 0 {
-        sample.fg = solid(palette.bg);
-        sample.bg = solid(palette.fg);
-        return;
-    }
-    std::mem::swap(&mut sample.fg, &mut sample.bg);
-    sample.fg[3] = 255;
-    sample.bg[3] = 255;
+    sample.fg = solid(palette.selection_fg);
+    sample.bg = solid(palette.selection_bg);
 }
 
 fn solid(value: u32) -> [u8; 4] {

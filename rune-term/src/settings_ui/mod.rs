@@ -11,9 +11,9 @@ use std::sync::Arc;
 
 use rune::{
     col, el, icon, row, text, AppHandle, AppSpec, Color, Cx, El, Icon, Key, KeyEvent, ScrollSpec,
-    Tx, WindowOptions, WindowSpec,
+    Titlebar, Tx, WindowOptions, WindowSpec,
 };
-use rune_kit::Kit;
+use rune_kit::{Kit, TextInput};
 
 use crate::model::Model;
 use crate::settings::{self, ConfigFile};
@@ -114,6 +114,7 @@ pub fn window(terminal: AppHandle<Model>) -> WindowSpec<SettingsModel> {
     .on_close(save_on_close);
     WindowSpec::from_app("settings", app)
         .state(SettingsModel::new(terminal))
+        .titlebar(Titlebar::new(crate::chrome::TITLEBAR_H))
         .options(WindowOptions {
             visible: false,
             ..WindowOptions::default()
@@ -169,7 +170,7 @@ fn theme_draft(config: &ConfigFile) -> themes::ThemeDraft {
         .or_else(|| names.first())
         .cloned()
         .unwrap_or_else(|| settings::DEFAULT_THEME.to_owned());
-    themes::ThemeDraft::from_colors(&name, config)
+    themes::ThemeDraft::from_name(&name, config)
 }
 
 /// The terminal's chord. Opens the settings window.
@@ -266,15 +267,11 @@ pub fn show_tab(model: &mut SettingsModel, tab: Tab) {
 pub fn view(model: &SettingsModel, cx: &mut Cx<SettingsModel>) -> El {
     let kit = kit(&previewed_palette(model));
     let mut overlays = Vec::new();
-    // The window's own controls (the macOS traffic lights) sit over the
-    // content's top-left, so the bar keeps clear of them.
-    let insets = cx.chrome_insets();
-    let leading = insets.leading.max(cx.titlebar_inset());
     let body = col()
         .w_full()
         .h_full()
         .fill(kit.c.page)
-        .child(toolbar(&kit, model, leading, insets.trailing))
+        .child(toolbar(&kit, model, cx))
         .child(
             row()
                 .w_full()
@@ -282,48 +279,36 @@ pub fn view(model: &SettingsModel, cx: &mut Cx<SettingsModel>) -> El {
                 .min_h(0.0)
                 .child(sidebar(&kit, model))
                 .child(el().w(1.0).h_full().fill(kit.c.border_muted))
-                .child(editor(&kit, model, &mut overlays)),
+                .child(editor(&kit, model, &mut overlays, cx)),
         );
     rune_kit::root(body, overlays)
 }
 
-fn toolbar(kit: &Kit, model: &SettingsModel, leading: f32, trailing: f32) -> El {
-    let selected = match model.tab {
-        Tab::Profiles => Some(0),
-        Tab::Themes => Some(1),
-    };
-    let status = model.status.clone();
-    let mut bar = row()
-        .w_full()
-        .h(52.0)
-        .pl(leading + 16.0)
-        .pr(trailing + 16.0)
-        .gap(12.0)
-        .center_y()
-        .fill(kit.c.bg_base)
-        .child(
-            text("Settings")
-                .font(kit.ty.ui_medium)
-                .color(kit.c.text_base),
-        )
-        .child(
-            rune_kit::SegmentedControl::new(&["Profiles", "Themes"], selected)
-                .fit()
-                .label("Section")
-                .on_pick(|m: &mut SettingsModel, index: usize, _tx| {
-                    show_tab(
-                        m,
-                        if index == 1 {
-                            Tab::Themes
-                        } else {
-                            Tab::Profiles
-                        },
-                    );
-                })
-                .build(kit),
-        )
+fn toolbar(kit: &Kit, model: &SettingsModel, cx: &mut Cx<SettingsModel>) -> El {
+    let insets = cx.chrome_insets();
+    let band = crate::chrome::band_height(insets.height);
+    let tab_h = crate::chrome::tab_box_height(band);
+    let leading = insets.leading.max(cx.titlebar_inset());
+    let mut bar = crate::chrome::title_strip(band, leading, insets.trailing, kit.c.surface_base)
+        .key("titlebar")
+        .child(section(
+            kit,
+            "Profiles",
+            "section-profiles",
+            model.tab == Tab::Profiles,
+            tab_h,
+            Tab::Profiles,
+        ))
+        .child(section(
+            kit,
+            "Themes",
+            "section-themes",
+            model.tab == Tab::Themes,
+            tab_h,
+            Tab::Themes,
+        ))
         .child(el().grow(1.0));
-    if let Some(status) = status {
+    if let Some(status) = model.status.clone() {
         bar = bar.child(
             text(status)
                 .font(kit.ty.small)
@@ -332,6 +317,33 @@ fn toolbar(kit: &Kit, model: &SettingsModel, leading: f32, trailing: f32) -> El 
         );
     }
     bar
+}
+
+/// One section, drawn as a terminal tab. Pressing the one already showing does
+/// nothing, so the rest of the draft is not reloaded.
+fn section(kit: &Kit, label: &str, key: &str, on: bool, tab_h: f32, tab: Tab) -> El {
+    let ink = if on {
+        kit.c.text_base
+    } else {
+        kit.c.text_muted
+    };
+    let mut chip = row()
+        .key(key)
+        .h(tab_h)
+        .pl(crate::chrome::TAB_PAD_X)
+        .pr(crate::chrome::TAB_PAD_X)
+        .center_y()
+        .radius(crate::chrome::TAB_RADIUS)
+        .on_press(move |model: &mut SettingsModel| {
+            if model.tab != tab {
+                show_tab(model, tab);
+            }
+        })
+        .child(text(label).color(ink));
+    if on {
+        chip = chip.fill(kit.c.page).border(1.0, kit.c.border_muted);
+    }
+    chip
 }
 
 fn sidebar(kit: &Kit, model: &SettingsModel) -> El {
@@ -397,7 +409,7 @@ fn add_row(kit: &Kit) -> El {
 fn profile_row(kit: &Kit, model: &SettingsModel, index: usize, name: &str, default: bool) -> El {
     let selected = model.selected == index;
     let profile = name.to_owned();
-    let mut row = row()
+    let row = row()
         .key(format!("profile-{index}"))
         .role("option")
         .w_full()
@@ -430,15 +442,12 @@ fn profile_row(kit: &Kit, model: &SettingsModel, index: usize, name: &str, defau
                 .truncate(),
         )
         .child(make_default(kit, profile, default));
-    for a in profiles::actions(kit, model) {
-        row = row.child(a);
-    }
     row
 }
 
 fn theme_row(kit: &Kit, model: &SettingsModel, index: usize, name: &str) -> El {
     let selected = model.selected == index;
-    let mut row = row()
+    let row = row()
         .key(format!("theme-{index}"))
         .role("option")
         .w_full()
@@ -470,12 +479,6 @@ fn theme_row(kit: &Kit, model: &SettingsModel, index: usize, name: &str) -> El {
                 .min_w(0.0)
                 .truncate(),
         );
-    // The row's actions sit on the row the editor is showing.
-    if selected {
-        for a in themes::actions(kit, model) {
-            row = row.child(a);
-        }
-    }
     row
 }
 
@@ -504,14 +507,19 @@ fn marker(kit: &Kit, selected: bool) -> El {
     }
 }
 
-/// A square button that runs one of the row's actions. `ink` is transparent
-/// for the rows that are not the editor's, so their buttons stay out of the
-/// way without leaving the row.
+/// Enter and leaving the field both run `done`. A half-typed value stays put.
+pub(crate) fn when_finished(input: TextInput, done: fn(&mut SettingsModel)) -> TextInput {
+    input
+        .on_submit(move |model: &mut SettingsModel, _| done(model))
+        .on_blur(move |model: &mut SettingsModel, _| done(model))
+}
+
+/// One editor action. Disabled, it keeps its icon and does not press.
 pub(crate) fn action(
     kit: &Kit,
     key: &'static str,
     glyph: &'static Icon,
-    _label: &str,
+    label: &str,
     enabled: bool,
     press: impl Fn(&mut SettingsModel) + 'static,
 ) -> El {
@@ -521,6 +529,7 @@ pub(crate) fn action(
         .h(24.0)
         .center()
         .radius(kit.radius.sm)
+        .help(label)
         .child(icon(glyph, 16.0).color(kit.c.text_base));
     if enabled {
         button = button
@@ -531,11 +540,32 @@ pub(crate) fn action(
     button
 }
 
+/// The editor column, with its actions at the top right.
+pub(crate) fn with_actions(actions: Vec<El>, body: El) -> El {
+    let mut bar = row()
+        .w_full()
+        .px(16.0)
+        .pt(12.0)
+        .gap(4.0)
+        .center_y()
+        .child(el().grow(1.0));
+    for action in actions {
+        bar = bar.child(action);
+    }
+    col()
+        .w_full()
+        .h_full()
+        .grow(1.0)
+        .min_h(0.0)
+        .child(bar)
+        .child(body)
+}
+
 /// The editor column.
-fn editor(kit: &Kit, model: &SettingsModel, overlays: &mut Vec<El>) -> El {
+fn editor(kit: &Kit, model: &SettingsModel, overlays: &mut Vec<El>, cx: &Cx<SettingsModel>) -> El {
     match model.tab {
-        Tab::Profiles => profiles::editor(kit, model, overlays),
-        Tab::Themes => themes::editor(kit, model),
+        Tab::Profiles => profiles::editor(kit, model, overlays, cx),
+        Tab::Themes => themes::editor(kit, model, overlays),
     }
 }
 
@@ -682,15 +712,37 @@ mod tests {
 
     /// A model over a config of its own, so a test never writes the user's.
     fn model(name: &str) -> SettingsModel {
-        let dir = std::env::temp_dir().join("rune-term-settings-ui-test");
-        SettingsModel::with_config(
-            ConfigFile::default().at(dir.join(format!("{name}.toml"))),
-            None,
-        )
+        let dir = std::env::temp_dir()
+            .join("rune-term-settings-ui-test")
+            .join(name);
+        let _ = std::fs::remove_dir_all(&dir);
+        SettingsModel::with_config(ConfigFile::default().at_dir(dir), None)
     }
 
     fn runtime(model: SettingsModel) -> Runtime<SettingsModel> {
         Runtime::new(model, view, (SIZE.0, SIZE.1), Env::new(true, 1.0))
+    }
+
+    #[test]
+    fn the_theme_menu_matches_its_field() {
+        let mut rt = runtime(model("theme-menu"));
+        rt.frame(0.0);
+        let trigger = width_of(&rt, "profile-theme-trigger");
+        press(&mut rt, "profile-theme-trigger");
+        assert!(rt.state.profile.theme_open);
+        let menu = width_of(&rt, "profile-theme-content");
+        assert!(
+            (menu - trigger).abs() < 1.0,
+            "menu {menu} trigger {trigger}"
+        );
+    }
+
+    fn width_of(rt: &Runtime<SettingsModel>, key: &str) -> f32 {
+        rt.elements()
+            .into_iter()
+            .find(|el| el.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("missing {key}"))
+            .rect[2]
     }
 
     #[test]
@@ -715,21 +767,10 @@ mod tests {
         let mut rt = runtime(model("delete"));
         rt.frame(0.0);
         press(&mut rt, "add-row");
-        eprintln!(
-            "before: selected={} keys={:?}",
-            rt.state.selected,
-            rt.state.config.profiles.keys().collect::<Vec<_>>()
-        );
-        eprintln!(
-            "delete: presented={:?} find={:?}",
-            rt.presented("profile-delete"),
-            rt.find("profile-delete")
-        );
+        // Let the actions' entering flight settle before the click.
+        rt.frame(0.3);
+        rt.frame(0.3);
         press(&mut rt, "profile-delete");
-        eprintln!(
-            "after: keys={:?}",
-            rt.state.config.profiles.keys().collect::<Vec<_>>()
-        );
         assert!(!rt.state.config.profiles.contains_key("Profile"));
         assert!(rt.find("profile-1").is_none());
     }
@@ -741,6 +782,157 @@ mod tests {
         rt.frame(0.0);
         assert!(rt.find("theme-0").is_some());
         assert!(rt.state.config.custom_themes.is_empty());
+    }
+
+    #[test]
+    fn an_indexed_color_is_stored_on_its_own() {
+        let mut rt = runtime(model("indexed-color"));
+        show_tab(&mut rt.state, Tab::Themes);
+        rt.frame(0.0);
+        press(&mut rt, "theme-duplicate");
+        let name = rt.state.theme.original.clone();
+        let background = rt.state.config.custom_themes[&name].background;
+        let foreground = rt.state.config.custom_themes[&name].foreground;
+        rt.state.theme.select_slot(crate::scheme::Slot::Indexed(17));
+        let [r, g, b] = crate::theme::xterm_index(17);
+        assert_eq!(
+            rt.state.theme.hex.text,
+            color_picker::hex6(u32::from(r) << 16 | u32::from(g) << 8 | u32::from(b))
+        );
+        rt.state.theme.select_slot(crate::scheme::Slot::Indexed(16));
+        rt.state
+            .theme
+            .hex
+            .replace_text(color_picker::hex6(foreground));
+        themes::reflect_color(&mut rt.state);
+        let theme = &rt.state.config.custom_themes[&name];
+        assert_eq!(theme.color(crate::scheme::Slot::Indexed(16)), foreground);
+        assert_eq!(theme.background, background);
+        assert_eq!(rt.state.theme.slot, crate::scheme::Slot::Indexed(16));
+
+        rt.state.theme.hex.replace_text(color_picker::hex6(0));
+        themes::reflect_color(&mut rt.state);
+        assert!(!rt.state.config.custom_themes[&name]
+            .indexed
+            .contains_key(&16));
+
+        rt.state
+            .theme
+            .hex
+            .replace_text(color_picker::hex6(foreground));
+        themes::reflect_color(&mut rt.state);
+        themes::remove_indexed(&mut rt.state);
+        let theme = &rt.state.config.custom_themes[&name];
+        assert!(!theme.indexed.contains_key(&16));
+        assert_eq!(theme.background, background);
+        assert_eq!(rt.state.theme.slot, crate::scheme::Slot::Background);
+        assert!(!rt.state.theme.editor_open);
+    }
+
+    #[test]
+    fn the_theme_editor_wraps_with_the_window() {
+        let mut wide = runtime(model("theme-layout-wide"));
+        show_tab(&mut wide.state, Tab::Themes);
+        wide.frame(0.0);
+        let name = text_top(&wide, "Name");
+        let author = text_top(&wide, "Author");
+        let source = text_top(&wide, "Source");
+        assert!((name - author).abs() < 1.0, "name {name} author {author}");
+        assert!(
+            (author - source).abs() < 1.0,
+            "author {author} source {source}"
+        );
+        let basic = text_top(&wide, "Basic");
+        let ui = text_top(&wide, "UI");
+        assert!((basic - ui).abs() < 1.0, "basic {basic} ui {ui}");
+        assert!(text_top(&wide, "ANSI") > basic);
+        assert!(text_top(&wide, "Cube") > text_top(&wide, "ANSI"));
+        assert!(text_top(&wide, "Gray") > text_top(&wide, "Cube"));
+        let cube = key_top(&wide, "slot-Index 16");
+        assert!((cube - key_top(&wide, "slot-Index 46")).abs() < 1.0);
+        assert!(key_top(&wide, "slot-Index 52") > cube);
+
+        let mut narrow = Runtime::new(
+            model("theme-layout-narrow"),
+            view,
+            (MIN_SIZE.0, MIN_SIZE.1),
+            Env::new(true, 1.0),
+        );
+        show_tab(&mut narrow.state, Tab::Themes);
+        narrow.frame(0.0);
+        assert!(text_top(&narrow, "Author") > text_top(&narrow, "Name"));
+        assert!(text_top(&narrow, "Source") > text_top(&narrow, "Author"));
+        assert!(text_top(&narrow, "UI") > text_top(&narrow, "Basic"));
+        let cube = key_top(&narrow, "slot-Index 16");
+        assert!((cube - key_top(&narrow, "slot-Index 28")).abs() < 1.0);
+        assert!(key_top(&narrow, "slot-Index 34") > cube);
+    }
+
+    fn text_top(rt: &Runtime<SettingsModel>, label: &str) -> f32 {
+        rt.elements()
+            .into_iter()
+            .find(|el| el.text.as_deref() == Some(label))
+            .unwrap_or_else(|| panic!("missing {label}"))
+            .rect[1]
+    }
+
+    fn key_top(rt: &Runtime<SettingsModel>, key: &str) -> f32 {
+        rt.elements()
+            .into_iter()
+            .find(|el| el.key.as_deref() == Some(key))
+            .unwrap_or_else(|| panic!("missing {key}"))
+            .rect[1]
+    }
+
+    #[test]
+    fn a_swatch_names_itself_and_opens_its_editor() {
+        let mut rt = runtime(model("swatch-tip"));
+        show_tab(&mut rt.state, Tab::Themes);
+        rt.frame(0.0);
+        let help = rt
+            .elements()
+            .into_iter()
+            .find(|el| el.key.as_deref() == Some("slot-Background"))
+            .and_then(|el| el.help);
+        assert_eq!(help.as_deref(), Some("Background"));
+        assert!(rt.find("theme-color-editor-content").is_none());
+        assert!(rt.find("slot-Index 16").is_some());
+        assert!(rt.find("slot-Index 232").is_some());
+        assert!(rt.find("slot-Index 255").is_some());
+        assert!(rt.find("indexed-add").is_none());
+        let index_help = rt
+            .elements()
+            .into_iter()
+            .find(|el| el.key.as_deref() == Some("slot-Index 16"))
+            .and_then(|el| el.help);
+        assert_eq!(index_help.as_deref(), Some("Index 16"));
+        press(&mut rt, "slot-Blue");
+        assert!(rt.find("theme-color-editor-content").is_none());
+
+        press(&mut rt, "theme-duplicate");
+        press(&mut rt, "slot-Blue");
+        assert!(rt.find("theme-color-editor-content").is_some());
+        assert_eq!(rt.state.theme.slot, crate::scheme::Slot::Ansi(4));
+        assert!(rt.state.theme.editor_open);
+        let title = rt
+            .elements()
+            .into_iter()
+            .find(|el| el.key.as_deref() == Some("title"))
+            .and_then(|el| el.text);
+        assert_eq!(title.as_deref(), Some("Blue"));
+
+        // The scrim fades in over the grid, and fades out after it closes.
+        rt.frame(0.5);
+        press(&mut rt, "slot-Blue");
+        assert!(rt.find("theme-color-editor-content").is_none());
+        assert!(!rt.state.theme.editor_open);
+        rt.frame(0.5);
+
+        press(&mut rt, "slot-Blue");
+        rt.frame(0.5);
+        press(&mut rt, "slot-Red");
+        assert!(rt.find("theme-color-editor-content").is_none());
+        assert_eq!(rt.state.theme.slot, crate::scheme::Slot::Ansi(4));
     }
 
     #[test]
@@ -768,7 +960,7 @@ mod tests {
         rt.frame(0.0);
         press(&mut rt, "theme-save");
         let theme = rt.state.config.custom_themes.get("Night").expect("renamed");
-        assert_eq!(theme.accent, rt.state.theme.colors.accent);
+        assert_eq!(theme.ansi, rt.state.theme.scheme.ansi);
         assert_eq!(theme.author, author);
         assert!(!rt.state.config.is_custom_theme(&format!("{source} Copy")));
     }
@@ -790,6 +982,34 @@ mod tests {
         rt.pointer_down(x, y);
         rt.pointer_up(x, y);
         rt.frame(0.0);
+    }
+
+    #[test]
+    fn the_editor_actions_name_themselves() {
+        let mut rt = runtime(model("action-tips"));
+        rt.frame(0.0);
+        assert_eq!(help_text(&rt, "profile-save").as_deref(), Some("Save"));
+        assert_eq!(help_text(&rt, "profile-revert").as_deref(), Some("Revert"));
+        assert_eq!(
+            help_text(&rt, "profile-duplicate").as_deref(),
+            Some("Duplicate")
+        );
+        assert_eq!(help_text(&rt, "profile-delete").as_deref(), Some("Delete"));
+        press(&mut rt, "section-themes");
+        assert_eq!(help_text(&rt, "theme-save").as_deref(), Some("Save"));
+        assert_eq!(help_text(&rt, "theme-revert").as_deref(), Some("Revert"));
+        assert_eq!(
+            help_text(&rt, "theme-duplicate").as_deref(),
+            Some("Duplicate")
+        );
+        assert_eq!(help_text(&rt, "theme-delete").as_deref(), Some("Delete"));
+    }
+
+    fn help_text(rt: &Runtime<SettingsModel>, key: &str) -> Option<String> {
+        rt.elements()
+            .into_iter()
+            .find(|el| el.key.as_deref() == Some(key))
+            .and_then(|el| el.help)
     }
 
     #[test]
@@ -830,6 +1050,137 @@ mod tests {
         assert!(rt.state.profile.theme.is_empty());
         assert_eq!(rt.state.previewed, None);
         assert_eq!(previewed_palette(&rt.state).name, saved);
+    }
+
+    #[test]
+    fn the_profile_name_lands_in_the_list_when_the_field_is_done() {
+        let mut rt = runtime(model("name-live"));
+        rt.frame(0.0);
+        let (x, y) = rt.find("input").expect("name field");
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        rt.frame(0.0);
+        rt.state.profile.name.text = "Work".to_owned();
+        rt.key(rune::KeyEvent {
+            key: Key::Enter,
+            mods: rune::Mods::default(),
+        });
+        rt.frame(0.0);
+        assert!(rt.state.config.profiles.contains_key("Work"));
+        assert!(!rt.state.config.profiles.contains_key("Default"));
+        assert_eq!(rt.state.profile.original, "Work");
+        assert_eq!(rt.state.selected, 0);
+
+        rt.state.profile.name.text = "Home".to_owned();
+        rt.physical_input(rune::PhysicalInput::FocusLost);
+        rt.frame(0.0);
+        assert!(rt.state.config.profiles.contains_key("Home"));
+        assert!(!rt.state.config.profiles.contains_key("Work"));
+        assert_eq!(rt.state.profile.original, "Home");
+
+        rt.state.profile.name.text = "Lab".to_owned();
+        rt.key(rune::KeyEvent {
+            key: Key::Tab,
+            mods: rune::Mods::default(),
+        });
+        rt.frame(0.0);
+        assert!(rt.state.config.profiles.contains_key("Lab"));
+        assert!(!rt.state.config.profiles.contains_key("Home"));
+
+        rt.state.profile.name.text = "  ".to_owned();
+        profiles::reflect_name(&mut rt.state);
+        assert_eq!(rt.state.status.as_deref(), Some("A profile needs a name"));
+        assert!(rt.state.config.profiles.contains_key("Lab"));
+
+        rt.state.profile.name.text = "Lab".to_owned();
+        profiles::reflect_name(&mut rt.state);
+        assert_eq!(rt.state.status, None);
+        assert!(rt.state.config.profiles.contains_key("Lab"));
+    }
+
+    #[test]
+    fn a_finished_profile_field_is_stored_without_the_rest_of_the_draft() {
+        let mut rt = runtime(model("fields"));
+        rt.frame(0.0);
+        let (x, y) = rt.find("input").expect("name field");
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        rt.frame(0.0);
+        // Name, then the theme menu, then the font family.
+        rt.key(rune::KeyEvent {
+            key: Key::Tab,
+            mods: rune::Mods::default(),
+        });
+        rt.frame(0.0);
+        rt.key(rune::KeyEvent {
+            key: Key::Tab,
+            mods: rune::Mods::default(),
+        });
+        rt.frame(0.0);
+        rt.state.profile.font_family.text = "Iosevka".to_owned();
+        rt.state.profile.shell_program.text = "zsh".to_owned();
+        rt.key(rune::KeyEvent {
+            key: Key::Enter,
+            mods: rune::Mods::default(),
+        });
+        rt.frame(0.0);
+        let profile = rt.state.config.profiles.get("Default").expect("profile");
+        assert_eq!(profile.font_family, "Iosevka");
+        assert!(profile.shell.is_none());
+        assert_eq!(rt.state.profile.shell_program.text, "zsh");
+        assert!(rt.state.profile.is_dirty());
+
+        rt.state.profile.font_size.text = "nope".to_owned();
+        profiles::reflect_font_size(&mut rt.state);
+        assert_eq!(
+            rt.state.status.as_deref(),
+            Some("'nope' is not a font size")
+        );
+        assert!(rt.state.config.profiles["Default"].font_size.is_none());
+
+        rt.state.profile.cwd.text = "  /tmp ".to_owned();
+        profiles::reflect_cwd(&mut rt.state);
+        assert_eq!(
+            rt.state.config.profiles["Default"].cwd.as_deref(),
+            Some("/tmp")
+        );
+        assert_eq!(rt.state.profile.cwd.text, "/tmp");
+        assert_eq!(rt.state.profile.shell_program.text, "zsh");
+    }
+
+    #[test]
+    fn a_finished_theme_field_is_stored_without_the_rest_of_the_draft() {
+        let mut rt = runtime(model("theme-fields"));
+        show_tab(&mut rt.state, Tab::Themes);
+        rt.frame(0.0);
+        press(&mut rt, "theme-duplicate");
+        let author = rt.state.theme.author.text.clone();
+        rt.state.theme.select_slot(crate::scheme::Slot::Ansi(15));
+        rt.state.theme.hex.text = "#112233".to_owned();
+        rt.state.theme.author.text = "Ada".to_owned();
+        themes::reflect_color(&mut rt.state);
+        let name = rt.state.theme.original.clone();
+        let theme = rt.state.config.custom_themes.get(&name).expect("theme");
+        assert_eq!(theme.color(crate::scheme::Slot::Ansi(15)), 0x112233);
+        assert_eq!(theme.background, 0);
+        assert_eq!(theme.author, author);
+        assert_eq!(rt.state.theme.author.text, "Ada");
+
+        rt.state.theme.name.text = "Night".to_owned();
+        themes::reflect_name(&mut rt.state);
+        assert!(rt.state.config.custom_themes.contains_key("Night"));
+        assert!(!rt.state.config.custom_themes.contains_key(&name));
+        assert_eq!(
+            rt.state.config.custom_themes["Night"].color(crate::scheme::Slot::Ansi(15)),
+            0x112233
+        );
+        assert_eq!(rt.state.config.custom_themes["Night"].author, author);
+        assert_eq!(rt.state.theme.author.text, "Ada");
+
+        rt.state.theme.name.text = "  ".to_owned();
+        themes::reflect_name(&mut rt.state);
+        assert_eq!(rt.state.status.as_deref(), Some("A theme needs a name"));
+        assert!(rt.state.config.custom_themes.contains_key("Night"));
     }
 
     #[test]
@@ -903,9 +1254,38 @@ mod tests {
             .next()
             .expect("a theme");
         assert_eq!(
-            rt.state.config.custom_themes[name].bg,
+            rt.state.config.custom_themes[name].background,
             rt.state.config.resolve_palette().bg
         );
+    }
+
+    #[test]
+    fn a_typed_hex_recolors_the_slot_and_a_slider_rewrites_the_field() {
+        let mut rt = runtime(model("hex"));
+        show_tab(&mut rt.state, Tab::Themes);
+        themes::duplicate_theme(&mut rt.state);
+        rt.state.theme.select_slot(crate::scheme::Slot::Ansi(4));
+        rt.state.theme.hex.text = "00ff00".to_owned();
+        themes::apply_typed_color(&mut rt.state);
+        assert_eq!(
+            rt.state.theme.scheme.color(crate::scheme::Slot::Ansi(4)),
+            0x00FF00
+        );
+        // A fragment is still being typed, so the color stays.
+        rt.state.theme.hex.text = "00ff".to_owned();
+        themes::apply_typed_color(&mut rt.state);
+        assert_eq!(
+            rt.state.theme.scheme.color(crate::scheme::Slot::Ansi(4)),
+            0x00FF00
+        );
+        assert!(!themes::hex_unusable("00ff"));
+        assert!(themes::hex_unusable("zz"));
+        rt.state.theme.set_slot_color(0x11_22_33);
+        assert_eq!(
+            rt.state.theme.scheme.color(crate::scheme::Slot::Ansi(4)),
+            0x112233
+        );
+        assert_eq!(rt.state.theme.hex.text, "#112233");
     }
 
     #[test]
@@ -914,14 +1294,38 @@ mod tests {
         show_tab(&mut rt.state, Tab::Themes);
         rt.frame(0.0);
         themes::duplicate_theme(&mut rt.state);
-        let before = rt.state.theme.colors;
-        rt.state.theme.colors.accent = 0x00FF_00FF;
+        let before = rt.state.theme.scheme.clone();
+        rt.state
+            .theme
+            .scheme
+            .set_color(crate::scheme::Slot::Ansi(4), 0x00FF_00FF);
         rt.invalidate();
         rt.frame(0.0);
         assert!(rt.state.theme.is_dirty());
         themes::revert_theme(&mut rt.state);
         assert!(!rt.state.theme.is_dirty());
-        assert_eq!(rt.state.theme.colors, before);
+        assert_eq!(rt.state.theme.scheme, before);
+    }
+
+    #[test]
+    fn the_section_bar_matches_the_terminal_titlebar() {
+        let mut rt = runtime(model("titlebar"));
+        rt.frame(0.0);
+        let bar = rt.presented("titlebar").expect("titlebar").0;
+        assert!(
+            (bar[3] - crate::chrome::TITLEBAR_H).abs() < 0.5,
+            "band {}",
+            bar[3]
+        );
+        let chip = rt.presented("section-profiles").expect("profiles").0;
+        let tab_h = crate::chrome::tab_box_height(crate::chrome::TITLEBAR_H);
+        assert!((chip[3] - tab_h).abs() < 0.5, "chip {}", chip[3]);
+        rt.state.profile.name.text = "Work".to_owned();
+        press(&mut rt, "section-profiles");
+        assert_eq!(rt.state.profile.name.text, "Work");
+        assert!(rt.state.config.profiles.contains_key("Default"));
+        press(&mut rt, "section-themes");
+        assert_eq!(rt.state.tab, Tab::Themes);
     }
 
     #[test]

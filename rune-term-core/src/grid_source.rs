@@ -65,21 +65,11 @@ impl GridSource for SurfaceGrid<'_> {
         let (row, col) = self.render.cursor();
         let colors = self.render.term_colors();
         let palette = self.palette.as_ref();
-        let glyph = if row < self.render.lines() && col < self.render.columns() {
-            let under = self.cell(row, col);
-            if under.bg[3] == 0 {
-                named(colors, NamedColor::Background, palette)
-            } else {
-                under.bg.map(|channel| channel as f32 / 255.0)
-            }
-        } else {
-            named(colors, NamedColor::Background, palette)
-        };
         CursorSample {
             col: col as u32,
             row: row as u32,
             visible: self.render.cursor_visible(),
-            color: glyph,
+            color: crate::theme::channels(palette.cursor_fg),
             bg: named(colors, NamedColor::Cursor, palette),
         }
     }
@@ -156,7 +146,8 @@ fn named(colors: &TermColors, name: NamedColor, palette: &Palette) -> [f32; 4] {
         return crate::theme::from_bytes(palette.ansi16[index as usize]);
     }
     match name {
-        NamedColor::Foreground | NamedColor::Cursor => crate::theme::channels(palette.fg),
+        NamedColor::Foreground => crate::theme::channels(palette.fg),
+        NamedColor::Cursor => crate::theme::channels(palette.cursor_bg),
         NamedColor::LightForeground => crate::theme::channels(palette.fg_bright),
         NamedColor::Background => crate::theme::channels(palette.bg),
         NamedColor::DimForeground | NamedColor::DimWhite => crate::theme::channels(palette.muted),
@@ -177,20 +168,13 @@ fn indexed(colors: &TermColors, index: usize, palette: &Palette) -> [f32; 4] {
             return color;
         }
     }
-    if (16..232).contains(&index) {
-        let v = index - 16;
-        let channel = |n: usize| {
-            if n == 0 {
-                0.0
-            } else {
-                f32::from(55 + 40 * n as u8) / 255.0
-            }
-        };
-        return [channel(v / 36), channel((v / 6) % 6), channel(v % 6), 1.0];
-    }
-    if (232..256).contains(&index) {
-        let v = f32::from(8 + 10 * (index - 232) as u8) / 255.0;
-        return [v, v, v, 1.0];
+    if let Ok(key) = u8::try_from(index) {
+        if let Some(rgb) = palette.indexed.get(&key) {
+            return crate::theme::from_bytes(*rgb);
+        }
+        if key >= 16 {
+            return crate::theme::from_bytes(crate::theme::xterm_index(key));
+        }
     }
     crate::theme::from_bytes(palette.ansi16[index.min(15)])
 }

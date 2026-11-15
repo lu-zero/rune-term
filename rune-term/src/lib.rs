@@ -16,6 +16,7 @@ pub mod metrics;
 mod model;
 mod pane_input;
 mod resize;
+mod scheme;
 mod scrollback;
 mod search;
 mod selection;

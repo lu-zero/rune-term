@@ -8,6 +8,7 @@
 //! - Gruvbox: Pavel Pertsev (morhetz), <https://github.com/morhetz/gruvbox>
 //! - Catppuccin Mocha: Catppuccin, <https://catppuccin.com>
 
+use std::collections::BTreeMap;
 use std::sync::{Arc, OnceLock};
 
 use rune::color::srgb_decode;
@@ -24,8 +25,52 @@ pub struct Palette {
     pub active_border: u32,
     pub accent: u32,
     pub ansi16: [[u8; 3]; 16],
+    /// Text drawn inside the cursor block.
+    pub cursor_fg: u32,
+    /// The cursor block.
+    pub cursor_bg: u32,
+    pub selection_fg: u32,
+    pub selection_bg: u32,
+    /// Scrollbar thumb. The track is [`Self::tab_bg`].
+    pub scrollbar: u32,
+    /// Overrides for palette indexes 16–255. Missing indexes use the xterm cube and gray ramp.
+    pub indexed: BTreeMap<u8, [u8; 3]>,
     pub author: String,
     pub url: String,
+}
+
+impl Palette {
+    fn blank() -> Self {
+        Self {
+            name: String::new(),
+            bg: 0,
+            fg: 0,
+            fg_bright: 0,
+            muted: 0,
+            tab_bg: 0,
+            active_border: 0,
+            accent: 0,
+            ansi16: [[0; 3]; 16],
+            cursor_fg: 0,
+            cursor_bg: 0,
+            selection_fg: 0,
+            selection_bg: 0,
+            scrollbar: 0,
+            indexed: BTreeMap::new(),
+            author: String::new(),
+            url: String::new(),
+        }
+    }
+}
+
+/// Built-in themes keep an inverted cursor and selection, and a thumb in the muted color.
+fn finish(mut palette: Palette) -> Arc<Palette> {
+    palette.cursor_fg = palette.bg;
+    palette.cursor_bg = palette.fg;
+    palette.selection_fg = palette.bg;
+    palette.selection_bg = palette.fg;
+    palette.scrollbar = palette.muted;
+    Arc::new(palette)
 }
 
 impl Palette {
@@ -75,6 +120,24 @@ pub fn resolve(name: &str) -> Arc<Palette> {
     resolve_builtin(name).unwrap_or_else(default_palette)
 }
 
+/// Index 16–231 is the xterm cube (`0`, then `55 + 40n`). Index 232–255 is the gray ramp (`8 + 10n`).
+pub fn xterm_index(index: u8) -> [u8; 3] {
+    if (16..232).contains(&index) {
+        let step = usize::from(index - 16);
+        let channel = |n: usize| if n == 0 { 0 } else { 55 + 40 * n as u8 };
+        return [
+            channel(step / 36),
+            channel((step / 6) % 6),
+            channel(step % 6),
+        ];
+    }
+    if index >= 232 {
+        let v = 8 + 10 * (index - 232);
+        return [v, v, v];
+    }
+    [0, 0, 0]
+}
+
 pub const fn hex(value: u32) -> [u8; 3] {
     [
         ((value >> 16) & 0x0000_00FF) as u8,
@@ -116,7 +179,7 @@ pub fn linear(value: u32) -> Color {
 fn flexoki_black() -> Arc<Palette> {
     static P: OnceLock<Arc<Palette>> = OnceLock::new();
     P.get_or_init(|| {
-        Arc::new(Palette {
+        finish(Palette {
             name: "Flexoki Black".to_owned(),
             bg: 0x0000_0000,
             fg: 0x00CE_CDC3,
@@ -145,6 +208,7 @@ fn flexoki_black() -> Arc<Palette> {
             ],
             author: "Steph Ango".to_owned(),
             url: "https://stephango.com/flexoki".to_owned(),
+            ..Palette::blank()
         })
     })
     .clone()
@@ -154,7 +218,7 @@ fn flexoki_black() -> Arc<Palette> {
 fn flexoki_dark() -> Arc<Palette> {
     static P: OnceLock<Arc<Palette>> = OnceLock::new();
     P.get_or_init(|| {
-        Arc::new(Palette {
+        finish(Palette {
             name: "Flexoki Dark".to_owned(),
             bg: 0x0010_0F0F,
             fg: 0x00CE_CDC3,
@@ -183,6 +247,7 @@ fn flexoki_dark() -> Arc<Palette> {
             ],
             author: "Steph Ango".to_owned(),
             url: "https://stephango.com/flexoki".to_owned(),
+            ..Palette::blank()
         })
     })
     .clone()
@@ -191,7 +256,7 @@ fn flexoki_dark() -> Arc<Palette> {
 fn flexoki_light() -> Arc<Palette> {
     static P: OnceLock<Arc<Palette>> = OnceLock::new();
     P.get_or_init(|| {
-        Arc::new(Palette {
+        finish(Palette {
             name: "Flexoki Light".to_owned(),
             bg: 0x00FF_FCF0,
             fg: 0x0010_0F0F,
@@ -220,6 +285,7 @@ fn flexoki_light() -> Arc<Palette> {
             ],
             author: "Steph Ango".to_owned(),
             url: "https://stephango.com/flexoki".to_owned(),
+            ..Palette::blank()
         })
     })
     .clone()
@@ -229,7 +295,7 @@ fn flexoki_light() -> Arc<Palette> {
 fn dracula() -> Arc<Palette> {
     static P: OnceLock<Arc<Palette>> = OnceLock::new();
     P.get_or_init(|| {
-        Arc::new(Palette {
+        finish(Palette {
             name: "Dracula".to_owned(),
             bg: 0x0028_2A36,
             fg: 0x00F8_F8F2,
@@ -258,6 +324,7 @@ fn dracula() -> Arc<Palette> {
             ],
             author: "Dracula Theme".to_owned(),
             url: "https://draculatheme.com".to_owned(),
+            ..Palette::blank()
         })
     })
     .clone()
@@ -267,7 +334,7 @@ fn dracula() -> Arc<Palette> {
 fn nord() -> Arc<Palette> {
     static P: OnceLock<Arc<Palette>> = OnceLock::new();
     P.get_or_init(|| {
-        Arc::new(Palette {
+        finish(Palette {
             name: "Nord".to_owned(),
             bg: 0x002E_3440,
             fg: 0x00D8_DEE9,
@@ -296,6 +363,7 @@ fn nord() -> Arc<Palette> {
             ],
             author: "Sven Greb / Arctic Ice Studio".to_owned(),
             url: "https://www.nordtheme.com".to_owned(),
+            ..Palette::blank()
         })
     })
     .clone()
@@ -305,7 +373,7 @@ fn nord() -> Arc<Palette> {
 fn solarized_dark() -> Arc<Palette> {
     static P: OnceLock<Arc<Palette>> = OnceLock::new();
     P.get_or_init(|| {
-        Arc::new(Palette {
+        finish(Palette {
             name: "Solarized Dark".to_owned(),
             bg: 0x0000_2B36,
             fg: 0x0083_9496,
@@ -334,6 +402,7 @@ fn solarized_dark() -> Arc<Palette> {
             ],
             author: "Ethan Schoonover".to_owned(),
             url: "https://ethanschoonover.com/solarized/".to_owned(),
+            ..Palette::blank()
         })
     })
     .clone()
@@ -343,7 +412,7 @@ fn solarized_dark() -> Arc<Palette> {
 fn solarized_light() -> Arc<Palette> {
     static P: OnceLock<Arc<Palette>> = OnceLock::new();
     P.get_or_init(|| {
-        Arc::new(Palette {
+        finish(Palette {
             name: "Solarized Light".to_owned(),
             bg: 0x00FD_F6E3,
             fg: 0x0065_7B83,
@@ -372,6 +441,7 @@ fn solarized_light() -> Arc<Palette> {
             ],
             author: "Ethan Schoonover".to_owned(),
             url: "https://ethanschoonover.com/solarized/".to_owned(),
+            ..Palette::blank()
         })
     })
     .clone()
@@ -381,7 +451,7 @@ fn solarized_light() -> Arc<Palette> {
 fn gruvbox_dark() -> Arc<Palette> {
     static P: OnceLock<Arc<Palette>> = OnceLock::new();
     P.get_or_init(|| {
-        Arc::new(Palette {
+        finish(Palette {
             name: "Gruvbox Dark".to_owned(),
             bg: 0x0028_2828,
             fg: 0x00EB_DBB2,
@@ -410,6 +480,7 @@ fn gruvbox_dark() -> Arc<Palette> {
             ],
             author: "Pavel Pertsev (morhetz)".to_owned(),
             url: "https://github.com/morhetz/gruvbox".to_owned(),
+            ..Palette::blank()
         })
     })
     .clone()
@@ -419,7 +490,7 @@ fn gruvbox_dark() -> Arc<Palette> {
 fn catppuccin_mocha() -> Arc<Palette> {
     static P: OnceLock<Arc<Palette>> = OnceLock::new();
     P.get_or_init(|| {
-        Arc::new(Palette {
+        finish(Palette {
             name: "Catppuccin Mocha".to_owned(),
             bg: 0x001E_1E2E,
             fg: 0x00CD_D6F4,
@@ -448,7 +519,25 @@ fn catppuccin_mocha() -> Arc<Palette> {
             ],
             author: "Catppuccin".to_owned(),
             url: "https://catppuccin.com".to_owned(),
+            ..Palette::blank()
         })
     })
     .clone()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::xterm_index;
+
+    #[test]
+    fn the_xterm_cube_and_gray_ramp() {
+        assert_eq!(xterm_index(0), [0, 0, 0]);
+        assert_eq!(xterm_index(16), [0, 0, 0]);
+        assert_eq!(xterm_index(17), [0, 0, 95]);
+        assert_eq!(xterm_index(22), [0, 95, 0]);
+        assert_eq!(xterm_index(52), [95, 0, 0]);
+        assert_eq!(xterm_index(231), [255, 255, 255]);
+        assert_eq!(xterm_index(232), [8, 8, 8]);
+        assert_eq!(xterm_index(255), [238, 238, 238]);
+    }
 }
