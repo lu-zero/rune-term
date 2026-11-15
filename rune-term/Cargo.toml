@@ -15,23 +15,23 @@ name = "rune-term"
 path = "src/main.rs"
 
 [dependencies]
-rune-term-core = { path = "../rune-term-core", default-features = false }
-term-control = { path = "../term-control" }
-term-mux = { path = "../term-mux" }
+rune-term-core.workspace = true
+term-control.workspace = true
+term-mux.workspace = true
 rune.workspace = true
 rune-kit.workspace = true
 librio.workspace = true
 teletypewriter = { workspace = true, optional = true }
-libc = { version = "0.2", optional = true }
-term-grid = { path = "../term-grid" }
-term-input = { path = "../term-input" }
-color-picker = { path = "../color-picker" }
-wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }
-serde = { version = "1", features = ["derive"] }
-toml = "0.8"
+libc = { workspace = true, optional = true }
+term-grid.workspace = true
+term-input.workspace = true
+color-picker.workspace = true
+wgpu.workspace = true
+serde.workspace = true
+toml.workspace = true
 etcetera.workspace = true
-winnow-args = { version = "0.6", default-features = false, features = ["derive", "help-text"] }
-okhsl = "1.0.3"
+winnow-args.workspace = true
+okhsl.workspace = true
 
 [features]
 default = ["pty"]
@@ -39,4 +39,4 @@ pty = ["dep:teletypewriter", "dep:libc", "librio/graphics", "rune-term-core/pty"
 graphics = ["librio/graphics", "rune-term-core/graphics"]
 
 [dev-dependencies]
-png = "0.18"
+png.workspace = true

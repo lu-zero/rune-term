@@ -68,6 +68,14 @@ comments, and docs: a pattern being there does not make it correct.
   Filling `sprite`, `images`, `ime`, `search`, or `selection` in passing is
   that work.
 
+**Dependencies**
+- Every dependency, external or in-tree, is declared once in the root
+  `[workspace.dependencies]`. A crate names it as `name.workspace = true`,
+  adding only `optional` or `features`, never its own version, path, or git source.
+- Base directories (home, config, runtime) come from `etcetera`. Never build
+  them from `HOME`, `XDG_*`, `APPDATA`, or a platform path such as
+  `~/Library/Application Support`.
+
 **Tests exercise the terminal, not the standard library**
 - No test whose assertions would hold for any correct implementation of the
   primitive underneath.

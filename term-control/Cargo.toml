@@ -7,6 +7,6 @@ publish.workspace = true
 description = "Control protocol types and helpers for rune-term IPC/CLI."
 
 [dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde.workspace = true
+serde_json.workspace = true
 etcetera.workspace = true

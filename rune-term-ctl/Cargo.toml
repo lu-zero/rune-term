@@ -11,7 +11,7 @@ name = "rune-term-ctl"
 path = "src/main.rs"
 
 [dependencies]
-rune_term = { package = "rune-term", path = "../rune-term", default-features = false }
-term-control = { path = "../term-control" }
-winnow-args = { version = "0.6", default-features = false, features = ["derive", "help-text"] }
-serde_json = "1"
+rune-term.workspace = true
+term-control.workspace = true
+winnow-args.workspace = true
+serde_json.workspace = true

@@ -19,11 +19,36 @@ license = "MIT"
 publish = false
 
 [workspace.dependencies]
+# In-tree crates.
+color-picker = { path = "color-picker" }
+rune-term = { path = "rune-term", default-features = false }
+rune-term-core = { path = "rune-term-core", default-features = false }
+term-control = { path = "term-control" }
+term-grid = { path = "term-grid" }
+term-input = { path = "term-input" }
+term-mux = { path = "term-mux" }
+
 rune = { git = "https://github.com/anomalyco/rune", branch = "dev" }
 rune-kit = { git = "https://github.com/anomalyco/rune", branch = "dev", default-features = false }
 librio = { git = "https://github.com/raphamorim/rio", branch = "main", default-features = false }
 teletypewriter = { git = "https://github.com/raphamorim/rio", branch = "main" }
+
+bytemuck = { version = "1", features = ["derive"] }
+core-foundation = "0.10.1"
+core-graphics = "0.24.0"
+core-text = "21.0.0"
 etcetera = "0.11"
+fontique = { version = "0.12", default-features = false, features = ["std", "system", "fontconfig-dlopen"] }
+libc = "0.2"
+okhsl = "1.0.3"
+png = "0.18"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+swash = "0.2.10"
+tiny-skia = "0.12"
+toml = "0.8"
+wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }
+winnow-args = { version = "0.6", default-features = false, features = ["derive", "help-text"] }
 
 [patch."https://github.com/anomalyco/rune"]
 rune = { git = "https://github.com/lu-zero/rune", branch = "physical-key-text" }

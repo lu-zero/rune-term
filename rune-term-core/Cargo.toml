@@ -13,9 +13,9 @@ path = "src/lib.rs"
 [dependencies]
 rune.workspace = true
 librio.workspace = true
-term-grid = { path = "../term-grid" }
-term-input = { path = "../term-input" }
-wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }
+term-grid.workspace = true
+term-input.workspace = true
+wgpu.workspace = true
 
 [features]
 default = []

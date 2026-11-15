@@ -7,12 +7,12 @@ publish.workspace = true
 description = "Cell-grid wgpu pass for rune-term. No Rune and no librio."
 
 [dependencies]
-bytemuck = { version = "1", features = ["derive"] }
-swash = "0.2.10"
-tiny-skia = "0.12"
-wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }
+bytemuck.workspace = true
+swash.workspace = true
+tiny-skia.workspace = true
+wgpu.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
-core-foundation = "0.10.1"
-core-graphics = "0.24.0"
-core-text = "21.0.0"
+core-foundation.workspace = true
+core-graphics.workspace = true
+core-text.workspace = true
