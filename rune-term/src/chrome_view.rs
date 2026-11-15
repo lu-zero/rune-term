@@ -19,10 +19,13 @@ use crate::split::Axis;
 pub fn area(model: &Model, cx: &mut Cx<Model>) -> El {
     let scale = cx.env().scale;
     let root = model.tabs.get(model.active).map(|tab| &tab.root);
+    // A pane that leaves must not fade over the shell that replaced it, and a
+    // split's leaves take their new sizes at once.
     let pane = match root {
         Some(Node::Split { .. }) => split_area(model, scale),
         _ => single(model, scale),
-    };
+    }
+    .instant_changes();
     search::mount(model, pane)
 }
 
@@ -706,5 +709,33 @@ mod tests {
         rt.frame(0.0);
         assert_eq!(leaves(&rt.state.tabs[0].root)[0].cols, before + 5);
         assert_eq!(node_cells(&rt.state.tabs[0].root), total);
+    }
+
+    #[test]
+    fn switching_between_a_split_tab_and_a_lone_pane_leaves_no_pane_behind() {
+        let mut model = host();
+        assert!(crate::tabs::open(&mut model));
+        assert!(split_focused(&mut model, Axis::Horizontal));
+        let mut rt = rune::Runtime::new(
+            model,
+            crate::chrome::view,
+            (800.0, 500.0),
+            rune::Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        for tab in ["tab-0", "tab-1", "tab-0"] {
+            let (x, y) = rt.find(tab).expect("tab");
+            rt.pointer_down(x, y);
+            rt.pointer_up(x, y);
+            rt.frame(0.0);
+            let leaving: Vec<_> = rt
+                .elements()
+                .into_iter()
+                .filter(|el| el.exiting)
+                .filter_map(|el| el.key)
+                .filter(|key| key.starts_with("pane") || key.starts_with("divider"))
+                .collect();
+            assert!(leaving.is_empty(), "after {tab}, still drawn: {leaving:?}");
+        }
     }
 }
