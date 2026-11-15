@@ -142,6 +142,7 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       application (font/theme are currently model-global) and full
       creation-time backend semantics remain. A tab group (a labelled group of
       tabs in the strip) is in the tree, ready for a multiplexer session group.
+      Pressing its label collapses it to `name | count` and the selected tab.
       Design:
       [`settings-profiles.md`](./settings-profiles.md),
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).

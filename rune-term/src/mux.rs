@@ -165,6 +165,7 @@ pub(crate) fn attach(model: &mut Model, args: &[String]) -> io::Result<TabGroupI
     model.tab_groups.push(TabGroup {
         id: group,
         label: "tmux".to_owned(),
+        collapsed: false,
     });
     model.muxes.push(Mux {
         group,

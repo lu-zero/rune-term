@@ -81,6 +81,8 @@ pub struct TabGroupId(pub u32);
 pub struct TabGroup {
     pub id: TabGroupId,
     pub label: String,
+    /// Only the label shows, and the group's selected tab.
+    pub collapsed: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -266,13 +268,20 @@ fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {
         let tab_group = model.tabs[index].group;
         let starts_group =
             tab_group.is_some() && (index == 0 || model.tabs[index - 1].group != tab_group);
-        if starts_group {
-            if let Some(group) = tab_group.and_then(|id| group_of(model, id)) {
-                strip = strip.child(group_label(&group.label, tab_h, p));
-            }
+        let group = tab_group.and_then(|id| group_of(model, id));
+        if let Some(group) = group.filter(|_| starts_group) {
+            let count = model
+                .tabs
+                .iter()
+                .filter(|tab| tab.group == Some(group.id))
+                .count();
+            strip = strip.child(group_label(group, count, tab_h, p));
         }
 
         let active = index == model.active;
+        if group.is_some_and(|group| group.collapsed) && !active {
+            continue;
+        }
         let hue = tab_group
             .and_then(|id| group_of(model, id))
             .map(|group| group_color(&group.label, p));
@@ -338,9 +347,24 @@ fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {
     strip.child(new_tab_button(tab_h, p))
 }
 
-fn group_label(label: &str, tab_h: f32, p: &Palette) -> El {
+/// A press collapses the group to this label, or opens it again.
+fn group_label(group: &TabGroup, count: usize, tab_h: f32, p: &Palette) -> El {
+    let id = group.id;
+    let label = group.label.as_str();
+    let caption = if group.collapsed {
+        format!("{label} | {count}")
+    } else {
+        label.to_owned()
+    };
     row()
         .key(format!("tab-group-{label}"))
+        .preserve_focus_on_press(true)
+        .on_press_tx(move |model: &mut Model, tx| {
+            if let Some(group) = model.tab_groups.iter_mut().find(|group| group.id == id) {
+                group.collapsed = !group.collapsed;
+            }
+            crate::tabs::focus_active(model, tx);
+        })
         .h(tab_h)
         .pl(10.0)
         .pr(10.0)
@@ -348,11 +372,7 @@ fn group_label(label: &str, tab_h: f32, p: &Palette) -> El {
         .radius(TAB_RADIUS)
         .fill(wash(group_color(label, p)))
         .border(1.0, group_color(label, p))
-        .child(
-            text(label.to_string())
-                .color(group_color(label, p))
-                .truncate(),
-        )
+        .child(text(caption).color(group_color(label, p)).truncate())
 }
 
 /// The group's color behind its label and tabs, faint enough for the text on it.
@@ -511,6 +531,7 @@ mod tests {
         model.tab_groups.push(TabGroup {
             id: group,
             label: "dev".to_owned(),
+            collapsed: false,
         });
         crate::tabs::open(&mut model);
         model.tabs[1].group = Some(group);
@@ -519,6 +540,43 @@ mod tests {
         let label = rect(&rt, "tab-group-dev");
         let tab = rect(&rt, "tab-1");
         assert!(label[0] < tab[0], "the group label comes first");
+    }
+
+    #[test]
+    fn a_pressed_group_collapses_to_its_label_and_selected_tab() {
+        let mut model = host();
+        let group = TabGroupId(1);
+        model.tab_groups.push(TabGroup {
+            id: group,
+            label: "dev".to_owned(),
+            collapsed: false,
+        });
+        crate::tabs::open(&mut model);
+        crate::tabs::open(&mut model);
+        model.tabs[1].group = Some(group);
+        model.tabs[2].group = Some(group);
+        assert_eq!(model.active, 2);
+        let mut rt = Runtime::new(model, view, (800.0, 500.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        let press = |rt: &mut Runtime<Model>| {
+            let (x, y) = rt.find("tab-group-dev").expect("the label");
+            rt.pointer_down(x, y);
+            rt.pointer_up(x, y);
+            rt.frame(0.0);
+        };
+        press(&mut rt);
+        assert!(rt.state.tab_groups[0].collapsed);
+        assert!(rt.find("tab-0").is_some(), "a tab outside the group stays");
+        assert!(
+            rt.find("tab-1").is_none(),
+            "the group's other tab folds away"
+        );
+        assert!(
+            rt.find("tab-2").is_some(),
+            "the selected tab stays on screen"
+        );
+        press(&mut rt);
+        assert!(rt.find("tab-1").is_some());
     }
 
     #[test]
