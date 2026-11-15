@@ -26,7 +26,8 @@ use crate::model::Model;
 use crate::settings::ConfigFile;
 
 pub struct Server {
-    path: Option<PathBuf>,
+    /// The socket file this server bound, by path and by device and inode.
+    bound: Option<(PathBuf, (u64, u64))>,
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
@@ -34,77 +35,84 @@ pub struct Server {
 impl Drop for Server {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
-        #[cfg(unix)]
-        if let Some(path) = &self.path {
-            // Wake the blocking accept loop before removing the socket.
-            let _ = std::os::unix::net::UnixStream::connect(path);
+        let Some((path, id)) = &self.bound else {
+            return;
+        };
+        // Another instance that bound the same path replaced the file. The accept loop can
+        // only be woken through it, so the thread is left to the exiting process.
+        if file_id(path) != Some(*id) {
+            return;
         }
+        #[cfg(unix)]
+        let _ = std::os::unix::net::UnixStream::connect(path);
         if let Some(handle) = self.thread.take() {
             let _ = handle.join();
         }
-        if let Some(path) = &self.path {
-            term_control::transport::cleanup_socket(path);
-        }
+        term_control::transport::cleanup_socket(path);
+    }
+}
+
+#[cfg(unix)]
+fn file_id(path: &Path) -> Option<(u64, u64)> {
+    use std::os::unix::fs::MetadataExt;
+    let meta = std::fs::metadata(path).ok()?;
+    Some((meta.dev(), meta.ino()))
+}
+
+#[cfg(not(unix))]
+fn file_id(_path: &std::path::Path) -> Option<(u64, u64)> {
+    None
+}
+
+fn idle() -> Server {
+    Server {
+        bound: None,
+        stop: Arc::new(AtomicBool::new(true)),
+        thread: None,
     }
 }
 
 pub fn start(shared: Arc<Shared>) -> Server {
     if cfg!(test) || std::env::var_os("RUNE_TERM_DISABLE_IPC").is_some() {
-        return Server {
-            path: None,
-            stop: Arc::new(AtomicBool::new(true)),
-            thread: None,
-        };
+        return idle();
     }
-
-    let Some(path) = term_control::default_socket_path() else {
-        return Server {
-            path: None,
-            stop: Arc::new(AtomicBool::new(true)),
-            thread: None,
-        };
-    };
-
-    #[cfg(not(unix))]
-    {
-        let _ = (path, shared);
-        return Server {
-            path: None,
-            stop: Arc::new(AtomicBool::new(true)),
-            thread: None,
-        };
+    match term_control::default_socket_path() {
+        Some(path) => listen(path, shared),
+        None => idle(),
     }
+}
 
-    #[cfg(unix)]
-    {
-        let listener = match term_control::transport::bind(&path) {
-            Ok(l) => l,
-            Err(err) => {
-                eprintln!(
-                    "rune-term: failed to bind control socket {}: {err}",
-                    path.display()
-                );
-                return Server {
-                    path: Some(path),
-                    stop: Arc::new(AtomicBool::new(true)),
-                    thread: None,
-                };
-            }
-        };
+#[cfg(not(unix))]
+fn listen(_path: PathBuf, _shared: Arc<Shared>) -> Server {
+    idle()
+}
 
-        let stop = Arc::new(AtomicBool::new(false));
-        let stop_thread = Arc::clone(&stop);
-        let path_thread = path.clone();
-        let thread = thread::Builder::new()
-            .name("rune-term-ipc".to_owned())
-            .spawn(move || serve(listener, path_thread, stop_thread, shared))
-            .ok();
-
-        Server {
-            path: Some(path),
-            stop,
-            thread,
+#[cfg(unix)]
+fn listen(path: PathBuf, shared: Arc<Shared>) -> Server {
+    let listener = match term_control::transport::bind(&path) {
+        Ok(l) => l,
+        Err(err) => {
+            eprintln!(
+                "rune-term: failed to bind control socket {}: {err}",
+                path.display()
+            );
+            return idle();
         }
+    };
+    let Some(id) = file_id(&path) else {
+        return idle();
+    };
+    let stop = Arc::new(AtomicBool::new(false));
+    let stop_thread = Arc::clone(&stop);
+    let path_thread = path.clone();
+    let thread = thread::Builder::new()
+        .name("rune-term-ipc".to_owned())
+        .spawn(move || serve(listener, path_thread, stop_thread, shared))
+        .ok();
+    Server {
+        bound: Some((path, id)),
+        stop,
+        thread,
     }
 }
 
@@ -130,7 +138,6 @@ fn serve(listener: UnixListener, path: PathBuf, stop: Arc<AtomicBool>, shared: A
             .name("rune-term-ipc-conn".to_owned())
             .spawn(move || handle_connection(stream, path, shared));
     }
-    term_control::transport::cleanup_socket(&path);
 }
 
 #[cfg(unix)]
@@ -352,5 +359,34 @@ fn collect_panes_inner(
             collect_panes_inner(model, left, focused, out);
             collect_panes_inner(model, right, focused, out);
         }
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_socket_another_instance_took_neither_hangs_the_close_nor_goes_away() {
+        let dir = std::env::temp_dir().join(format!("rune-term-ipc-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("control.sock");
+        let shared = Arc::clone(&crate::model::init().shared);
+        let first = listen(path.clone(), Arc::clone(&shared));
+        // A second instance binds the same path, which replaces the first one's file.
+        let second = listen(path.clone(), shared);
+        let (done, closed) = mpsc::channel();
+        thread::spawn(move || {
+            drop(first);
+            let _ = done.send(());
+        });
+        assert!(
+            closed.recv_timeout(Duration::from_secs(2)).is_ok(),
+            "closing hung on the socket it no longer owns"
+        );
+        assert!(path.exists(), "the other instance's socket was removed");
+        drop(second);
+        assert!(!path.exists(), "the owner removes its own socket");
+        let _ = std::fs::remove_dir(&dir);
     }
 }
