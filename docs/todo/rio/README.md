@@ -8,10 +8,10 @@ this tree.
 
 - [#2049](https://github.com/raphamorim/rio/pull/2049): document when a
   wakeup repeats, and to clear a host flag before `RenderState::update`.
-  With it, `update_rearm` on the fork is not needed.
+  Landed as #2053. `update_rearm` on the fork is not needed.
 - [#2050](https://github.com/raphamorim/rio/issues/2050): an embedder cannot
-  report focus (DECSET 1004). A PR was offered: `Surface::notify_focus` that
-  does not go through `Surface::write`.
+  report focus (DECSET 1004). Fixed by #2051: `Surface::set_focus(bool)`,
+  which leaves the view and the selection alone.
 
 ## Drafted, not sent
 
@@ -24,7 +24,11 @@ this tree.
   `SurfaceDelegate::output`. A tmux pane gets librio's answers on top of
   tmux's own.
 - [`reflow.md`](./reflow.md): column reflow can leave the cursor's line in
-  scrollback and the screen blank.
+  scrollback and the screen blank. #2058 (open) fixes it for a cursor after
+  the line's last character, the shell prompt's usual place. A cursor in the
+  middle of the line still ends in a blank screen. Trailing space cells still
+  wrap, and a wide character still moves the cursor. Rewrite the draft as a
+  follow-up to #2058.
 
 ## Not verified
 
@@ -34,13 +38,16 @@ this tree.
 ## On the fork
 
 rune-term builds against `lu-zero/rio` branch `librio-update-rearm-reflow`.
+Upstream now covers all three of its commits:
 
-- Its reflow ships regressions upstream does not have: a column-0 cursor moves
-  up a row, a cleared screen refills from scrollback, the cursor is off next to
-  a wide character, trailing spaces are dropped, and `preserve_scrollback`
-  crept in. Fix them or drop the branch's reflow.
-- `notify_focus` goes through `Surface::write`, which drops the selection and
-  scrolls to the bottom on every tab switch. #2050 replaces it.
-- Rebasing onto upstream brings `Action::ProgramStatus` and
-  `Action::CommandFinished` (#2039, #2043); the match in
-  `rune-term/src/delegate.rs` needs arms for them.
+- `update_rearm`: #2053 documents the order instead.
+- `notify_focus`: #2051 adds `set_focus`. The fork's version goes through
+  `Surface::write`, which drops the selection and scrolls on every tab switch.
+- The reflow: it ships regressions upstream does not have (a column-0 cursor
+  moves up a row, a cleared screen refills from scrollback, trailing spaces
+  are dropped, `preserve_scrollback` crept in). #2058 fixes the common case
+  without them.
+
+Moving back to upstream `main` needs `set_focus` in place of `notify_focus`,
+the update without `update_rearm`, and arms for `Action::ProgramStatus` and
+`Action::CommandFinished` (#2039, #2043) in `rune-term/src/delegate.rs`.
