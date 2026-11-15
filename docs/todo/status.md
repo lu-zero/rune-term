@@ -205,9 +205,12 @@ What Rio still needs, sent and drafted, is [`rio/`](./rio/README.md).
 
 - [x] **4. Rune paired text.** `PhysicalInput::Key` carries `text` and
       `consumed_mods` on `lu-zero/rune` branch `physical-key-text`.
-- [x] **`RenderState::update_rearm`.** On `lu-zero/rio` branch
-      `librio-update-rearm-reflow`. This tree calls it, and `notify_focus`.
-- [~] **3. Reflow.** Join-then-split is on that same branch.
+- [x] **Wakeup order and focus reports.** Upstream: the host clears its
+      flag before `RenderState::update` (#2053), and `Surface::set_focus`
+      reports focus (#2051).
+- [~] **3. Reflow.** `lu-zero/rio` branch `reflow-cursor-on-2058`: Rio #2058
+      plus our fixes. bash still redraws a multi-line prompt one row too
+      high after a width change; that needs prompt marks.
       `preserve_scrollback` is still false on macOS in the plan.
 
 The design header still records an empty workspace. This page is the status.

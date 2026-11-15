@@ -78,11 +78,11 @@ impl Surfaces {
             return;
         }
         if let Some(old) = self.shown.and_then(|old| self.inner.get(&old)) {
-            old.surface.notify_focus(false);
+            old.surface.set_focus(false);
         }
         self.shown = Some(id);
         if let Some(new) = self.inner.get(&id) {
-            new.surface.notify_focus(true);
+            new.surface.set_focus(true);
         }
     }
 
@@ -149,7 +149,7 @@ impl Surfaces {
 
     pub fn focus(&self, mark: u32) -> bool {
         if let Some(host) = self.by_mark(mark) {
-            host.surface.notify_focus(true);
+            host.surface.set_focus(true);
             true
         } else {
             false

@@ -23,11 +23,8 @@ this tree.
 - [`replies.md`](./replies.md): the terminal's replies and user input share
   `SurfaceDelegate::output`. A tmux pane gets librio's answers on top of
   tmux's own.
-- [`reflow.md`](./reflow.md): a comment for #2058 (open). The PR fixes the
-  round trip for a cursor after the line's last character. A cursor in the
-  middle of the line still leaves the screen on a shrink, and a displaced
-  wide char shifts the cursor column. `patches/rio-2058-cursor-reflow.patch`
-  fixes both on top of the PR.
+- [`reflow.md`](./reflow.md): our reflow fixes on top of #2058, and how to
+  offer them. One of them changes what three of #2058's tests expect.
 
 ## Not verified
 
@@ -36,17 +33,6 @@ this tree.
 
 ## On the fork
 
-rune-term builds against `lu-zero/rio` branch `librio-update-rearm-reflow`.
-Upstream now covers all three of its commits:
-
-- `update_rearm`: #2053 documents the order instead.
-- `notify_focus`: #2051 adds `set_focus`. The fork's version goes through
-  `Surface::write`, which drops the selection and scrolls on every tab switch.
-- The reflow: it ships regressions upstream does not have (a column-0 cursor
-  moves up a row, a cleared screen refills from scrollback, trailing spaces
-  are dropped, `preserve_scrollback` crept in). #2058 fixes the common case
-  without them.
-
-Moving back to upstream `main` needs `set_focus` in place of `notify_focus`,
-the update without `update_rearm`, and arms for `Action::ProgramStatus` and
-`Action::CommandFinished` (#2039, #2043) in `rune-term/src/delegate.rs`.
+rune-term builds against `lu-zero/rio` branch `reflow-cursor-on-2058`: #2058
+(open) and three commits of ours on top. Everything the old
+`librio-update-rearm-reflow` branch carried is upstream or replaced.

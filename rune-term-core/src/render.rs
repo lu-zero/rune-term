@@ -39,7 +39,8 @@ pub fn sync_active_host(
     let flagged = host.frame_flag.load(Ordering::Acquire);
     let rearmed = flagged || resized;
     if rearmed {
-        host.render.update_rearm(&host.frame_flag);
+        host.frame_flag.store(false, Ordering::Release);
+        host.render.update();
         host.hover_probe = None;
     }
     if host.cell_px.0 == 0 || host.cell_px.1 == 0 {
@@ -94,7 +95,8 @@ pub fn rearm_background(host: &mut HostSurface) -> bool {
     let resized = host.resized.swap(false, Ordering::AcqRel);
     let flagged = host.frame_flag.load(Ordering::Acquire);
     if flagged || resized {
-        host.render.update_rearm(&host.frame_flag);
+        host.frame_flag.store(false, Ordering::Release);
+        host.render.update();
         host.hover_probe = None;
         true
     } else {

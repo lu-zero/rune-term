@@ -24,7 +24,7 @@ comments, and docs: a pattern being there does not make it correct.
   The workspace depends on upstream `rune` and `librio`. `[patch]` replaces
   those sources with `https://github.com/lu-zero/rune` branch
   `physical-key-text` and `https://github.com/lu-zero/rio` branch
-  `librio-update-rearm-reflow`. A local checkout replaces that patch entry
+  `reflow-cursor-on-2058`. A local checkout replaces that patch entry
   with a path. winit stays `../rune/vendor/winit`: the vendored crate is
   excluded from the rune workspace, so a git pin cannot see it. Cascadia
   Code NF is vendored at `term-grid/CascadiaCodeNF.ttf`.

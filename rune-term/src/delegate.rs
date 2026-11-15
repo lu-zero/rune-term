@@ -572,6 +572,7 @@ fn apply_action(model: &mut Model, id: SurfaceId, action: Action) -> bool {
             host.progress = next;
             true
         }
+        Action::ProgramStatus(_) | Action::CommandFinished { .. } => false,
     }
 }
 
