@@ -2,9 +2,8 @@
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 
-use rune::{
-    col, el, row, text, text_input, Color, Cx, El, PopupItem, PopupMenu, TextEdit, TextStyle, Tx,
-};
+use rune::{col, el, row, text, Color, Cx, El, PopupItem, PopupMenu, TextEdit, Tx};
+use rune_kit::{Button, ButtonVariant, Dialog, Kit, TextInput};
 
 use crate::chrome_view;
 use crate::model::Model;
@@ -113,76 +112,57 @@ pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
         root = root.child(confirm_open_link(uri, p));
     }
     if let Some(name) = &model.session_name {
-        root = root.child(name_session(name, p));
+        let mut layer = Vec::new();
+        name_session(name, &crate::settings_ui::kit(p), &mut layer);
+        root = root.children(layer);
     }
     root
 }
 
-fn name_session(name: &TextEdit, p: &Palette) -> El {
-    let field = text_input(name, TextStyle::new(13.0, 400.0))
-        .key("session-name")
-        .single_line()
-        .h(28.0)
-        .w_full()
-        .fill(theme::linear(p.bg))
-        .color(theme::linear(p.fg))
+/// Return or Create starts the session; Escape, Cancel or a click outside drops the name.
+fn name_session(name: &TextEdit, k: &Kit, layer: &mut Vec<El>) {
+    let field = TextInput::new(name)
+        .placeholder("Session name")
+        .label("Session name")
+        .width(None)
         .on_edit(|model: &mut Model| model.session_name.as_mut().expect("the prompt is open"))
-        .on_submit(|model: &mut Model, _tx| crate::mux::submit_name(model));
-    let card = col()
-        .key("name-session")
-        .w(320.0)
-        .fill(theme::linear(p.tab_bg))
-        .border(1.0, theme::linear(p.active_border))
-        .radius(8.0)
-        .gap(12.0)
-        .pl(16.0)
-        .pr(16.0)
-        .pt(14.0)
-        .pb(14.0)
-        .modal(true, |model: &mut Model| {
-            model.session_name = None;
-        })
-        .child(text("New tmux session").color(text_color(p)))
-        .child(field)
-        .child(
-            row()
-                .w_full()
-                .gap(8.0)
-                .justify_center()
-                .child(
-                    el().key("cancel-name-session")
-                        .pl(12.0)
-                        .pr(12.0)
-                        .pt(6.0)
-                        .pb(6.0)
-                        .radius(6.0)
-                        .border(1.0, theme::linear(p.active_border))
-                        .focusable(true)
-                        .on_press_tx(|model: &mut Model, _tx| {
-                            model.session_name = None;
-                        })
-                        .child(text("Cancel").color(theme::linear(p.muted))),
-                )
-                .child(
-                    el().key("create-session")
-                        .pl(12.0)
-                        .pr(12.0)
-                        .pt(6.0)
-                        .pb(6.0)
-                        .radius(6.0)
-                        .fill(theme::linear(p.accent))
-                        .focusable(true)
-                        .on_press_tx(|model: &mut Model, _tx| crate::mux::submit_name(model))
-                        .child(text("Create").color(text_color(p))),
-                ),
-        );
-    rune::el()
-        .key("name-session-overlay")
-        .absolute(0.0, 0.0)
+        .on_submit(|model: &mut Model, _tx| crate::mux::submit_name(model))
+        .build(k)
+        .key("session-name");
+    let buttons = row()
         .w_full()
-        .h_full()
-        .center()
-        .child(card)
+        .gap(8.0)
+        .justify_end()
+        .child(
+            Button::new("Cancel")
+                .on_press(|model: &mut Model| model.session_name = None)
+                .build(k)
+                .key("cancel-name-session"),
+        )
+        .child(
+            Button::new("Create")
+                .variant(ButtonVariant::Submit)
+                .on_press(crate::mux::submit_name)
+                .build(k)
+                .key("create-session"),
+        );
+    Dialog::new("name-session", "New tmux session")
+        .description("If a session has this name already, it is attached.")
+        .width(360.0)
+        .fit()
+        .open(true)
+        .on_close(|model: &mut Model| model.session_name = None)
+        .child(
+            col()
+                .w_full()
+                .gap(16.0)
+                .pl(16.0)
+                .pr(16.0)
+                .pb(16.0)
+                .child(field)
+                .child(buttons),
+        )
+        .build(k, layer);
 }
 
 fn confirm_open_link(uri: &str, p: &Palette) -> El {
@@ -540,6 +520,27 @@ mod tests {
         let label = rect(&rt, "tab-group-dev");
         let tab = rect(&rt, "tab-1");
         assert!(label[0] < tab[0], "the group label comes first");
+    }
+
+    #[test]
+    fn the_name_prompt_takes_the_typed_name_and_cancel_drops_it() {
+        let mut model = host();
+        crate::mux::ask_name(&mut model);
+        let mut rt = Runtime::new(model, view, (800.0, 500.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        assert!(rt.find("session-name").is_some(), "the field is drawn");
+        rt.key(rune::KeyEvent {
+            key: rune::Key::Text("work".into()),
+            mods: rune::Mods::default(),
+        });
+        rt.frame(0.0);
+        assert_eq!(rt.state.session_name.as_ref().unwrap().text, "work");
+        let (x, y) = rt.find("cancel-name-session").expect("the cancel button");
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        rt.frame(0.0);
+        assert!(rt.state.session_name.is_none());
+        assert!(rt.state.muxes.is_empty(), "cancel starts nothing");
     }
 
     #[test]
