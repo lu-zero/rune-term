@@ -1,6 +1,10 @@
 //! Frozen `apply` signature. The body floors the slot into whole cells and
 //! does not write that count back into the slot. Every layout is `live_only`.
 
+use std::sync::atomic::Ordering;
+
+use crate::surfaces::HostSurface;
+
 /// What the caller, which has `Tx`, must do. `apply` does not take `Tx`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct GridMetrics {
@@ -179,6 +183,45 @@ fn fit(
     }
 }
 
+/// Applies the terminal side of a resize effect to a host surface.
+pub fn apply_to_host(host: &HostSurface, effect: &ResizeEffect) {
+    if effect.resize_surface {
+        host.surface.resize(
+            effect.cols,
+            effect.rows,
+            effect.pixel_width,
+            effect.pixel_height,
+        );
+        host.resized.store(true, Ordering::Release);
+    }
+}
+
+/// Floors layout and applies surface resize when the fitted cell count changes.
+pub fn fit_layout_host(
+    host: &mut HostSurface,
+    slot_points: (f32, f32),
+    scale: f32,
+    cell_points: (f32, f32),
+) -> ResizeEffect {
+    let effect = apply(ResizeRequest::Layout {
+        slot_points,
+        scale,
+        cell_points,
+        current: GridMetrics {
+            cols: host.cols,
+            rows: host.rows,
+            cell_px: host.cell_px,
+        },
+    });
+    if effect.resize_surface {
+        host.cols = effect.cols;
+        host.rows = effect.rows;
+        host.cell_px = effect.cell_px;
+        apply_to_host(host, &effect);
+    }
+    effect
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -323,47 +366,4 @@ mod tests {
         assert_eq!(effect.cell_px, (7, 15));
         assert!(effect.resize_surface);
     }
-}
-
-use std::sync::atomic::Ordering;
-
-use crate::surfaces::HostSurface;
-
-/// Applies the terminal side of a resize effect to a host surface.
-pub fn apply_to_host(host: &HostSurface, effect: &ResizeEffect) {
-    if effect.resize_surface {
-        host.surface.resize(
-            effect.cols,
-            effect.rows,
-            effect.pixel_width,
-            effect.pixel_height,
-        );
-        host.resized.store(true, Ordering::Release);
-    }
-}
-
-/// Floors layout and applies surface resize when the fitted cell count changes.
-pub fn fit_layout_host(
-    host: &mut HostSurface,
-    slot_points: (f32, f32),
-    scale: f32,
-    cell_points: (f32, f32),
-) -> ResizeEffect {
-    let effect = apply(ResizeRequest::Layout {
-        slot_points,
-        scale,
-        cell_points,
-        current: GridMetrics {
-            cols: host.cols,
-            rows: host.rows,
-            cell_px: host.cell_px,
-        },
-    });
-    if effect.resize_surface {
-        host.cols = effect.cols;
-        host.rows = effect.rows;
-        host.cell_px = effect.cell_px;
-        apply_to_host(host, &effect);
-    }
-    effect
 }
