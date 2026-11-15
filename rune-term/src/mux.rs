@@ -792,24 +792,19 @@ pub(crate) fn menu(model: &Model, mut menu: PopupMenu) -> PopupMenu {
     let Some(sessions) = sessions(&[]) else {
         return menu;
     };
-    let mut tmux = PopupMenu::new()
-        .item(PopupItem::new("tmux-new", "New Session"))
-        .item(PopupItem::new("tmux-named", "New Named Session…"));
-    let detached: Vec<&String> = sessions
+    // Greyed out, rather than gone, when every session is already open here.
+    let attach: Vec<PopupItem> = sessions
         .iter()
         .filter(|name| !attached_here(model, name))
+        .map(|name| PopupItem::new(format!("tmux-attach:{name}"), name.as_str()))
         .collect();
-    if !detached.is_empty() {
-        tmux = tmux.separator();
-    }
-    for name in detached {
-        tmux = tmux.item(PopupItem::new(
-            format!("tmux-attach:{name}"),
-            format!("Attach {name}"),
-        ));
-    }
-    menu = menu.separator().submenu("tmux", tmux);
-    menu
+    let open = !attach.is_empty();
+    let tmux = PopupMenu::new()
+        .item(PopupItem::new("tmux-new", "New Session"))
+        .item(PopupItem::new("tmux-named", "New Named Session…"))
+        .separator()
+        .submenu_enabled("Attach Session", PopupMenu::new().items(attach), open);
+    menu.separator().submenu("tmux", tmux)
 }
 
 /// One Hidden Windows entry. Its windows, or with several sessions a submenu each. A
