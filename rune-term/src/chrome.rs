@@ -204,7 +204,6 @@ fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {
         let hue = tab_group
             .and_then(|id| group_of(model, id))
             .map(|group| group_color(&group.label, p));
-        let in_group = hue.is_some();
         let color = if active {
             text_color(p)
         } else if let Some(hue) = hue {
@@ -238,8 +237,8 @@ fn tab_strip(model: &Model, cx: &mut Cx<Model>) -> El {
                     theme::linear(p.active_border)
                 },
             );
-        } else if in_group {
-            tab = tab.border(1.0, theme::linear(p.active_border));
+        } else if let Some(hue) = hue {
+            tab = tab.fill(wash(hue)).border(1.0, hue);
         }
         let label = text(tab_caption(model, index))
             .grow(1.0)
@@ -272,12 +271,19 @@ fn group_label(label: &str, tab_h: f32, p: &Palette) -> El {
         .pr(10.0)
         .center_y()
         .radius(TAB_RADIUS)
+        .fill(wash(group_color(label, p)))
         .border(1.0, group_color(label, p))
         .child(
             text(label.to_string())
                 .color(group_color(label, p))
                 .truncate(),
         )
+}
+
+/// The group's color behind its label and tabs, faint enough for the text on it.
+fn wash(mut hue: Color) -> Color {
+    hue.a = 0.12;
+    hue
 }
 
 /// A hue from the group's name, so a session keeps its color across runs. A light
