@@ -792,16 +792,23 @@ pub(crate) fn menu(model: &Model, mut menu: PopupMenu) -> PopupMenu {
     let Some(sessions) = sessions(&[]) else {
         return menu;
     };
-    menu = menu
-        .separator()
-        .item(PopupItem::new("tmux-new", "New tmux Session"))
-        .item(PopupItem::new("tmux-named", "New Named tmux Session…"));
-    for name in sessions.iter().filter(|name| !attached_here(model, name)) {
-        menu = menu.item(PopupItem::new(
+    let mut tmux = PopupMenu::new()
+        .item(PopupItem::new("tmux-new", "New Session"))
+        .item(PopupItem::new("tmux-named", "New Named Session…"));
+    let detached: Vec<&String> = sessions
+        .iter()
+        .filter(|name| !attached_here(model, name))
+        .collect();
+    if !detached.is_empty() {
+        tmux = tmux.separator();
+    }
+    for name in detached {
+        tmux = tmux.item(PopupItem::new(
             format!("tmux-attach:{name}"),
-            format!("Attach tmux: {name}"),
+            format!("Attach {name}"),
         ));
     }
+    menu = menu.separator().submenu("tmux", tmux);
     menu
 }
 
