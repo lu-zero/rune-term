@@ -9,8 +9,9 @@ fmt:
 fmt-check:
     cargo fmt --all -- --check
 
+# The workspace with default features (rune-term spawns shells), then rune-term without them.
 clippy:
-    cargo clippy -p term-grid -p term-input -p term-control -p term-mux -p rune-term-ctl --all-targets -- -D warnings
+    cargo clippy --workspace --all-targets -- -D warnings
     cargo clippy -p rune-term --all-targets --no-default-features --features graphics -- -D warnings
 
 check:
@@ -21,12 +22,10 @@ check-lib:
     cargo check -p rune-term --no-default-features --lib
     cargo check -p term-control -p rune-term-ctl
 
+# rune-term's tests differ by feature: the shell link with `pty`, the window without it.
 test-lib:
-    cargo test -p term-grid --lib
-    cargo test -p term-input --lib
+    cargo test --workspace --lib
     cargo test -p rune-term --no-default-features --lib
-    cargo test -p term-control --lib
-    cargo test -p term-mux --lib
 
 test-grid:
     cargo test -p rune-term --test grid_pipeline
