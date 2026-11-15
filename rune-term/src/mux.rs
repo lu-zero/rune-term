@@ -741,7 +741,16 @@ mod tests {
         }
     }
 
-    fn attached(name: &str) -> (Server, Model, TabGroupId) {
+    /// A machine without tmux skips these tests rather than failing them.
+    fn attached(name: &str) -> Option<(Server, Model, TabGroupId)> {
+        let installed = Command::new("tmux")
+            .arg("-V")
+            .output()
+            .is_ok_and(|out| out.status.success());
+        if !installed {
+            eprintln!("tmux is not installed: skipped");
+            return None;
+        }
         let server = Server(format!("rune-term-{}-{name}", std::process::id()));
         let mut model = crate::model::init();
         delegate::setup(&mut model, Arc::new(|| {}));
@@ -766,7 +775,7 @@ mod tests {
         .map(|arg| (*arg).to_owned())
         .collect();
         let group = attach(&mut model, &args).expect("tmux");
-        (server, model, group)
+        Some((server, model, group))
     }
 
     fn until(model: &mut Model, mut done: impl FnMut(&mut Model) -> bool) -> bool {
@@ -801,7 +810,9 @@ mod tests {
 
     #[test]
     fn a_session_is_a_group_and_its_pane_takes_keys() {
-        let (_server, mut model, group) = attached("keys");
+        let Some((_server, mut model, group)) = attached("keys") else {
+            return;
+        };
         assert!(
             until(&mut model, |model| model.tabs.len() == 2),
             "the window did not become a tab"
@@ -832,7 +843,9 @@ mod tests {
 
     #[test]
     fn a_split_is_two_leaves_and_a_hidden_window_comes_back_redrawn() {
-        let (_server, mut model, group) = attached("split");
+        let Some((_server, mut model, group)) = attached("split") else {
+            return;
+        };
         assert!(until(&mut model, |model| model.tabs.len() == 2));
         let first = crate::tabs::surface_of(&model.tabs[model.active]).unwrap();
         model
@@ -872,7 +885,9 @@ mod tests {
 
     #[test]
     fn the_server_going_away_closes_its_tabs_only() {
-        let (server, mut model, group) = attached("exit");
+        let Some((server, mut model, group)) = attached("exit") else {
+            return;
+        };
         assert!(until(&mut model, |model| model.tabs.len() == 2));
         let _ = Command::new("tmux")
             .args(["-L", &server.0, "kill-server"])
@@ -888,7 +903,9 @@ mod tests {
 
     #[test]
     fn a_divider_drag_resizes_the_pane_in_tmux() {
-        let (_server, mut model, _group) = attached("resize");
+        let Some((_server, mut model, _group)) = attached("resize") else {
+            return;
+        };
         assert!(until(&mut model, |model| model.tabs.len() == 2));
         split(&model, Axis::Horizontal);
         assert!(until(&mut model, |model| leaves(
@@ -912,7 +929,9 @@ mod tests {
     /// The far end, not this copy, decides what a resized pane holds.
     #[test]
     fn a_pane_dragged_through_every_size_shows_what_tmux_shows() {
-        let (server, mut model, _group) = attached("sweep");
+        let Some((server, mut model, _group)) = attached("sweep") else {
+            return;
+        };
         assert!(until(&mut model, |model| model.tabs.len() == 2));
         // A two-line prompt that, like readline's, goes back up and redraws itself
         // whenever the pane is resized, after history the screen was cleared into.
