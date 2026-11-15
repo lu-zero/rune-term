@@ -1,4 +1,4 @@
-//! The delegate runs on the PTY thread and on the UI thread from `inject_output`.
+//! The delegate runs on the PTY reader thread and on the UI thread from `inject_output`.
 //! It enqueues chrome and wakes. It does not write `Model`.
 
 use std::collections::{HashMap, HashSet};
@@ -73,6 +73,8 @@ pub struct Shared {
     output: Mutex<Vec<u8>>,
     /// The shell the last output came from.
     output_surface: Mutex<Option<SurfaceId>>,
+    #[cfg(feature = "pty")]
+    links: Mutex<HashMap<SurfaceId, crate::link::PtyLink>>,
     control: Mutex<
         Vec<(
             term_control::Request,
@@ -103,6 +105,8 @@ impl Shared {
             }),
             output: Mutex::new(Vec::new()),
             output_surface: Mutex::new(None),
+            #[cfg(feature = "pty")]
+            links: Mutex::new(HashMap::new()),
             control: Mutex::new(Vec::new()),
             rearms: AtomicUsize::new(0),
         })
@@ -136,10 +140,47 @@ impl Shared {
         flags.live.insert(id, flag);
     }
 
-    pub(crate) fn remove_flag(&self, id: SurfaceId) {
+    /// Drop the shell's flag and its link. Dropping the link hangs up the shell.
+    pub(crate) fn forget(&self, id: SurfaceId) {
         let mut flags = self.flags.lock().expect("flags");
         flags.live.remove(&id);
         flags.pending.remove(&id);
+        drop(flags);
+        #[cfg(feature = "pty")]
+        {
+            // Not dropped under the lock: the reader may be writing a reply.
+            let link = self.links.lock().expect("links").remove(&id);
+            drop(link);
+        }
+    }
+
+    #[cfg(feature = "pty")]
+    fn insert_link(&self, id: SurfaceId, link: crate::link::PtyLink) {
+        self.links.lock().expect("links").insert(id, link);
+    }
+
+    /// The winsize follows the grid: `cols * cell_px` by `rows * cell_px`.
+    #[cfg(feature = "pty")]
+    fn resize_links(&self, terminal: &mut rune_term_core::terminal::Terminal) {
+        let mut links = self.links.lock().expect("links");
+        for host in terminal.iter_mut() {
+            if host.cols == 0 || host.rows == 0 || host.cell_px.0 == 0 {
+                continue;
+            }
+            if let Some(link) = links.get_mut(&host.surface.id()) {
+                link.resize((
+                    host.cols,
+                    host.rows,
+                    host.cols.saturating_mul(host.cell_px.0),
+                    host.rows.saturating_mul(host.cell_px.1),
+                ));
+            }
+        }
+    }
+
+    #[cfg(feature = "pty")]
+    pub(crate) fn closed(&self, id: SurfaceId) {
+        self.push(HostEvent::Close(id));
     }
 
     pub(crate) fn note_rearm(&self) {
@@ -180,7 +221,7 @@ impl Shared {
     }
 
     /// `wakeup` sets the flag and wakes only on the false→true edge.
-    fn raise(&self, id: SurfaceId) {
+    pub(crate) fn raise(&self, id: SurfaceId) {
         let mut flags = self.flags.lock().expect("flags");
         if let Some(flag) = flags.live.get(&id).cloned() {
             drop(flags);
@@ -230,6 +271,11 @@ impl SurfaceDelegate for Delegate {
     }
 
     fn output(&self, surface: SurfaceId, bytes: &[u8]) {
+        #[cfg(feature = "pty")]
+        if let Some(link) = self.shared.links.lock().expect("links").get(&surface) {
+            link.write(bytes);
+            return;
+        }
         *self.shared.output_surface.lock().expect("output") = Some(surface);
         self.shared
             .output
@@ -300,9 +346,16 @@ pub(crate) fn open_host(
     let resolved = model.config.resolve_profile(profile);
     let desc = surface_desc_for(&resolved, cols, rows);
     let flag = Arc::new(AtomicBool::new(false));
-    let surface = model.engine.create_surface(&desc).expect("create surface");
+    let surface = Arc::new(model.engine.create_surface(&desc).expect("create surface"));
     let id = surface.id();
     model.shared.insert_flag(id, Arc::clone(&flag));
+    #[cfg(feature = "pty")]
+    {
+        let link =
+            crate::link::PtyLink::spawn(Arc::clone(&surface), &desc, Arc::clone(&model.shared))
+                .expect("spawn shell");
+        model.shared.insert_link(id, link);
+    }
     let render = RenderState::new(&surface);
     model.terminal.insert(HostSurface {
         surface,
@@ -356,6 +409,8 @@ pub fn poll(model: &mut Model, now: f64, tx: &mut Tx) -> bool {
             }
         }
     }
+    #[cfg(feature = "pty")]
+    model.shared.resize_links(&mut model.terminal);
     if crate::scrollback::refresh(model, now, tx) {
         chrome = true;
     }
@@ -377,7 +432,7 @@ fn apply(model: &mut Model, event: HostEvent, tx: &mut Tx) -> bool {
 
 /// The shell exited. Drop its leaf. The window closes with the last surface.
 fn drop_closed(model: &mut Model, id: SurfaceId, tx: &mut Tx) -> bool {
-    model.shared.remove_flag(id);
+    model.shared.forget(id);
     if model.terminal.remove(id).is_none() {
         return false;
     }
@@ -616,5 +671,50 @@ mod tests {
             crate::tabs::surface_of(&rt.state.tabs[0]),
             Some(active_surface)
         );
+    }
+}
+
+#[cfg(all(test, feature = "pty"))]
+mod pty_tests {
+    use super::*;
+
+    #[test]
+    fn a_shell_answers_through_the_link_and_its_exit_closes_the_pane() {
+        let shared = Shared::new();
+        let engine = librio::Engine::new(shared.delegate());
+        let desc = SurfaceDesc {
+            shell: Some("/bin/sh".to_owned()),
+            args: vec![
+                "-c".to_owned(),
+                r#"read line; printf 'got:%s' "$line""#.to_owned(),
+            ],
+            ..SurfaceDesc::default()
+        };
+        let surface = Arc::new(engine.create_surface(&desc).expect("surface"));
+        let id = surface.id();
+        let link = crate::link::PtyLink::spawn(Arc::clone(&surface), &desc, Arc::clone(&shared))
+            .expect("spawn");
+        shared.insert_link(id, link);
+        // A key leaves through the delegate's output, which the link writes to the shell.
+        surface.text("hi\r");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let closed = loop {
+            if shared
+                .take_events()
+                .iter()
+                .any(|event| matches!(event, HostEvent::Close(closed) if *closed == id))
+            {
+                break true;
+            }
+            if std::time::Instant::now() > deadline {
+                break false;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        };
+        assert!(closed, "the shell's exit did not close the pane");
+        let mut render = RenderState::new(&surface);
+        render.update();
+        let shown = (0..render.lines()).any(|line| render.text_row(line).contains("got:hi"));
+        assert!(shown, "the shell's answer did not reach the grid");
     }
 }

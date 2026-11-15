@@ -22,7 +22,7 @@ pub struct Progress {
 }
 
 pub struct HostSurface {
-    pub surface: Surface,
+    pub surface: Arc<Surface>,
     pub render: RenderState,
     pub mark: u32,
     pub title: String,

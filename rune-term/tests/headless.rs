@@ -97,7 +97,7 @@ fn an_unsized_shell_leaves_the_pane_empty() {
         .expect("surface");
     let render = librio::RenderState::new(&surface);
     let mut host = rune_term_core::surfaces::HostSurface {
-        surface,
+        surface: std::sync::Arc::new(surface),
         render,
         mark: 1,
         title: String::new(),

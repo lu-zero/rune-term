@@ -20,6 +20,8 @@ term-control = { path = "../term-control" }
 rune.workspace = true
 rune-kit.workspace = true
 librio.workspace = true
+teletypewriter = { workspace = true, optional = true }
+libc = { version = "0.2", optional = true }
 term-grid = { path = "../term-grid" }
 term-input = { path = "../term-input" }
 color-picker = { path = "../color-picker" }
@@ -31,7 +33,7 @@ winnow-args = { version = "0.6", default-features = false, features = ["derive",
 
 [features]
 default = ["pty"]
-pty = ["librio/pty", "librio/graphics", "rune-term-core/pty"]
+pty = ["dep:teletypewriter", "dep:libc", "librio/graphics", "rune-term-core/pty"]
 graphics = ["librio/graphics", "rune-term-core/graphics"]
 
 [dev-dependencies]

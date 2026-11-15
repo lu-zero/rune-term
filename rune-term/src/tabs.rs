@@ -107,7 +107,7 @@ pub fn close(model: &mut Model, index: usize, tx: &mut Tx) {
     let group = tab.group;
     let ids = surfaces_of(&tab.root);
     for id in ids {
-        model.shared.remove_flag(id);
+        model.shared.forget(id);
         model.terminal.remove(id);
     }
     model.tabs.remove(index);

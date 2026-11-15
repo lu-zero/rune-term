@@ -7,6 +7,8 @@ mod chrome_view;
 pub mod cli;
 mod delegate;
 mod grid_pass;
+#[cfg(feature = "pty")]
+mod link;
 pub use rune_term_core::grid_source;
 mod hyperlink;
 pub use rune_term_core::images;

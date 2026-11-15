@@ -151,12 +151,15 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       with generated man pages/reference docs; `justfile` for build/test/run and
       install across lean/fat/helper compositions. Design:
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
-- [ ] **23. Multiplexer-backed sessions.** Explicit session concept and
+- [~] **23. Multiplexer-backed sessions.** Explicit session concept and
       backend abstraction (local `librio` vs multiplexer), covering create /
       attach / detach / resume, multi-client policy, and remoting/share
       capabilities. tmux first, then rmux; ssh and mosh are raw links. The
       layers, the mapping (session → group, window → tab, pane → leaf) and
-      the P0–P4 order are decided. Design:
+      the P0–P4 order are decided. P0 is in: librio is built without its
+      `pty` feature, and rune-term spawns the shell on a teletypewriter PTY,
+      reads it into `inject_output` on a thread, and writes the delegate's
+      `output` back to it. The winsize follows the grid. Design:
       [`multiplexer-sessions.md`](./multiplexer-sessions.md).
 - [ ] **24. Backend adapters and composition.** Fat/lean packaging (features
       and/or `rune-term-*` helpers) with progressive adapters: local, rmux

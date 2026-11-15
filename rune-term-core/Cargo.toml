@@ -19,5 +19,5 @@ wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }
 
 [features]
 default = []
-pty = ["librio/pty", "librio/graphics"]
+pty = ["librio/graphics"]
 graphics = ["librio/graphics"]
