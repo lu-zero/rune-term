@@ -24,6 +24,8 @@ pub const TITLEBAR_H: f32 = 38.0;
 const TAB_W: f32 = 132.0;
 /// Between the strip's items.
 const STRIP_GAP: f32 = 6.0;
+/// Travel before a press on the strip becomes a drag; less is a click.
+const DRAG_START: f32 = 4.0;
 pub(crate) const TAB_PAD_X: f32 = 14.0;
 pub(crate) const TAB_RADIUS: f32 = 7.0;
 
@@ -430,7 +432,7 @@ fn follow(el: El, dx: f32, dragged: bool) -> El {
     }
 }
 
-/// A press and release without travel stays a click: only a move starts the drag.
+/// A press and release with little travel stays a click: only a move past [`DRAG_START`] starts the drag.
 fn drag_strip(
     model: &mut Model,
     group: Option<TabGroupId>,
@@ -445,6 +447,9 @@ fn drag_strip(
             tx.live_only();
         }
         Phase::Move => {
+            if model.strip_drag.is_none() && drag.dx.abs() < DRAG_START {
+                return;
+            }
             // Held inside its lane, as a group's tab cannot leave the group.
             let before: f32 = widths[..from].iter().sum();
             let after: f32 = widths[from + 1..].iter().sum();
@@ -807,6 +812,17 @@ mod tests {
         );
         press(&mut rt);
         assert!(rt.find("tab-1").is_some());
+
+        // A real click travels a point or two between down and up.
+        let (x, y) = rt.find("tab-group-dev").expect("the label");
+        rt.pointer_down(x, y);
+        rt.pointer_move(x + 1.0, y);
+        rt.pointer_up(x + 1.0, y);
+        rt.frame(0.0);
+        assert!(
+            rt.state.tab_groups[0].collapsed,
+            "a click that jitters still collapses"
+        );
     }
 
     #[test]
