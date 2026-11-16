@@ -75,5 +75,10 @@ shots:
 
 ci: check-all
 
+# The bash prompt marks as a file to source, for a profile directory such as /etc/profile.d.
+install-shell-integration dir:
+    install -d "{{dir}}"
+    install -m 644 assets/shell/rune-term.bash "{{dir}}/rune-term.sh"
+
 ctl *args:
     cargo run -p rune-term-ctl -- {{args}}

@@ -35,6 +35,27 @@ struct Gui {
     /// `--help`. To list Rune's tooling flags: `rune-term --rune-args --help`.
     #[arg(long = "rune-args", value_name = "ARG", values = 1.., allow_hyphen_values)]
     rune_args: Vec<String>,
+
+    #[arg(subcommand)]
+    command: Option<Command>,
+}
+
+#[derive(Subcommand, Debug)]
+enum Command {
+    /// Print the prompt marks script for a shell, to evaluate from its rc file.
+    ShellIntegration(ShellIntegration),
+}
+
+#[derive(Args, Debug)]
+struct ShellIntegration {
+    #[arg(subcommand)]
+    shell: Shell,
+}
+
+#[derive(Subcommand, Debug)]
+enum Shell {
+    /// `eval "$(rune-term shell-integration bash)"` in ~/.bashrc, after starship.
+    Bash,
 }
 
 impl RuneTerm {
@@ -52,6 +73,12 @@ impl RuneTerm {
 
 impl Gui {
     fn run(self) {
+        if let Some(Command::ShellIntegration(ShellIntegration { shell: Shell::Bash })) =
+            self.command
+        {
+            print!("{}", include_str!("../../assets/shell/rune-term.bash"));
+            return;
+        }
         if self.rune_help {
             // Rune prints help and exits.
             rune::tooling::Args::parse_from(vec!["--help".to_owned()]);

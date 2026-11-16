@@ -28,9 +28,14 @@
 
 ## Shell integration
 
-bash and starship send no OSC 133. rune-term has to add the marks to the
-prompt itself, as kitty and Ghostty do. Without them, 5 does nothing and a
-multi-line bash prompt loses a line per drag.
+bash and starship send no OSC 133, and without the marks 5 does nothing: a
+multi-line bash prompt loses a line per drag. `rune-term shell-integration bash`
+prints `assets/shell/rune-term.bash`, which adds them; `just
+install-shell-integration DIR` installs it as a file for a profile directory.
+It is opt-in. It puts `A` before the prompt, `P;k=s` before its last line, and
+`C` in `PS0`. starship sets `PS1` at the end of its own `PROMPT_COMMAND`, so the
+hook puts itself back last; read before starship, the first prompt has no
+marks. zsh has none yet.
 
 ## Upstreaming
 

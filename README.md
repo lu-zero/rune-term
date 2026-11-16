@@ -61,6 +61,19 @@ cargo test -p rune-term --no-default-features --test headless
 `cargo run -p rune-term` opens the window. The default feature is `pty`.
 `--no-default-features` is the inject harness and does not spawn a shell.
 
+### Shell integration
+
+A bash prompt keeps its layout through a resize only with OSC 133 marks. Add
+this to `~/.bashrc`, after `eval "$(starship init bash)"` if you use starship:
+
+```
+command -v rune-term >/dev/null && eval "$(rune-term shell-integration bash)"
+```
+
+To source a file instead of running `rune-term` at every shell start, install
+it with `just install-shell-integration /etc/profile.d` (or any directory your
+profile sources). Read before starship, the first prompt goes without marks.
+
 ## License
 
 MIT: [`LICENSE`](./LICENSE). Cascadia Code NF is SIL Open Font License 1.1:
