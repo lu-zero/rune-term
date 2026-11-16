@@ -75,10 +75,18 @@ shots:
 
 ci: check-all
 
-# The bash prompt marks as a file to source, for a profile directory such as /etc/profile.d.
-install-shell-integration dir:
+# The prompt marks as files to source, for every shell.
+install-shell-integration dir: (install-shell-integration-bash dir) (install-shell-integration-zsh dir)
+
+# rune-term.sh, for a profile directory such as /etc/profile.d.
+install-shell-integration-bash dir:
     install -d "{{dir}}"
     install -m 644 assets/shell/rune-term.bash "{{dir}}/rune-term.sh"
+
+# rune-term.zsh, to source from a zshrc.
+install-shell-integration-zsh dir:
+    install -d "{{dir}}"
+    install -m 644 assets/shell/rune-term.zsh "{{dir}}/rune-term.zsh"
 
 ctl *args:
     cargo run -p rune-term-ctl -- {{args}}

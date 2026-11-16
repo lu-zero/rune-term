@@ -70,9 +70,13 @@ this to `~/.bashrc`, after `eval "$(starship init bash)"` if you use starship:
 command -v rune-term >/dev/null && eval "$(rune-term shell-integration bash)"
 ```
 
+For zsh, add `eval "$(rune-term shell-integration zsh)"` to `~/.zshrc`.
+
 To source a file instead of running `rune-term` at every shell start, install
-it with `just install-shell-integration /etc/profile.d` (or any directory your
-profile sources). Read before starship, the first prompt goes without marks.
+them with `just install-shell-integration /etc/profile.d` (or any directory your
+profile sources): `rune-term.sh` for bash, `rune-term.zsh` to source from a
+zshrc. `install-shell-integration-bash` and `-zsh` install one. Read before
+starship, bash's first prompt goes without marks.
 
 ## License
 

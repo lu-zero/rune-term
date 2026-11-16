@@ -56,6 +56,8 @@ struct ShellIntegration {
 enum Shell {
     /// `eval "$(rune-term shell-integration bash)"` in ~/.bashrc, after starship.
     Bash,
+    /// `eval "$(rune-term shell-integration zsh)"` in ~/.zshrc.
+    Zsh,
 }
 
 impl RuneTerm {
@@ -73,10 +75,14 @@ impl RuneTerm {
 
 impl Gui {
     fn run(self) {
-        if let Some(Command::ShellIntegration(ShellIntegration { shell: Shell::Bash })) =
-            self.command
-        {
-            print!("{}", include_str!("../../assets/shell/rune-term.bash"));
+        if let Some(Command::ShellIntegration(ShellIntegration { shell })) = self.command {
+            print!(
+                "{}",
+                match shell {
+                    Shell::Bash => include_str!("../../assets/shell/rune-term.bash"),
+                    Shell::Zsh => include_str!("../../assets/shell/rune-term.zsh"),
+                }
+            );
             return;
         }
         if self.rune_help {

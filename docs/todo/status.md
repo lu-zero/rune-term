@@ -210,8 +210,8 @@ What Rio still needs, sent and drafted, is [`rio/`](./rio/README.md).
       reports focus (#2051).
 - [~] **3. Reflow.** `lu-zero/rio` branch `reflow-cursor-on-2058`: Rio #2058
       plus our fixes. A multi-line bash prompt survives a width change only
-      with OSC 133 marks: bash gets them from
-      `rune-term shell-integration bash`; zsh has no script yet.
+      with OSC 133 marks, from `rune-term shell-integration bash` or
+      `zsh`.
       `preserve_scrollback` is still false on macOS in the plan.
 
 The design header still records an empty workspace. This page is the status.

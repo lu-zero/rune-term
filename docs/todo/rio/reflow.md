@@ -30,12 +30,17 @@
 
 bash and starship send no OSC 133, and without the marks 5 does nothing: a
 multi-line bash prompt loses a line per drag. `rune-term shell-integration bash`
-prints `assets/shell/rune-term.bash`, which adds them; `just
-install-shell-integration DIR` installs it as a file for a profile directory.
-It is opt-in. It puts `A` before the prompt, `P;k=s` before its last line, and
-`C` in `PS0`. starship sets `PS1` at the end of its own `PROMPT_COMMAND`, so the
-hook puts itself back last; read before starship, the first prompt has no
-marks. zsh has none yet.
+prints `assets/shell/rune-term.bash`, which adds them, and `zsh` prints
+`rune-term.zsh`; `just install-shell-integration DIR` installs them as files,
+and `install-shell-integration-bash` or `-zsh` one of them. They are opt-in.
+
+bash gets `A` before the prompt, `P;k=s` before its last line, and `C` in
+`PS0`. starship sets `PS1` at the end of its own `PROMPT_COMMAND`, so the hook
+puts itself back last; read before starship, the first prompt has no marks.
+
+zle redraws the whole prompt after a resize, so zsh gets only `A` at the
+prompt's first line, put back on `PROMPT` in `precmd`, and `C` from `preexec`.
+Without marks a zsh prompt loses a line within a few drags as bash's does.
 
 ## Upstreaming
 
