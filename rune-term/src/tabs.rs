@@ -128,7 +128,7 @@ pub fn has_panes(model: &Model) -> bool {
 
 /// Close the focused pane, or the tab when it has no other.
 pub fn close_pane(model: &mut Model, tx: &mut Tx) {
-    if crate::mux::kill_pane(model) {
+    if crate::mux::kills(model, model.active) && crate::mux::kill_pane(model) {
         return;
     }
     if !has_panes(model) {
@@ -137,6 +137,16 @@ pub fn close_pane(model: &mut Model, tx: &mut Tx) {
     }
     if let Some(id) = focused_surface(&model.tabs[model.active]) {
         delegate::drop_closed(model, id, tx);
+    }
+}
+
+/// The tab's close button: a session's window is killed unless its profile
+/// keeps it, hidden; any other tab closes.
+pub fn close_tab(model: &mut Model, index: usize, tx: &mut Tx) {
+    if crate::mux::kills(model, index) {
+        crate::mux::kill_window(model, index);
+    } else {
+        close(model, index, tx);
     }
 }
 

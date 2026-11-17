@@ -1029,6 +1029,24 @@ pub(crate) fn window_of(model: &Model, index: usize) -> Option<(usize, u32)> {
 }
 
 /// tmux closes the window and its shells. The tab goes when tmux reports it gone.
+/// Closing tab `index` kills its window: a session's tab whose link is up and
+/// whose profile does not keep windows on close.
+pub(crate) fn kills(model: &Model, index: usize) -> bool {
+    let Some((at, _)) = window_of(model, index) else {
+        return false;
+    };
+    let mux = &model.muxes[at];
+    let lost = model
+        .tab_groups
+        .iter()
+        .any(|entry| entry.id == mux.group && entry.lost);
+    let detach = model
+        .config
+        .profile(&mux.profile)
+        .is_some_and(|profile| profile.on_close == crate::settings::OnClose::Detach);
+    !lost && !detach
+}
+
 /// The selected tab is a session's, and its link is up.
 pub(crate) fn live(model: &Model) -> bool {
     focused(model).is_some_and(|(index, ..)| {
@@ -2202,6 +2220,61 @@ mod tests {
             model.muxes[0].hidden.is_empty(),
             "it was killed, not hidden"
         );
+    }
+
+    #[test]
+    fn the_close_button_kills_a_window_unless_its_profile_detaches() {
+        let Some((server, mut model, _group)) = attached("on-close") else {
+            return;
+        };
+        assert!(until(&mut model, |model| model.tabs.len() == 2));
+        let windows = || {
+            let out = server
+                .run(&["list-windows", "-t", "on-close", "-F", "#{window_id}"])
+                .output()
+                .unwrap();
+            String::from_utf8_lossy(&out.stdout).lines().count()
+        };
+        for _ in 0..2 {
+            assert!(open_window(&model));
+        }
+        assert!(until(&mut model, |model| model.tabs.len() == 4));
+        assert_eq!(windows(), 3);
+
+        let index = model.active;
+        crate::tabs::close_tab(&mut model, index, &mut Tx::default());
+        assert!(
+            until(&mut model, |model| model.tabs.len() == 3),
+            "the tab stayed"
+        );
+        assert_eq!(windows(), 2, "the window was not killed");
+        assert!(model.muxes[0].hidden.is_empty());
+
+        model.config.profiles.insert(
+            "keep".to_owned(),
+            crate::settings::Profile {
+                backend: "tmux".to_owned(),
+                on_close: crate::settings::OnClose::Detach,
+                ..Default::default()
+            },
+        );
+        model.muxes[0].profile = "keep".to_owned();
+        let index = model
+            .tabs
+            .iter()
+            .rposition(|tab| tab.window.is_some())
+            .unwrap();
+        model.active = index;
+        crate::tabs::close_pane(&mut model, &mut Tx::default());
+        assert_eq!(model.tabs.len(), 2, "Cmd+W hides the window");
+        let index = model
+            .tabs
+            .iter()
+            .position(|tab| tab.window.is_some())
+            .unwrap();
+        crate::tabs::close_tab(&mut model, index, &mut Tx::default());
+        assert!(until(&mut model, |model| model.muxes[0].hidden.len() == 2));
+        assert_eq!(windows(), 2, "a detached window keeps running");
     }
 
     #[test]

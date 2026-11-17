@@ -111,6 +111,38 @@ pub struct Profile {
     /// The session a "tmux" or "rmux" profile attaches, created when missing.
     /// Without one each open starts a new session.
     pub session: Option<String>,
+    /// What closing a "tmux" or "rmux" tab or pane does to the window.
+    #[serde(skip_serializing_if = "OnClose::is_kill")]
+    pub on_close: OnClose,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OnClose {
+    /// The window or pane ends, as iTerm2 and WezTerm close one.
+    #[default]
+    Kill,
+    /// The window keeps running, hidden, and the menu shows it again.
+    Detach,
+}
+
+impl OnClose {
+    pub const NAMES: [&str; 2] = ["kill", "detach"];
+
+    fn is_kill(&self) -> bool {
+        *self == OnClose::Kill
+    }
+
+    pub fn name(self) -> &'static str {
+        Self::NAMES[self as usize]
+    }
+
+    pub fn from_name(name: &str) -> Self {
+        match name {
+            "detach" => OnClose::Detach,
+            _ => OnClose::Kill,
+        }
+    }
 }
 
 impl Default for Profile {
@@ -124,6 +156,7 @@ impl Default for Profile {
             cwd: None,
             host: None,
             session: None,
+            on_close: OnClose::Kill,
         }
     }
 }

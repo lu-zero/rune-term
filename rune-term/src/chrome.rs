@@ -412,7 +412,7 @@ fn tab_el(model: &Model, index: usize, tab_h: f32, p: &Palette) -> El {
         .hover(hover_overlay(p))
         .preserve_focus_on_press(true)
         .on_press_tx(move |model: &mut Model, tx| {
-            crate::tabs::close(model, index, tx);
+            crate::tabs::close_tab(model, index, tx);
             crate::tabs::focus_active(model, tx);
         })
         .child(text("×").color(theme::linear(p.muted)));
@@ -537,6 +537,9 @@ fn group_label(group: &TabGroup, count: usize, tab_h: f32, p: &Palette) -> El {
             }
             crate::tabs::focus_active(model, tx);
         })
+        .on_secondary_press_local(move |model: &mut Model, point, tx| {
+            group_menu(model, id, point.window(), tx);
+        })
         .h(tab_h)
         .pl(10.0)
         .pr(10.0)
@@ -614,18 +617,40 @@ fn tab_menu(model: &Model, index: usize, at: rune::PointerPress, tx: &mut Tx) {
     } else {
         PopupMenu::new().item(PopupItem::new("close", "Close Tab"))
     };
-    tx.popup_menu(
-        menu,
-        at,
-        move |model: &mut Model, picked, tx| match picked {
-            Some("hide" | "close") => crate::tabs::close(model, index, tx),
-            Some("kill") => crate::mux::kill_window(model, index),
-            Some("reconnect") => crate::mux::reconnect(model, index),
-            Some("detach") => crate::mux::detach(model, index, tx),
-            Some("save-profile") => crate::mux::ask_profile_name(model, index),
-            _ => {}
-        },
-    );
+    tx.popup_menu(menu, at, move |model: &mut Model, picked, tx| {
+        tab_action(model, index, picked, tx)
+    });
+}
+
+/// The session as a whole: leaving it, and saving it.
+fn group_menu(model: &Model, group: TabGroupId, at: rune::PointerPress, tx: &mut Tx) {
+    let Some(index) = model.tabs.iter().position(|tab| tab.group == Some(group)) else {
+        return;
+    };
+    let lost = group_of(model, group).is_some_and(|group| group.lost);
+    let mut menu = PopupMenu::new();
+    if lost {
+        menu = menu
+            .item(PopupItem::new("reconnect", "Reconnect"))
+            .separator();
+    }
+    let menu = menu
+        .item(PopupItem::new("detach", "Detach Session"))
+        .item(PopupItem::new("save-profile", "Save as Profile…"));
+    tx.popup_menu(menu, at, move |model: &mut Model, picked, tx| {
+        tab_action(model, index, picked, tx)
+    });
+}
+
+fn tab_action(model: &mut Model, index: usize, picked: Option<&str>, tx: &mut Tx) {
+    match picked {
+        Some("hide" | "close") => crate::tabs::close(model, index, tx),
+        Some("kill") => crate::mux::kill_window(model, index),
+        Some("reconnect") => crate::mux::reconnect(model, index),
+        Some("detach") => crate::mux::detach(model, index, tx),
+        Some("save-profile") => crate::mux::ask_profile_name(model, index),
+        _ => {}
+    }
 }
 
 pub(crate) fn hover_overlay(p: &Palette) -> Color {
