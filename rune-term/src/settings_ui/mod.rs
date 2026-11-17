@@ -1238,6 +1238,16 @@ mod tests {
         let saved = rt.state.config.profile("Default").unwrap();
         assert_eq!(saved.host.as_deref(), Some("thalia"));
         assert_eq!(saved.session, None);
+        assert!(shows(&rt, "On close"));
+        assert_eq!(saved.on_close, crate::settings::OnClose::Kill);
+        press(&mut rt, "profile-on-close-trigger");
+        press(&mut rt, "option1");
+        let dir = rt.state.config.dir();
+        let written = ConfigFile::open(&dir).unwrap();
+        assert_eq!(
+            written.profile("Default").unwrap().on_close,
+            crate::settings::OnClose::Detach
+        );
     }
 
     #[test]

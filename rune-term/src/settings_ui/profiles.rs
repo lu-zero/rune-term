@@ -29,6 +29,8 @@ pub struct ProfileDraft {
     pub backend_open: bool,
     pub host: TextEdit,
     pub session: TextEdit,
+    pub on_close: settings::OnClose,
+    pub on_close_open: bool,
 }
 
 impl ProfileDraft {
@@ -75,6 +77,8 @@ impl ProfileDraft {
             backend_open: false,
             host: TextEdit::new(profile.host.clone().unwrap_or_default()),
             session: TextEdit::new(profile.session.clone().unwrap_or_default()),
+            on_close: profile.on_close,
+            on_close_open: false,
         }
     }
 
@@ -148,6 +152,7 @@ impl ProfileDraft {
                 backend: self.backend.clone(),
                 host: non_empty(&self.host.text),
                 session: non_empty(&self.session.text),
+                on_close: self.on_close,
             },
         ))
     }
@@ -279,14 +284,25 @@ pub fn editor(
                     reflect_session,
                 ))),
         )
-        .child(text_field(
-            kit,
-            "Host",
-            &draft.host,
-            "This machine",
-            |m| &mut m.profile.host,
-            reflect_host,
-        ))
+        .child(
+            row()
+                .w_full()
+                .gap(12.0)
+                .child(half(text_field(
+                    kit,
+                    "Host",
+                    &draft.host,
+                    "This machine",
+                    |m| &mut m.profile.host,
+                    reflect_host,
+                )))
+                .child(half(
+                    Field::new()
+                        .label("On close")
+                        .control(on_close_select(kit, model, overlays, cx))
+                        .build(kit),
+                )),
+        )
     } else {
         body.child(
             row()
@@ -386,6 +402,41 @@ fn backend_select(
 }
 
 const BACKENDS: [&str; 3] = ["local", "tmux", "rmux"];
+
+/// Whether closing a session's tab or last pane kills the window or keeps it running, hidden.
+fn on_close_select(
+    kit: &Kit,
+    model: &SettingsModel,
+    overlays: &mut Vec<El>,
+    cx: &Cx<SettingsModel>,
+) -> El {
+    let mut select = Select::new("profile-on-close", &settings::OnClose::NAMES)
+        .label("On close")
+        .appearance(SelectAppearance::Field)
+        .current(Some(model.profile.on_close.name()))
+        .fill()
+        .open(model.profile.on_close_open);
+    if let Some([width, _]) = cx.layout_size("profile-on-close-trigger") {
+        select = select.menu_width(width);
+    }
+    select
+        .on_toggle(|m: &mut SettingsModel| {
+            m.profile.on_close_open = !m.profile.on_close_open;
+        })
+        .on_close(|m: &mut SettingsModel| {
+            m.profile.on_close_open = false;
+        })
+        .on_choose(|m: &mut SettingsModel, value: &str, _tx| {
+            m.profile.on_close = settings::OnClose::from_name(value);
+            m.profile.on_close_open = false;
+            reflect_field(m, |draft, profile| {
+                let changed = profile.on_close != draft.on_close;
+                profile.on_close = draft.on_close;
+                Ok(changed)
+            });
+        })
+        .build(kit, overlays)
+}
 
 /// The theme the profile uses, chosen from the built-in and the custom ones.
 /// An empty theme inherits the global one.

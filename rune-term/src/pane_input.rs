@@ -163,7 +163,7 @@ pub fn on_secondary_mark(
             rune::PopupItem::new("split-down", "Split Down")
                 .key_equivalent(shortcut("cmd+shift+d")),
         );
-    if crate::tabs::has_panes(model) || crate::mux::live(model) {
+    if crate::tabs::has_panes(model) || crate::mux::kills(model, model.active) {
         menu = menu.item(
             rune::PopupItem::new("close-pane", "Close Pane").key_equivalent(shortcut("cmd+w")),
         );
