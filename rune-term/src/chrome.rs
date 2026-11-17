@@ -90,6 +90,8 @@ pub struct TabGroup {
     pub label: String,
     /// Only the label shows, and the group's selected tab.
     pub collapsed: bool,
+    /// Its link dropped: the tabs keep what they last showed until it reconnects.
+    pub lost: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -336,7 +338,7 @@ fn tab_el(model: &Model, index: usize, tab_h: f32, p: &Palette) -> El {
     let active = index == model.active;
     let hue = tab_group
         .and_then(|id| group_of(model, id))
-        .map(|group| group_color(&group.label, p));
+        .map(|group| group_color(group, p));
     let color = if active {
         text_color(p)
     } else if let Some(hue) = hue {
@@ -498,6 +500,7 @@ fn drag_strip(
 
 /// A press collapses the group to this label, or opens it again.
 fn group_label(group: &TabGroup, count: usize, tab_h: f32, p: &Palette) -> El {
+    let hue = group_color(group, p);
     let id = group.id;
     let label = group.label.as_str();
     let caption = if group.collapsed {
@@ -522,9 +525,9 @@ fn group_label(group: &TabGroup, count: usize, tab_h: f32, p: &Palette) -> El {
         .pr(10.0)
         .center_y()
         .radius(TAB_RADIUS)
-        .fill(wash(group_color(label, p)))
-        .border(1.0, group_color(label, p))
-        .child(text(caption).color(group_color(label, p)).truncate())
+        .fill(wash(hue))
+        .border(1.0, hue)
+        .child(text(caption).color(hue).truncate())
 }
 
 /// The group's color behind its label and tabs, faint enough for the text on it.
@@ -533,9 +536,17 @@ fn wash(mut hue: Color) -> Color {
     hue
 }
 
+/// A lost group is greyed out.
+fn group_color(group: &TabGroup, p: &Palette) -> Color {
+    match group.lost {
+        true => theme::linear(p.muted),
+        false => label_color(&group.label, p),
+    }
+}
+
 /// A hue from the group's name, so a session keeps its color across runs. A light
 /// background takes a darker value to keep the text readable.
-fn group_color(label: &str, p: &Palette) -> Color {
+fn label_color(label: &str, p: &Palette) -> Color {
     let mut hasher = DefaultHasher::new();
     label.hash(&mut hasher);
     let bits = hasher.finish();
@@ -566,7 +577,17 @@ fn new_tab_button(tab_h: f32, p: &Palette) -> El {
 
 /// A tmux tab tells hiding its window, killing it, and leaving the session apart.
 fn tab_menu(model: &Model, index: usize, at: rune::PointerPress, tx: &mut Tx) {
-    let menu = if crate::mux::window_of(model, index).is_some() {
+    let lost = model.tabs[index]
+        .group
+        .and_then(|id| group_of(model, id))
+        .is_some_and(|group| group.lost);
+    let menu = if lost {
+        PopupMenu::new()
+            .item(PopupItem::new("reconnect", "Reconnect"))
+            .separator()
+            .item(PopupItem::new("detach", "Detach Session"))
+            .item(PopupItem::new("save-profile", "Save as Profile…"))
+    } else if crate::mux::window_of(model, index).is_some() {
         PopupMenu::new()
             .item(PopupItem::new("hide", "Hide Window"))
             .item(PopupItem::new("kill", "Close Window"))
@@ -582,6 +603,7 @@ fn tab_menu(model: &Model, index: usize, at: rune::PointerPress, tx: &mut Tx) {
         move |model: &mut Model, picked, tx| match picked {
             Some("hide" | "close") => crate::tabs::close(model, index, tx),
             Some("kill") => crate::mux::kill_window(model, index),
+            Some("reconnect") => crate::mux::reconnect(model, index),
             Some("detach") => crate::mux::detach(model, index, tx),
             Some("save-profile") => crate::mux::ask_profile_name(model, index),
             _ => {}
@@ -633,7 +655,7 @@ mod tests {
                 "logs",
                 "build",
             ] {
-                let fg = luminance(group_color(name, palette));
+                let fg = luminance(label_color(name, palette));
                 let ratio = (fg.max(bg) + 0.05) / (fg.min(bg) + 0.05);
                 assert!(ratio >= 3.0, "{name} on {}: {ratio:.2}", palette.name);
             }
@@ -686,6 +708,7 @@ mod tests {
             id: group,
             label: "dev".to_owned(),
             collapsed: false,
+            lost: false,
         });
         crate::tabs::open(&mut model);
         model.tabs[1].group = Some(group);
@@ -752,6 +775,7 @@ mod tests {
             id: group,
             label: "dev".to_owned(),
             collapsed: false,
+            lost: false,
         });
         crate::tabs::open(&mut model);
         crate::tabs::open(&mut model);
@@ -808,6 +832,7 @@ mod tests {
             id: group,
             label: "dev".to_owned(),
             collapsed: false,
+            lost: false,
         });
         crate::tabs::open(&mut model);
         crate::tabs::open(&mut model);

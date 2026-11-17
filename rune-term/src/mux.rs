@@ -313,38 +313,14 @@ pub(crate) fn attach(
     target: &Target,
     args: &[String],
 ) -> io::Result<TabGroupId> {
-    let mut child = target
-        .command(args)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()?;
-    let mut stdin = child.stdin.take().expect("piped stdin");
-    let stdout = child.stdout.take().expect("piped stdout");
     let group = TabGroupId(NEXT_GROUP.fetch_add(1, Ordering::Relaxed));
-    let (input, queued) = mpsc::channel::<Vec<u8>>();
-    thread::Builder::new()
-        .name(format!("tmux-write-{}", group.0))
-        .spawn(move || {
-            for bytes in queued {
-                if stdin.write_all(&bytes).is_err() {
-                    break;
-                }
-            }
-        })?;
     let panes = Arc::new(Mutex::new(Panes::default()));
-    let reader = (Arc::clone(&panes), Arc::clone(&model.shared), input.clone());
-    thread::Builder::new()
-        .name(format!("tmux-read-{}", group.0))
-        .spawn(move || {
-            let (panes, shared, input) = reader;
-            read(stdout, &panes, &shared, &input, group);
-            let _ = child.wait();
-        })?;
+    let input = link(&model.shared, target, args, group, &panes)?;
     model.tab_groups.push(TabGroup {
         id: group,
         label: target.label(target.program.name()),
         collapsed: false,
+        lost: false,
     });
     model.muxes.push(Mux {
         group,
@@ -364,21 +340,70 @@ pub(crate) fn attach(
     Ok(group)
 }
 
+/// The multiplexer, with a thread writing what the group sends it and one
+/// reading what it says back into the group's panes.
+fn link(
+    shared: &Arc<Shared>,
+    target: &Target,
+    args: &[String],
+    group: TabGroupId,
+    panes: &Arc<Mutex<Panes>>,
+) -> io::Result<mpsc::Sender<Vec<u8>>> {
+    let mut child = target
+        .command(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()?;
+    let mut stdin = child.stdin.take().expect("piped stdin");
+    let stdout = child.stdout.take().expect("piped stdout");
+    let (input, queued) = mpsc::channel::<Vec<u8>>();
+    thread::Builder::new()
+        .name(format!("tmux-write-{}", group.0))
+        .spawn(move || {
+            for bytes in queued {
+                if stdin.write_all(&bytes).is_err() {
+                    break;
+                }
+            }
+        })?;
+    let reader = (Arc::clone(panes), Arc::clone(shared), input.clone());
+    thread::Builder::new()
+        .name(format!("tmux-read-{}", group.0))
+        .spawn(move || {
+            let (panes, shared, input) = reader;
+            match read(stdout, &panes, &shared, &input, group) {
+                Ok(reason) => {
+                    shared.push_mux(group, Update::Exit(reason));
+                    let _ = child.wait();
+                }
+                Err(err) => {
+                    let status = child.wait();
+                    let status =
+                        status.map_or_else(|err| err.to_string(), |status| status.to_string());
+                    shared.push_mux_lost(group, err.unwrap_or(status));
+                }
+            }
+        })?;
+    Ok(input)
+}
+
+/// The `%exit` reason, or, when the link ended without one, the read error if any.
 fn read(
     mut stdout: ChildStdout,
     panes: &Mutex<Panes>,
     shared: &Shared,
     input: &mpsc::Sender<Vec<u8>>,
     group: TabGroupId,
-) {
+) -> Result<Option<String>, Option<String>> {
     let mut client = tmux::Client::default();
     let mut buf = vec![0u8; 64 * 1024];
-    let reason = loop {
+    loop {
         let n = match stdout.read(&mut buf) {
-            Ok(0) => break None,
+            Ok(0) => return Err(None),
             Ok(n) => n,
             Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
-            Err(err) => break Some(err.to_string()),
+            Err(err) => return Err(Some(err.to_string())),
         };
         for update in client.feed(&buf[..n]) {
             match update {
@@ -387,10 +412,7 @@ fn read(
                     follow_sizes(panes, shared, &windows);
                     shared.push_mux(group, Update::Windows(windows));
                 }
-                Update::Exit(reason) => {
-                    shared.push_mux(group, Update::Exit(reason));
-                    return;
-                }
+                Update::Exit(reason) => return Ok(reason),
                 other => shared.push_mux(group, other),
             }
         }
@@ -398,8 +420,7 @@ fn read(
         if !commands.is_empty() {
             let _ = input.send(commands.into_bytes());
         }
-    };
-    shared.push_mux(group, Update::Exit(reason));
+    }
 }
 
 /// Injected under the lock, so a surface the UI is making cannot get its
@@ -728,6 +749,59 @@ fn release(model: &mut Model, index: usize, pane: u32, id: SurfaceId) {
     mux.surfaces.remove(&pane);
     model.shared.forget(id);
     model.terminal.remove(id);
+}
+
+/// The link dropped. A group that never reached its session goes; one that
+/// did stays, greyed, for its tab menu to reconnect.
+pub(crate) fn lost(model: &mut Model, group: TabGroupId, reason: &str, tx: &mut Tx) -> bool {
+    let Some(index) = model.muxes.iter().position(|mux| mux.group == group) else {
+        return false;
+    };
+    let mux = &model.muxes[index];
+    eprintln!(
+        "rune-term: {}: the link dropped: {reason}",
+        mux.target.program.name()
+    );
+    if mux.session.is_none() {
+        end(model, index, tx);
+        return true;
+    }
+    if let Some(entry) = model.tab_groups.iter_mut().find(|entry| entry.id == group) {
+        entry.lost = true;
+    }
+    true
+}
+
+/// A lost group attaches its session again, over a new link, into the tabs it has.
+/// tmux redraws every pane on attach. A session gone in the meantime starts anew.
+pub(crate) fn reconnect(model: &mut Model, index: usize) {
+    let Some((at, _)) = window_of(model, index) else {
+        return;
+    };
+    let mux = &model.muxes[at];
+    let Some(session) = mux.session.clone() else {
+        return;
+    };
+    let args = session_args(Session::Named(&session));
+    let input = match link(&model.shared, &mux.target, &args, mux.group, &mux.panes) {
+        Ok(input) => input,
+        Err(err) => {
+            eprintln!("rune-term: {}: {err}", mux.target.program.name());
+            return;
+        }
+    };
+    for (pane, id) in &mux.surfaces {
+        model.shared.route_to_mux(*id, input.clone(), *pane);
+    }
+    let group = mux.group;
+    let mux = &mut model.muxes[at];
+    mux.input = input;
+    mux.reported = None;
+    mux.selected = None;
+    mux.resized = None;
+    if let Some(entry) = model.tab_groups.iter_mut().find(|entry| entry.id == group) {
+        entry.lost = false;
+    }
 }
 
 /// tmux went away. Its tabs go with it.
@@ -1706,6 +1780,50 @@ mod tests {
         }
         assert_eq!(attached_clients(), 0, "the client did not detach");
         assert_eq!(sessions(&server.0).unwrap(), ["detach"]);
+    }
+
+    #[test]
+    fn a_dropped_link_greys_the_group_and_reconnects_into_its_tabs() {
+        let Some((server, mut model, group)) = attached("dropped") else {
+            return;
+        };
+        assert!(until(&mut model, |model| model.muxes[0].session.is_some()
+            && model.tabs.len() == 2));
+        let pane = crate::tabs::surface_of(&model.tabs[model.active]).unwrap();
+        let out = server
+            .run(&["list-clients", "-F", "#{client_pid}"])
+            .output()
+            .unwrap();
+        let pid = String::from_utf8(out.stdout).unwrap();
+        let killed = Command::new("kill")
+            .args(["-9", pid.trim()])
+            .status()
+            .unwrap();
+        assert!(killed.success());
+        let lost = |model: &Model| model.tab_groups.iter().any(|g| g.id == group && g.lost);
+        assert!(
+            until(&mut model, |model| lost(model)),
+            "the group did not grey out"
+        );
+        assert_eq!(model.tabs.len(), 2, "its tab stays");
+
+        let index = model.active;
+        reconnect(&mut model, index);
+        assert!(!lost(&model));
+        let surface = |model: &Model| crate::tabs::surface_of(&model.tabs[model.active]);
+        model
+            .terminal
+            .get(pane)
+            .unwrap()
+            .surface
+            .text("echo $((6*7))\r");
+        assert!(
+            until(&mut model, |model| screen(model, pane).contains("\n42")),
+            "the answer did not come back: {}",
+            screen(&mut model, pane)
+        );
+        assert_eq!(surface(&model), Some(pane), "the pane reconnected in place");
+        assert_eq!(sessions(&server.0).unwrap(), ["dropped"]);
     }
 
     #[test]

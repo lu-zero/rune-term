@@ -102,6 +102,11 @@ enum HostEvent {
         group: crate::chrome::TabGroupId,
         update: term_mux::tmux::Update,
     },
+    /// The link to a group's multiplexer ended without its `%exit`.
+    MuxLost {
+        group: crate::chrome::TabGroupId,
+        reason: String,
+    },
 }
 
 struct Delegate {
@@ -212,6 +217,10 @@ impl Shared {
         update: term_mux::tmux::Update,
     ) {
         self.push(HostEvent::Mux { group, update });
+    }
+
+    pub(crate) fn push_mux_lost(&self, group: crate::chrome::TabGroupId, reason: String) {
+        self.push(HostEvent::MuxLost { group, reason });
     }
 
     pub(crate) fn note_rearm(&self) {
@@ -480,6 +489,7 @@ fn apply(model: &mut Model, event: HostEvent, tx: &mut Tx) -> bool {
         HostEvent::Action { id, action } => apply_action(model, id, action),
         HostEvent::Close(id) => drop_closed(model, id, tx),
         HostEvent::Mux { group, update } => crate::mux::apply(model, group, update, tx),
+        HostEvent::MuxLost { group, reason } => crate::mux::lost(model, group, &reason, tx),
         HostEvent::Clipboard { kind, len, .. } => {
             eprintln!("clipboard write dropped ({kind:?}, {len} bytes)");
             #[cfg(all(test, not(feature = "pty")))]
