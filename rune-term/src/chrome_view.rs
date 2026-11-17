@@ -91,6 +91,22 @@ pub fn split_focused(model: &mut Model, axis: Axis) -> bool {
     true
 }
 
+/// Focus the leaf drawn with effect `mark` in the selected tab, as a press on it does.
+pub fn focus_mark(model: &mut Model, mark: u32, tx: &mut Tx) {
+    let Some(tab) = model.tabs.get(model.active) else {
+        return;
+    };
+    let mut id = None;
+    crate::tabs::walk(&tab.root, &mut |leaf| {
+        if leaf.mark == mark {
+            id = Some(leaf.id);
+        }
+    });
+    if let Some(id) = id {
+        focus_leaf(model, id, tx);
+    }
+}
+
 /// Returns whether focus moved. Also focuses the pane element in Rune.
 pub fn focus_leaf(model: &mut Model, id: LeafId, tx: &mut Tx) -> bool {
     let Some(active) = model.tabs.get(model.active).map(|_| model.active) else {
@@ -772,6 +788,31 @@ mod tests {
             rt.frame(0.0);
         }
         assert_eq!(sides(&rt), before);
+    }
+
+    #[test]
+    fn a_right_click_focuses_the_pane_under_it() {
+        let mut model = host();
+        assert!(split_focused(&mut model, Axis::Horizontal));
+        let mut rt = rune::Runtime::new(
+            model,
+            crate::chrome::view,
+            (800.0, 500.0),
+            rune::Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        rt.frame(0.0);
+        let [left, right] = [0, 1].map(|at| leaves(&rt.state.tabs[0].root)[at].clone());
+        assert_eq!(rt.state.tabs[0].focused, right.id);
+        let rect = rt
+            .presented(&format!("pane-{}", left.mark))
+            .expect("the left pane")
+            .0;
+        let (x, y) = (rect[0] + rect[2] / 2.0, rect[1] + rect[3] / 2.0);
+        rt.secondary_down(x, y);
+        rt.secondary_up(x, y);
+        rt.frame(0.0);
+        assert_eq!(rt.state.tabs[0].focused, left.id);
     }
 
     #[test]
