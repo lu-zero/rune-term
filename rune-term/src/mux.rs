@@ -1436,7 +1436,12 @@ mod tests {
 
     impl Server {
         /// tmux leaves its socket file behind on `kill-server`, so it goes by hand.
+        /// A server whose last session ended has exited and cannot say where the
+        /// file is, so tmux's own rule names it.
         fn stop(&self) {
+            let Some(name) = &self.0.socket else {
+                return;
+            };
             let socket = self
                 .run(&["display-message", "-p", "#{socket_path}"])
                 .stderr(Stdio::null())
@@ -1444,20 +1449,21 @@ mod tests {
                 .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
                 .unwrap_or_default();
             let _ = self.run(&["kill-server"]).stderr(Stdio::null()).status();
-            if socket.is_empty() {
-                return;
-            }
-            match &self.0.host {
-                None => {
-                    let _ = std::fs::remove_file(&socket);
-                }
-                Some(host) => {
-                    let _ = Command::new("ssh")
-                        .args(["-T", "-o", "BatchMode=yes", "--", host])
-                        .arg(format!("rm -f -- {}", target::quote(&socket)))
-                        .status();
-                }
-            }
+            let path = match socket.as_str() {
+                "" => format!(
+                    "\"${{TMUX_TMPDIR:-/tmp}}/tmux-$(id -u)\"/{}",
+                    target::quote(name)
+                ),
+                socket => target::quote(socket),
+            };
+            let script = format!("rm -f -- {path}");
+            let _ = match &self.0.host {
+                None => Command::new("sh").args(["-c", &script]).status(),
+                Some(host) => Command::new("ssh")
+                    .args(["-T", "-o", "BatchMode=yes", "--", host])
+                    .arg(script)
+                    .status(),
+            };
         }
     }
 
