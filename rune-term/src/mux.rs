@@ -139,6 +139,34 @@ pub(crate) fn sessions(target: &Target) -> Option<Vec<String>> {
     )
 }
 
+/// `rune-term sessions`. A program missing here, or on the host, is skipped.
+/// 1 when ssh could not reach the host.
+pub(crate) fn print_sessions(host: Option<String>) -> i32 {
+    for program in [Program::Tmux, Program::Rmux] {
+        let target = Target {
+            program,
+            host: host.clone(),
+            socket: None,
+        };
+        match remote::list(&target) {
+            remote::Listed::Sessions(sessions) => {
+                for session in sessions {
+                    println!("{}\t{session}", program.name());
+                }
+            }
+            remote::Listed::Unreachable if host.is_some() => {
+                eprintln!(
+                    "rune-term: ssh could not reach {}",
+                    host.as_deref().unwrap_or_default()
+                );
+                return 1;
+            }
+            _ => {}
+        }
+    }
+    0
+}
+
 /// What a name prompt names: a session to start, or a profile that reopens a group.
 pub(crate) enum Naming {
     Session(Target),

@@ -201,7 +201,7 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       argument quoted for the far shell; the group is `session@host`.
       The menu lists the sessions on each host a profile or an open group
       names, from that host's last answer, asked again in the background
-      each time the menu opens. A link that drops after reaching its session
+      each time the menu opens. `rune-term sessions [HOST]` prints them. A link that drops after reaching its session
       greys its group; the tab menu's Reconnect attaches it again into the
       same tabs, and tmux redraws every pane. Design:
       [`multiplexer-sessions.md`](./multiplexer-sessions.md).

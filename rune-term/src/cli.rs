@@ -58,6 +58,16 @@ struct Gui {
 enum Command {
     /// Print the prompt marks script for a shell, to evaluate from its rc file.
     ShellIntegration(ShellIntegration),
+    /// Print the tmux and rmux sessions here, or on HOST over ssh, one
+    /// `PROGRAM<TAB>SESSION` a line.
+    Sessions(Sessions),
+}
+
+#[derive(Args, Debug)]
+struct Sessions {
+    /// What `ssh` takes, as `--ssh` does.
+    #[arg(positional, value_name = "HOST")]
+    host: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -89,15 +99,21 @@ impl RuneTerm {
 
 impl Gui {
     fn run(self) {
-        if let Some(Command::ShellIntegration(ShellIntegration { shell })) = self.command {
-            print!(
-                "{}",
-                match shell {
-                    Shell::Bash => include_str!("../../assets/shell/rune-term.bash"),
-                    Shell::Zsh => include_str!("../../assets/shell/rune-term.zsh"),
-                }
-            );
-            return;
+        match self.command {
+            Some(Command::ShellIntegration(ShellIntegration { shell })) => {
+                print!(
+                    "{}",
+                    match shell {
+                        Shell::Bash => include_str!("../../assets/shell/rune-term.bash"),
+                        Shell::Zsh => include_str!("../../assets/shell/rune-term.zsh"),
+                    }
+                );
+                return;
+            }
+            Some(Command::Sessions(Sessions { host })) => {
+                std::process::exit(crate::mux::print_sessions(host));
+            }
+            None => {}
         }
         if self.rune_help {
             // Rune prints help and exits.
