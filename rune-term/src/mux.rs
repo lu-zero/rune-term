@@ -1251,9 +1251,36 @@ mod tests {
         }
     }
 
+    impl Server {
+        /// tmux leaves its socket file behind on `kill-server`, so it goes by hand.
+        fn stop(&self) {
+            let socket = self
+                .run(&["display-message", "-p", "#{socket_path}"])
+                .stderr(Stdio::null())
+                .output()
+                .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_owned())
+                .unwrap_or_default();
+            let _ = self.run(&["kill-server"]).stderr(Stdio::null()).status();
+            if socket.is_empty() {
+                return;
+            }
+            match &self.0.host {
+                None => {
+                    let _ = std::fs::remove_file(&socket);
+                }
+                Some(host) => {
+                    let _ = Command::new("ssh")
+                        .args(["-T", "-o", "BatchMode=yes", "--", host])
+                        .arg(format!("rm -f -- {}", target::quote(&socket)))
+                        .status();
+                }
+            }
+        }
+    }
+
     impl Drop for Server {
         fn drop(&mut self) {
-            let _ = self.run(&["kill-server"]).stderr(Stdio::null()).status();
+            self.stop();
         }
     }
 
@@ -1458,7 +1485,7 @@ mod tests {
             return;
         };
         assert!(until(&mut model, |model| model.tabs.len() == 2));
-        let _ = server.run(&["kill-server"]).status();
+        server.stop();
         assert!(
             until(&mut model, |model| model.tabs.len() == 1),
             "the session's tab outlived it"

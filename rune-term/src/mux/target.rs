@@ -92,7 +92,7 @@ impl Target {
 }
 
 /// One word for a POSIX shell, whatever it holds.
-fn quote(arg: &str) -> String {
+pub(super) fn quote(arg: &str) -> String {
     format!("'{}'", arg.replace('\'', r"'\''"))
 }
 
