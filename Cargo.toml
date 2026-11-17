@@ -55,8 +55,8 @@ rune = { git = "https://github.com/lu-zero/rune", branch = "physical-key-text" }
 rune-kit = { git = "https://github.com/lu-zero/rune", branch = "physical-key-text" }
 
 [patch."https://github.com/raphamorim/rio"]
-librio = { git = "https://github.com/lu-zero/rio", branch = "reflow-cursor-on-2058" }
-teletypewriter = { git = "https://github.com/lu-zero/rio", branch = "reflow-cursor-on-2058" }
+librio = { git = "https://github.com/lu-zero/rio", branch = "rune-term-on-main" }
+teletypewriter = { git = "https://github.com/lu-zero/rio", branch = "rune-term-on-main" }
 
 # Vendored winit is excluded from the rune workspace, so a git pin cannot see it.
 [patch.crates-io]

@@ -208,8 +208,8 @@ What Rio still needs, sent and drafted, is [`rio/`](./rio/README.md).
 - [x] **Wakeup order and focus reports.** Upstream: the host clears its
       flag before `RenderState::update` (#2053), and `Surface::set_focus`
       reports focus (#2051).
-- [~] **3. Reflow.** `lu-zero/rio` branch `reflow-cursor-on-2058`: Rio #2058
-      plus our fixes. A multi-line bash prompt survives a width change only
+- [~] **3. Reflow.** `lu-zero/rio` branch `rune-term-on-main`: Rio main
+      plus our prompt and resize commits. A multi-line bash prompt survives a width change only
       with OSC 133 marks, from `rune-term shell-integration bash` or
       `zsh`.
       `preserve_scrollback` is still false on macOS in the plan.

@@ -12,6 +12,8 @@ this tree.
 - [#2050](https://github.com/raphamorim/rio/issues/2050): an embedder cannot
   report focus (DECSET 1004). Fixed by #2051: `Surface::set_focus(bool)`,
   which leaves the view and the selection alone.
+- [#2082](https://github.com/raphamorim/rio/pull/2082): an empty input stopped
+  later ones. Closed: #2084's writer thread never writes zero bytes.
 
 ## Drafted, not sent
 
@@ -23,8 +25,8 @@ this tree.
 - [`replies.md`](./replies.md): the terminal's replies and user input share
   `SurfaceDelegate::output`. A tmux pane gets librio's answers on top of
   tmux's own.
-- [`reflow.md`](./reflow.md): our reflow fixes on top of #2058, and how to
-  offer them. One of them changes what three of #2058's tests expect.
+- [`reflow.md`](./reflow.md): our prompt and resize commits on top of Rio
+  main, and how to offer them.
 
 ## Not verified
 
@@ -33,6 +35,7 @@ this tree.
 
 ## On the fork
 
-rune-term builds against `lu-zero/rio` branch `reflow-cursor-on-2058`: #2058
-(open) and five commits of ours on top. Everything the old
-`librio-update-rearm-reflow` branch carried is upstream or replaced.
+rune-term builds against `lu-zero/rio` branch `rune-term-on-main`: Rio main
+and two commits of ours on top, listed in [`reflow.md`](./reflow.md).
+Everything the older `reflow-cursor-on-2058` and `librio-update-rearm-reflow`
+branches carried is upstream or replaced.
