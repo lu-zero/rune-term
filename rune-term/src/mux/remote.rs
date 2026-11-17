@@ -12,8 +12,8 @@ use super::Target;
 pub(crate) enum Listed {
     Asking,
     Sessions(Vec<String>),
-    /// ssh could not reach the host or log in.
-    Unreachable,
+    /// ssh could not reach the host or log in, and what it said.
+    Unreachable(String),
     /// The host has no such program.
     Missing,
 }
@@ -47,13 +47,23 @@ pub(crate) fn list(target: &Target) -> Listed {
     let out = target
         .command(&["list-sessions", "-F", "#{session_name}"].map(String::from))
         .stdin(Stdio::null())
-        .stderr(Stdio::null())
         .output();
-    match out.map(|out| (out.status.code(), out.stdout)) {
-        Err(_) | Ok((Some(255), _)) => Listed::Unreachable,
-        Ok((Some(127), _)) => Listed::Missing,
-        Ok((_, stdout)) => Listed::Sessions(
-            String::from_utf8_lossy(&stdout)
+    let out = match out {
+        Ok(out) => out,
+        Err(err) => return Listed::Unreachable(err.to_string()),
+    };
+    match out.status.code() {
+        Some(255) => Listed::Unreachable(
+            String::from_utf8_lossy(&out.stderr)
+                .lines()
+                .map(str::trim)
+                .rfind(|line| !line.is_empty())
+                .unwrap_or("ssh failed")
+                .to_owned(),
+        ),
+        Some(127) => Listed::Missing,
+        _ => Listed::Sessions(
+            String::from_utf8_lossy(&out.stdout)
                 .lines()
                 .map(str::to_owned)
                 .collect(),
@@ -73,6 +83,9 @@ mod tests {
             host: Some("rune-term-test.invalid".to_owned()),
             socket: None,
         };
-        assert_eq!(list(&target), Listed::Unreachable);
+        let Listed::Unreachable(said) = list(&target) else {
+            panic!("reached a host that does not exist");
+        };
+        assert!(said.contains("rune-term-test.invalid"), "{said}");
     }
 }

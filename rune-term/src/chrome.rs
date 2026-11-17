@@ -6,7 +6,7 @@ use std::ops::Range;
 use std::rc::Rc;
 
 use rune::{col, el, row, text, Color, Cx, Drag, El, Phase, PopupItem, PopupMenu, Tx};
-use rune_kit::{Button, ButtonVariant, Dialog, Kit, TextInput};
+use rune_kit::{Button, ButtonVariant, Dialog, Kit, TextInput, Toast, ToastRegion};
 
 use crate::chrome_view;
 use crate::model::Model;
@@ -109,6 +109,12 @@ pub struct Tab {
     pub fit: Option<(Node, Node)>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Notice {
+    pub title: String,
+    pub detail: String,
+}
+
 pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
     let p = model.palette.as_ref();
     let tab = tab_strip(model, cx);
@@ -128,6 +134,14 @@ pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
         let mut layer = Vec::new();
         name_prompt(prompt, &crate::settings_ui::kit(p), &mut layer);
         root = root.children(layer);
+    }
+    if let Some(notice) = &model.notice {
+        let k = crate::settings_ui::kit(p);
+        let toast = Toast::new("notice", notice.title.as_str())
+            .description(notice.detail.as_str())
+            .on_close(|model: &mut Model| model.notice = None)
+            .build(&k);
+        root = root.child(ToastRegion::new().toast(toast).build(&k));
     }
     root
 }
@@ -825,6 +839,23 @@ mod tests {
         rt.frame(0.0);
         assert!(rt.state.name_prompt.is_none());
         assert!(rt.state.muxes.is_empty(), "cancel starts nothing");
+    }
+
+    #[test]
+    fn a_notice_shows_until_its_close_button() {
+        let mut model = host();
+        model.notice = Some(Notice {
+            title: "Lost tmux on thalia".to_owned(),
+            detail: "ssh: Could not resolve hostname thalia".to_owned(),
+        });
+        let mut rt = Runtime::new(model, view, (800.0, 500.0), Env::new(true, 1.0));
+        rt.frame(0.0);
+        assert!(rt.find("notice").is_some(), "the notice is drawn");
+        let (x, y) = rt.find("close").expect("the close button");
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        rt.frame(0.0);
+        assert!(rt.state.notice.is_none());
     }
 
     #[test]

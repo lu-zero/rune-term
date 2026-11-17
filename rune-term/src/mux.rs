@@ -7,7 +7,7 @@ mod remote;
 mod target;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
-use std::io::{self, Read, Write};
+use std::io::{self, BufRead, Read, Write};
 use std::process::{ChildStdout, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
@@ -113,11 +113,18 @@ pub(crate) fn start_queued_profile(model: &mut Model) {
     crate::tabs::apply_active_profile(model);
 }
 
+/// Logged, and shown in the window until closed.
+fn notify(model: &mut Model, title: String, detail: String) {
+    eprintln!("rune-term: {title}: {detail}");
+    model.notice = Some(crate::chrome::Notice { title, detail });
+}
+
 pub(crate) fn attach_queued(model: &mut Model) {
     match QUEUED.lock().expect("tmux").take() {
         Some(Queued::Session(target, args)) => {
             if let Err(err) = attach(model, &target, &args) {
-                eprintln!("rune-term: {}: {err}", target.program.name());
+                let title = format!("Could not start {}", target.program.name());
+                notify(model, title, err.to_string());
             }
         }
         Some(Queued::Profile(name)) => {
@@ -158,11 +165,8 @@ pub(crate) fn print_sessions(host: Option<String>) -> i32 {
                     println!("{}\t{session}", program.name());
                 }
             }
-            remote::Listed::Unreachable if host.is_some() => {
-                eprintln!(
-                    "rune-term: ssh could not reach {}",
-                    host.as_deref().unwrap_or_default()
-                );
+            remote::Listed::Unreachable(said) if host.is_some() => {
+                eprintln!("rune-term: {said}");
                 return 1;
             }
             _ => {}
@@ -248,7 +252,10 @@ pub(crate) fn open_profile(model: &mut Model, name: &str) -> bool {
                 mux.profile = name.to_owned();
             }
         }
-        Err(err) => eprintln!("rune-term: {}: {err}", target.program.name()),
+        Err(err) => {
+            let title = format!("Could not start {}", target.program.name());
+            notify(model, title, err.to_string());
+        }
     }
     true
 }
@@ -256,7 +263,8 @@ pub(crate) fn open_profile(model: &mut Model, name: &str) -> bool {
 /// From the menu. The session's windows arrive as tabs once tmux lists them.
 pub(crate) fn open_session(model: &mut Model, target: &Target, session: Session) {
     if let Err(err) = attach(model, target, &session_args(session)) {
-        eprintln!("rune-term: {}: {err}", target.program.name());
+        let title = format!("Could not start {}", target.program.name());
+        notify(model, title, err.to_string());
     }
 }
 
@@ -387,10 +395,14 @@ fn link(
         .command(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()?;
     let mut stdin = child.stdin.take().expect("piped stdin");
     let stdout = child.stdout.take().expect("piped stdout");
+    let stderr = child.stderr.take().expect("piped stderr");
+    let complaint = thread::Builder::new()
+        .name(format!("tmux-stderr-{}", group.0))
+        .spawn(move || last_line(stderr))?;
     let (input, queued) = mpsc::channel::<Vec<u8>>();
     thread::Builder::new()
         .name(format!("tmux-write-{}", group.0))
@@ -415,11 +427,22 @@ fn link(
                     let status = child.wait();
                     let status =
                         status.map_or_else(|err| err.to_string(), |status| status.to_string());
-                    shared.push_mux_lost(group, err.unwrap_or(status));
+                    let complaint = complaint.join().ok().flatten();
+                    shared.push_mux_lost(group, complaint.or(err).unwrap_or(status));
                 }
             }
         })?;
     Ok(input)
+}
+
+/// What ssh or the multiplexer said last on stderr: why it stopped, when it did.
+fn last_line(stderr: impl Read) -> Option<String> {
+    io::BufReader::new(stderr)
+        .lines()
+        .map_while(Result::ok)
+        .map(|line| line.trim().to_owned())
+        .filter(|line| !line.is_empty())
+        .last()
 }
 
 /// The `%exit` reason, or, when the link ended without one, the read error if any.
@@ -525,7 +548,8 @@ pub(crate) fn apply(model: &mut Model, group: TabGroupId, update: Update, tx: &m
         }
         Update::Exit(reason) => {
             if let Some(reason) = reason {
-                eprintln!("rune-term: tmux: {reason}");
+                let title = model.muxes[index].target.program.name().to_owned();
+                notify(model, title, reason);
             }
             end(model, index, tx);
             true
@@ -820,11 +844,20 @@ pub(crate) fn lost(model: &mut Model, group: TabGroupId, reason: &str, tx: &mut 
         return false;
     };
     let mux = &model.muxes[index];
-    eprintln!(
-        "rune-term: {}: the link dropped: {reason}",
-        mux.target.program.name()
-    );
-    if mux.session.is_none() {
+    let title = match &mux.session {
+        Some(session) => format!(
+            "Lost {} session {}",
+            mux.target.program.name(),
+            mux.target.label(session)
+        ),
+        None => format!(
+            "Could not open {}",
+            mux.target.label(mux.target.program.name())
+        ),
+    };
+    let reached = mux.session.is_some();
+    notify(model, title, reason.to_owned());
+    if !reached {
         end(model, index, tx);
         return true;
     }
@@ -848,10 +881,12 @@ pub(crate) fn reconnect(model: &mut Model, index: usize) {
     let input = match link(&model.shared, &mux.target, &args, mux.group, &mux.panes) {
         Ok(input) => input,
         Err(err) => {
-            eprintln!("rune-term: {}: {err}", mux.target.program.name());
+            let title = format!("Could not reconnect {}", mux.target.program.name());
+            notify(model, title, err.to_string());
             return;
         }
     };
+    let mux = &model.muxes[at];
     for (pane, id) in &mux.surfaces {
         model.shared.route_to_mux(*id, input.clone(), *pane);
     }
@@ -1150,8 +1185,8 @@ fn host_menu(model: &Model, target: &Target, menu: PopupMenu) -> PopupMenu {
             return menu.submenu(host, PopupMenu::new().item(missing));
         }
         remote::Listed::Asking => vec![PopupItem::new(id("asking"), "Listing…").enabled(false)],
-        remote::Listed::Unreachable => {
-            vec![PopupItem::new(id("unreachable"), "Unreachable").enabled(false)]
+        remote::Listed::Unreachable(said) => {
+            vec![PopupItem::new(id("unreachable"), said.as_str()).enabled(false)]
         }
         remote::Listed::Sessions(sessions) => sessions
             .iter()
@@ -2030,6 +2065,31 @@ mod tests {
         }
         assert_eq!(attached_clients(), 0, "the client did not detach");
         assert_eq!(sessions(&server.0).unwrap(), ["detach"]);
+    }
+
+    #[test]
+    fn a_host_ssh_cannot_reach_says_why_in_the_window() {
+        if sessions(&Target::local(Program::Tmux)).is_none() {
+            eprintln!("tmux is not installed: skipped");
+            return;
+        }
+        let mut model = crate::model::init();
+        let target = Target {
+            program: Program::Tmux,
+            host: Some("rune-term-test.invalid".to_owned()),
+            socket: None,
+        };
+        open_session(&mut model, &target, Session::New);
+        assert!(
+            until(&mut model, |model| model.notice.is_some()),
+            "no notice"
+        );
+        let notice = model.notice.as_ref().unwrap();
+        assert!(
+            notice.detail.contains("Could not resolve hostname"),
+            "{notice:?}"
+        );
+        assert!(model.muxes.is_empty(), "a group that never attached stays");
     }
 
     #[test]

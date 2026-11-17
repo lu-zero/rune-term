@@ -26,6 +26,8 @@ pub struct Model {
     pub pending_link_open: Option<String>,
     /// The name prompt for a new session or a saved one, while it is open.
     pub(crate) name_prompt: Option<crate::mux::NamePrompt>,
+    /// What went wrong opening or keeping a session, until it is closed.
+    pub(crate) notice: Option<crate::chrome::Notice>,
     pub(crate) strip_drag: Option<crate::tabs::StripDrag>,
     /// A drop just ended on the strip. Rune runs the press its release also makes after it.
     pub(crate) strip_dropped: bool,
@@ -81,6 +83,7 @@ pub fn init() -> Model {
         search: SearchUi::default(),
         pending_link_open: None,
         name_prompt: None,
+        notice: None,
         strip_drag: None,
         strip_dropped: false,
         settings: None,

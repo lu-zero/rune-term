@@ -206,7 +206,8 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       names, from that host's last answer, asked again in the background
       each time the menu opens. `rune-term sessions [HOST]` prints them. A link that drops after reaching its session
       greys its group; the tab menu's Reconnect attaches it again into the
-      same tabs, and tmux redraws every pane. Design:
+      same tabs, and tmux redraws every pane. Why a link failed, ssh's
+      last line when it was ssh, shows in a notice in the window. Design:
       [`multiplexer-sessions.md`](./multiplexer-sessions.md).
 - [ ] **24. Backend adapters and composition.** Fat/lean packaging (features
       and/or `rune-term-*` helpers) with progressive adapters: local, rmux
