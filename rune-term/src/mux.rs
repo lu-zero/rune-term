@@ -1029,6 +1029,32 @@ pub(crate) fn window_of(model: &Model, index: usize) -> Option<(usize, u32)> {
 }
 
 /// tmux closes the window and its shells. The tab goes when tmux reports it gone.
+/// The selected tab is a session's, and its link is up.
+pub(crate) fn live(model: &Model) -> bool {
+    focused(model).is_some_and(|(index, ..)| {
+        let group = model.muxes[index].group;
+        !model
+            .tab_groups
+            .iter()
+            .any(|entry| entry.id == group && entry.lost)
+    })
+}
+
+/// tmux kills the focused pane, and the window with its last one, as iTerm2's
+/// close does. The tab goes when tmux reports the window gone.
+pub(crate) fn kill_pane(model: &Model) -> bool {
+    if !live(model) {
+        return false;
+    }
+    let Some((index, _, pane)) = focused(model) else {
+        return false;
+    };
+    let _ = model.muxes[index]
+        .input
+        .send(tmux::kill_pane(pane).into_bytes());
+    true
+}
+
 pub(crate) fn kill_window(model: &Model, index: usize) {
     if let Some((mux, window)) = window_of(model, index) {
         let _ = model.muxes[mux]
@@ -1054,9 +1080,10 @@ pub(crate) fn open_window(model: &Model) -> bool {
     true
 }
 
-pub(crate) fn split(model: &Model, axis: Axis) {
+/// False when the selected tab is not a session's.
+pub(crate) fn split(model: &Model, axis: Axis) -> bool {
     let Some((index, _, pane)) = focused(model) else {
-        return;
+        return false;
     };
     let axis = match axis {
         Axis::Horizontal => term_mux::Axis::Horizontal,
@@ -1065,6 +1092,7 @@ pub(crate) fn split(model: &Model, axis: Axis) {
     let _ = model.muxes[index]
         .input
         .send(tmux::split_window(pane, axis).into_bytes());
+    true
 }
 
 /// A divider drag on a session's tab. `surface` heads the side that takes
@@ -1144,14 +1172,8 @@ pub(crate) fn report(model: &mut Model) {
     }
 }
 
-/// Splits for a session's tab, and every hidden window.
+/// Every hidden window, and the sessions to open.
 pub(crate) fn menu(model: &Model, mut menu: PopupMenu) -> PopupMenu {
-    if focused(model).is_some() {
-        menu = menu
-            .separator()
-            .item(PopupItem::new("split-right", "Split Right"))
-            .item(PopupItem::new("split-down", "Split Down"));
-    }
     menu = hidden(model, menu);
     for program in [Program::Tmux, Program::Rmux] {
         menu = program_menu(model, &Target::local(program), menu);
@@ -1748,7 +1770,7 @@ mod tests {
                 .collect::<Vec<_>>()
         };
         pump(&mut rt, 300);
-        rt.update(|model, _| split(model, Axis::Horizontal));
+        rt.update(|model, _| assert!(split(model, Axis::Horizontal)));
         pump(&mut rt, 500);
         let left = rt.state.muxes[0].surfaces[&0];
         rt.update(|model, _| {
@@ -1814,7 +1836,7 @@ mod tests {
         for axis in [first, second] {
             type_all(&mut rt);
             pump(&mut rt, 300);
-            rt.update(|model, _| split(model, axis));
+            rt.update(|model, _| assert!(split(model, axis)));
             pump(&mut rt, 500);
         }
         type_all(&mut rt);
@@ -2134,6 +2156,52 @@ mod tests {
         );
         assert_eq!(surface(&model), Some(pane), "the pane reconnected in place");
         assert_eq!(sessions(&server.0).unwrap(), ["dropped"]);
+    }
+
+    #[test]
+    fn closing_a_pane_kills_it_and_its_last_pane_the_window() {
+        let Some((server, mut model, group)) = attached("close-pane") else {
+            return;
+        };
+        assert!(until(&mut model, |model| model.tabs.len() == 2));
+        assert!(open_window(&model));
+        assert!(until(&mut model, |model| model.tabs.len() == 3));
+        assert!(split(&model, Axis::Horizontal));
+        let panes = |model: &Model| {
+            let tab = &model.tabs[model.active];
+            crate::tabs::surfaces_of(&tab.root).len()
+        };
+        assert!(until(&mut model, |model| panes(model) == 2), "no split");
+        let window = model.tabs[model.active].window;
+        let count = || {
+            let out = server
+                .run(&["list-panes", "-s", "-t", "close-pane", "-F", "#{pane_id}"])
+                .output()
+                .unwrap();
+            String::from_utf8_lossy(&out.stdout).lines().count()
+        };
+        assert_eq!(count(), 3);
+
+        crate::tabs::close_pane(&mut model, &mut Tx::default());
+        assert!(
+            until(&mut model, |model| panes(model) == 1),
+            "the pane stayed"
+        );
+        assert_eq!(count(), 2, "tmux kept the pane");
+        assert_eq!(model.tabs[model.active].window, window, "the tab stays");
+
+        crate::tabs::close_pane(&mut model, &mut Tx::default());
+        assert!(
+            until(&mut model, |model| model.tabs.len() == 2),
+            "the window's tab stayed"
+        );
+        assert!(model.tabs.iter().all(|tab| tab.window != window));
+        assert!(model.tabs.iter().any(|tab| tab.group == Some(group)));
+        assert_eq!(count(), 1);
+        assert!(
+            model.muxes[0].hidden.is_empty(),
+            "it was killed, not hidden"
+        );
     }
 
     #[test]

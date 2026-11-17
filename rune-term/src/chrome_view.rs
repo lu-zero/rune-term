@@ -54,9 +54,7 @@ pub fn attach_initial(model: &mut Model, id: librio::SurfaceId) {
     }
 }
 
-/// Split the focused leaf. The new leaf is the right or bottom one.
-/// No chord calls this yet. The non-pty test does.
-#[cfg_attr(any(not(test), feature = "pty"), allow(dead_code))]
+/// Split the focused leaf. The new leaf is the right or bottom one, and takes focus.
 pub fn split_focused(model: &mut Model, axis: Axis) -> bool {
     let Some(active) = model.tabs.get(model.active).map(|_| model.active) else {
         return false;
@@ -89,6 +87,7 @@ pub fn split_focused(model: &mut Model, axis: Axis) -> bool {
     if let Some(leaf) = find_leaf_mut(&mut model.tabs[active].root, new_id) {
         leaf.surface = surface;
     }
+    model.tabs[active].focused = new_id;
     true
 }
 
@@ -449,7 +448,7 @@ fn adopt_host_size(model: &mut Model, id: LeafId) {
 }
 
 /// Same sum as the split tree: a divider costs one cell.
-fn node_cells(node: &Node) -> (u16, u16) {
+pub(crate) fn node_cells(node: &Node) -> (u16, u16) {
     match node {
         Node::Leaf(leaf) => (leaf.cols, leaf.rows),
         Node::Split {
@@ -684,8 +683,7 @@ mod tests {
         assert_ne!(left_surface, right_surface);
         assert_ne!(left_mark, right_mark);
 
-        assert!(focus_leaf(&mut model, right_id, &mut rune::Tx::default()));
-        assert_eq!(model.tabs[0].focused, right_id);
+        assert_eq!(model.tabs[0].focused, right_id, "the new pane has focus");
         assert!(!focus_leaf(&mut model, right_id, &mut rune::Tx::default()));
         {
             let host = model.terminal.get_mut(left_surface).unwrap();
@@ -774,6 +772,46 @@ mod tests {
             rt.frame(0.0);
         }
         assert_eq!(sides(&rt), before);
+    }
+
+    #[test]
+    fn closing_a_pane_gives_its_cells_to_a_split_beside_it() {
+        let mut model = host();
+        assert!(split_focused(&mut model, Axis::Horizontal));
+        assert!(split_focused(&mut model, Axis::Vertical));
+        let mut rt = rune::Runtime::new(
+            model,
+            crate::chrome::view,
+            (800.0, 500.0),
+            rune::Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        rt.frame(0.0);
+        let whole = node_cells(&rt.state.tabs[0].root);
+        let left = leaves(&rt.state.tabs[0].root)[0].id;
+        rt.update(|model, tx| {
+            focus_leaf(model, left, tx);
+            crate::tabs::close_pane(model, tx);
+        });
+        rt.frame(0.0);
+        rt.frame(0.0);
+        let rest = leaves(&rt.state.tabs[0].root);
+        assert_eq!(rest.len(), 2);
+        assert!(
+            rest.iter().all(|leaf| leaf.cols == whole.0),
+            "{whole:?} left {:?}",
+            rest.iter()
+                .map(|leaf| (leaf.cols, leaf.rows))
+                .collect::<Vec<_>>()
+        );
+        for leaf in rest {
+            let host = rt.state.terminal.get(leaf.surface).unwrap();
+            assert_eq!(
+                (host.cols, host.rows),
+                (leaf.cols, leaf.rows),
+                "the shell's grid follows"
+            );
+        }
     }
 
     #[test]

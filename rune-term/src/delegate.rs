@@ -500,7 +500,7 @@ fn apply(model: &mut Model, event: HostEvent, tx: &mut Tx) -> bool {
 }
 
 /// The shell exited. Drop its leaf. The window closes with the last surface.
-fn drop_closed(model: &mut Model, id: SurfaceId, tx: &mut Tx) -> bool {
+pub(crate) fn drop_closed(model: &mut Model, id: SurfaceId, tx: &mut Tx) -> bool {
     model.shared.forget(id);
     if model.terminal.remove(id).is_none() {
         return false;
@@ -517,13 +517,17 @@ fn drop_closed(model: &mut Model, id: SurfaceId, tx: &mut Tx) -> bool {
 
 fn drop_leaf(model: &mut Model, surface: SurfaceId) {
     for index in 0..model.tabs.len() {
+        let neighbour = split::neighbour(&model.tabs[index].root, surface);
+        let (cols, rows) = crate::chrome_view::node_cells(&model.tabs[index].root);
         match split::detach(model.tabs[index].root.clone(), surface) {
             split::Detach::Missing(_) => continue,
             split::Detach::Rest(root) => {
                 if !split::contains_leaf(&root, model.tabs[index].focused) {
-                    model.tabs[index].focused = split::first_leaf(&root);
+                    model.tabs[index].focused =
+                        neighbour.unwrap_or_else(|| split::first_leaf(&root));
                 }
-                model.tabs[index].root = root;
+                // The tab's rect is unchanged, so no layout pass would refit what is left.
+                model.tabs[index].root = split::scale(&root, cols, rows);
                 return;
             }
             split::Detach::Empty => {
@@ -703,7 +707,7 @@ mod tests {
             }
             other => panic!("expected a split, got {other:?}"),
         };
-        assert!(crate::chrome_view::focus_leaf(
+        assert!(!crate::chrome_view::focus_leaf(
             &mut model,
             right_id,
             &mut rune::Tx::default()

@@ -185,7 +185,9 @@ pub fn is_app_chord(key: PhysicalKeyCode, mods: Mods) -> bool {
         return true;
     }
     if cfg!(target_os = "macos") {
-        mods.logo && !mods.ctrl && !mods.alt && !mods.shift && cmd_chord_key(key)
+        // Shift+Cmd+D splits down; Shift with any other Cmd key is the shell's.
+        let shift = !mods.shift || key == PhysicalKeyCode::KeyD;
+        mods.logo && !mods.ctrl && !mods.alt && shift && cmd_chord_key(key)
     } else {
         mods.ctrl && mods.shift && !mods.alt && !mods.logo && ctrl_shift_chord_key(key)
     }
@@ -376,6 +378,7 @@ fn cmd_chord_key(key: PhysicalKeyCode) -> bool {
             | PhysicalKeyCode::KeyC
             | PhysicalKeyCode::KeyV
             | PhysicalKeyCode::KeyA
+            | PhysicalKeyCode::KeyD
             | PhysicalKeyCode::Comma
             | PhysicalKeyCode::Digit1
             | PhysicalKeyCode::Digit2
@@ -616,6 +619,21 @@ mod tests {
             is_app_chord(PhysicalKeyCode::KeyC, mods),
             cfg!(target_os = "macos")
         );
+    }
+
+    #[test]
+    fn shift_cmd_is_a_chord_for_a_split_down_only() {
+        let mods = Mods {
+            logo: true,
+            cmd: true,
+            shift: true,
+            ..Mods::default()
+        };
+        assert_eq!(
+            is_app_chord(PhysicalKeyCode::KeyD, mods),
+            cfg!(target_os = "macos")
+        );
+        assert!(!is_app_chord(PhysicalKeyCode::KeyT, mods));
     }
 
     #[test]

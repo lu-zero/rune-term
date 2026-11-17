@@ -106,6 +106,40 @@ pub fn close_active(model: &mut Model, tx: &mut Tx) {
     close(model, model.active, tx);
 }
 
+/// A session's pane splits in the session; any other in this tab.
+pub fn split(model: &mut Model, axis: crate::split::Axis, tx: &mut Tx) {
+    if crate::mux::split(model, axis) {
+        return;
+    }
+    if crate::chrome_view::split_focused(model, axis) {
+        show_active(model);
+        focus_active(model, tx);
+    }
+}
+
+/// Whether the selected tab holds more than one pane of its own; a session's
+/// panes are the session's.
+pub fn has_panes(model: &Model) -> bool {
+    model
+        .tabs
+        .get(model.active)
+        .is_some_and(|tab| tab.group.is_none() && matches!(tab.root, Node::Split { .. }))
+}
+
+/// Close the focused pane, or the tab when it has no other.
+pub fn close_pane(model: &mut Model, tx: &mut Tx) {
+    if crate::mux::kill_pane(model) {
+        return;
+    }
+    if !has_panes(model) {
+        close_active(model, tx);
+        return;
+    }
+    if let Some(id) = focused_surface(&model.tabs[model.active]) {
+        delegate::drop_closed(model, id, tx);
+    }
+}
+
 /// Close `index`. The last one closes the window.
 pub fn close(model: &mut Model, index: usize, tx: &mut Tx) {
     let Some(tab) = model.tabs.get(index) else {
