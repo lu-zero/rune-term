@@ -1595,6 +1595,90 @@ mod tests {
     }
 
     #[test]
+    fn a_pane_split_down_then_right_shows_what_tmux_shows() {
+        splits_show_what_tmux_shows("down-right", Axis::Vertical, Axis::Horizontal);
+    }
+
+    #[test]
+    fn a_pane_split_right_then_down_shows_what_tmux_shows() {
+        splits_show_what_tmux_shows("right-down", Axis::Horizontal, Axis::Vertical);
+    }
+
+    /// A split inside a split keeps to its own cells, and each pane shows tmux's.
+    fn splits_show_what_tmux_shows(name: &str, first: Axis, second: Axis) {
+        let Some((server, model, _group)) = attached(name) else {
+            return;
+        };
+        let size = (800.0, 500.0);
+        let mut rt =
+            rune::Runtime::new(model, crate::chrome::view, size, rune::Env::new(true, 1.0));
+        let pump = |rt: &mut rune::Runtime<Model>, ms: u64| {
+            let end = Instant::now() + Duration::from_millis(ms);
+            while Instant::now() < end {
+                rt.update(|model, tx| {
+                    delegate::poll(model, 0.0, tx);
+                });
+                rt.frame(0.0);
+                thread::sleep(Duration::from_millis(5));
+            }
+        };
+        let type_all = |rt: &mut rune::Runtime<Model>| {
+            let mut ids = Vec::new();
+            crate::tabs::walk(&rt.state.tabs[rt.state.active].root, &mut |leaf| {
+                ids.push(leaf.surface)
+            });
+            for id in ids {
+                rt.state
+                    .terminal
+                    .get(id)
+                    .unwrap()
+                    .surface
+                    .text("seq 1 40\r");
+            }
+        };
+        pump(&mut rt, 300);
+        for axis in [first, second] {
+            type_all(&mut rt);
+            pump(&mut rt, 300);
+            rt.update(|model, _| split(model, axis));
+            pump(&mut rt, 500);
+        }
+        type_all(&mut rt);
+        pump(&mut rt, 800);
+        let mut leaves = Vec::new();
+        crate::tabs::walk(&rt.state.tabs[rt.state.active].root, &mut |leaf| {
+            leaves.push(leaf.mark)
+        });
+        assert_eq!(leaves.len(), 3);
+        for el in rt.elements() {
+            let Some(key) = el.key.as_deref() else {
+                continue;
+            };
+            if key.starts_with("pane-") || key.starts_with("divider-") {
+                let [x, y, w, h] = el.rect;
+                assert!(
+                    x + w <= size.0 && y + h <= size.1,
+                    "{key} {:?} leaves the window",
+                    el.rect
+                );
+            }
+        }
+        let panes: Vec<(u32, SurfaceId)> = rt.state.muxes[0]
+            .surfaces
+            .iter()
+            .map(|(pane, id)| (*pane, *id))
+            .collect();
+        for (pane, id) in panes {
+            let out = server
+                .run(&["capture-pane", "-p", "-t", &format!("%{pane}")])
+                .output()
+                .unwrap();
+            let theirs = String::from_utf8_lossy(&out.stdout).trim_end().to_owned();
+            assert_eq!(screen(&mut rt.state, id).trim_end(), theirs, "pane %{pane}");
+        }
+    }
+
+    #[test]
     fn a_listed_session_attaches_as_its_own_group() {
         let Some((server, mut model, first)) = attached("listed") else {
             return;

@@ -196,10 +196,13 @@ fn nodes(node: &Node, path: &mut Vec<bool>, model: &Model, scale: f32, cell: (f3
     let second = nodes(right, path, model, scale, cell);
     path.pop();
     let (cols, rows) = node_cells(node);
+    // Full width or height would be the parent split's, not this one's.
     let split = match axis {
-        Axis::Horizontal => row().w(span(cols, cell.0, scale)).h_full(),
-        Axis::Vertical => col().h(span(rows, cell.1, scale)).w_full(),
-    };
+        Axis::Horizontal => row(),
+        Axis::Vertical => col(),
+    }
+    .w(span(cols, cell.0, scale))
+    .h(span(rows, cell.1, scale));
     split.child(first).child(bar).child(second)
 }
 
