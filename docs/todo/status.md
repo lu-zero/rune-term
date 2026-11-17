@@ -189,8 +189,13 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       never from layout, and a resized pane is redrawn from
       `capture-pane`, since this copy's reflow pulls back history tmux
       does not. The pane answers queries tmux
-      already answered ([`rio/replies.md`](./rio/replies.md)). ssh is not
-      wired. Design:
+      already answered ([`rio/replies.md`](./rio/replies.md)). rmux speaks
+      the same control mode: `--rmux SESSION` and an rmux submenu, shown
+      when rmux is installed, attach it the same way. `--ssh HOST` runs
+      either on a host as `ssh -T -o BatchMode=yes HOST tmux -C …`, each
+      argument quoted for the far shell; the group is `session@host`.
+      Remote sessions are not listed in the menu, and a dropped link is
+      not reconnected. Design:
       [`multiplexer-sessions.md`](./multiplexer-sessions.md).
 - [ ] **24. Backend adapters and composition.** Fat/lean packaging (features
       and/or `rune-term-*` helpers) with progressive adapters: local, rmux

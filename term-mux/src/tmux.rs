@@ -1,6 +1,7 @@
 //! tmux control mode (`tmux -C`): one line per notification, and a
 //! `%begin` … `%end` block per command. Lines are bytes: `%output` escapes
 //! control bytes and backslash, but passes bytes above 0x7f through raw.
+//! rmux writes `%output` inside a block too, so there it is output, not reply.
 
 use crate::layout::{Axis, Layout};
 
@@ -83,6 +84,15 @@ impl Parser {
 
     fn line(&mut self, line: &[u8]) -> Option<Event> {
         let line = line.strip_suffix(b"\r").unwrap_or(line);
+        if let Some(rest) = line.strip_prefix(b"%output ") {
+            let (pane, value) = split_word(rest);
+            if let Some(pane) = id(pane, b'%') {
+                return Some(Event::Output {
+                    pane,
+                    bytes: unescape(value),
+                });
+            }
+        }
         if let Some(block) = &mut self.block {
             // A command's own output may start with `%` (`list-panes` prints `%0`).
             let ok = if line.starts_with(b"%end ") {
@@ -98,13 +108,6 @@ impl Parser {
                 ok,
                 client: block.client,
                 lines: block.lines,
-            });
-        }
-        if let Some(rest) = line.strip_prefix(b"%output ") {
-            let (pane, value) = split_word(rest);
-            return Some(Event::Output {
-                pane: id(pane, b'%')?,
-                bytes: unescape(value),
             });
         }
         let text = String::from_utf8_lossy(line);
@@ -309,6 +312,27 @@ mod tests {
                 Event::Output {
                     pane: 12,
                     bytes: b"\x1b[K".to_vec(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn output_inside_a_reply_is_output_as_rmux_writes_it() {
+        let mut parser = Parser::default();
+        let events = parser
+            .feed(b"%begin 1 4 1\n%output %0 \\015\\033[K\nrune-capture %0 2 2\n%end 1 4 1\n");
+        assert_eq!(
+            events,
+            vec![
+                Event::Output {
+                    pane: 0,
+                    bytes: b"\r\x1b[K".to_vec(),
+                },
+                Event::Reply {
+                    ok: true,
+                    client: true,
+                    lines: vec![b"rune-capture %0 2 2".to_vec()],
                 },
             ]
         );

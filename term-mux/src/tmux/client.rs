@@ -205,10 +205,11 @@ pub fn sizes(layout: &Layout) -> Vec<(u32, (u16, u16))> {
     }
 }
 
-/// The pane's screen as it is now, announced by its marker.
+/// The pane's screen as it is now, announced by its marker. Two lines, not a
+/// `;` list: rmux answers a list in one block.
 pub fn capture(pane: u32) -> String {
     format!(
-        "display -p -t %{pane} \"rune-capture #{{pane_id}} #{{cursor_x}} #{{cursor_y}}\" ; \
+        "display -p -t %{pane} \"rune-capture #{{pane_id}} #{{cursor_x}} #{{cursor_y}}\"\n\
          capture-pane -p -e -t %{pane}\n"
     )
 }

@@ -1,10 +1,13 @@
 //! A tmux session in control mode as a tab group: a window is a tab and a pane
 //! is a leaf. tmux owns the layout. rune-term reports its size in cells and
-//! mirrors the layout tmux sends back.
+//! mirrors the layout tmux sends back. rmux speaks the same protocol, and
+//! either can run on an ssh host.
+
+mod target;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::{self, Read, Write};
-use std::process::{ChildStdout, Command, Stdio};
+use std::process::{ChildStdout, Stdio};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
@@ -18,8 +21,9 @@ use crate::chrome::{Leaf, LeafId, Node, Tab, TabGroup, TabGroupId};
 use crate::delegate::{self, Shared};
 use crate::model::Model;
 use crate::split::Axis;
+pub(crate) use target::{Program, Target};
 
-static QUEUED: Mutex<Option<Vec<String>>> = Mutex::new(None);
+static QUEUED: Mutex<Option<(Target, Vec<String>)>> = Mutex::new(None);
 /// Above any group a test or the strip made by hand.
 static NEXT_GROUP: AtomicU32 = AtomicU32::new(1 << 16);
 
@@ -29,6 +33,7 @@ const EARLY_CAP: usize = 1 << 20;
 
 pub(crate) struct Mux {
     pub group: TabGroupId,
+    target: Target,
     input: mpsc::Sender<Vec<u8>>,
     panes: Arc<Mutex<Panes>>,
     windows: Vec<Window>,
@@ -60,26 +65,25 @@ struct Panes {
     cell_px: (u16, u16),
 }
 
-/// The arguments `setup` starts tmux with. They include `-C`.
-pub(crate) fn queue(args: Vec<String>) {
-    *QUEUED.lock().expect("tmux") = Some(args);
+/// The session `setup` attaches.
+pub(crate) fn queue(target: Target, session: Session) {
+    *QUEUED.lock().expect("tmux") = Some((target, session_args(session)));
 }
 
 pub(crate) fn attach_queued(model: &mut Model) {
-    let Some(args) = QUEUED.lock().expect("tmux").take() else {
+    let Some((target, args)) = QUEUED.lock().expect("tmux").take() else {
         return;
     };
-    if let Err(err) = attach(model, &args) {
-        eprintln!("rune-term: tmux: {err}");
+    if let Err(err) = attach(model, &target, &args) {
+        eprintln!("rune-term: {}: {err}", target.program.name());
     }
 }
 
-/// The sessions on tmux's server. None when tmux is not installed, and empty when
-/// no server runs. `server` picks a server other than the default one.
-pub(crate) fn sessions(server: &[&str]) -> Option<Vec<String>> {
-    let out = Command::new("tmux")
-        .args(server)
-        .args(["list-sessions", "-F", "#{session_name}"])
+/// The sessions on the target's server. None when the program is not installed,
+/// and empty when no server runs. It runs on the UI thread, so only for a local target.
+pub(crate) fn sessions(target: &Target) -> Option<Vec<String>> {
+    let out = target
+        .command(&["list-sessions", "-F", "#{session_name}"].map(String::from))
         .stderr(Stdio::null())
         .output()
         .ok()?;
@@ -110,32 +114,37 @@ fn session_args(session: Session) -> Vec<String> {
 }
 
 /// From the menu. The session's windows arrive as tabs once tmux lists them.
-pub(crate) fn open_session(model: &mut Model, session: Session) {
-    if let Err(err) = attach(model, &session_args(session)) {
-        eprintln!("rune-term: tmux: {err}");
+pub(crate) fn open_session(model: &mut Model, target: &Target, session: Session) {
+    if let Err(err) = attach(model, target, &session_args(session)) {
+        eprintln!("rune-term: {}: {err}", target.program.name());
     }
 }
 
-pub(crate) fn ask_name(model: &mut Model) {
+pub(crate) fn ask_name(model: &mut Model, target: Target) {
     let mut edit = rune::TextEdit::new("");
     edit.focused = true;
-    model.session_name = Some(edit);
+    model.session_name = Some((target, edit));
 }
 
 /// The name the prompt holds. An empty name starts nothing.
 pub(crate) fn submit_name(model: &mut Model) {
-    let Some(edit) = model.session_name.take() else {
+    let Some((target, edit)) = model.session_name.take() else {
         return;
     };
     let name = edit.text.trim();
     if !name.is_empty() {
-        open_session(model, Session::Named(name));
+        open_session(model, &target, Session::Named(name));
     }
 }
 
-pub(crate) fn attach(model: &mut Model, args: &[String]) -> io::Result<TabGroupId> {
-    let mut child = Command::new("tmux")
-        .args(args)
+/// `args` follow the program and its socket, and include `-C`.
+pub(crate) fn attach(
+    model: &mut Model,
+    target: &Target,
+    args: &[String],
+) -> io::Result<TabGroupId> {
+    let mut child = target
+        .command(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
@@ -164,11 +173,12 @@ pub(crate) fn attach(model: &mut Model, args: &[String]) -> io::Result<TabGroupI
         })?;
     model.tab_groups.push(TabGroup {
         id: group,
-        label: "tmux".to_owned(),
+        label: target.label(target.program.name()),
         collapsed: false,
     });
     model.muxes.push(Mux {
         group,
+        target: target.clone(),
         input,
         panes,
         windows: Vec::new(),
@@ -275,8 +285,9 @@ pub(crate) fn apply(model: &mut Model, group: TabGroupId, update: Update, tx: &m
     match update {
         Update::Output { .. } => false,
         Update::Session(name) => {
+            let label = model.muxes[index].target.label(&name);
             if let Some(entry) = model.tab_groups.iter_mut().find(|g| g.id == group) {
-                entry.label = name;
+                entry.label = label;
             }
             true
         }
@@ -789,22 +800,55 @@ pub(crate) fn menu(model: &Model, mut menu: PopupMenu) -> PopupMenu {
             .item(PopupItem::new("split-down", "Split Down"));
     }
     menu = hidden(model, menu);
-    let Some(sessions) = sessions(&[]) else {
+    for program in [Program::Tmux, Program::Rmux] {
+        menu = program_menu(model, &Target::local(program), menu);
+    }
+    menu
+}
+
+/// A program's submenu, when it is installed. Its ids are the program's name,
+/// a dash, and the action.
+fn program_menu(model: &Model, target: &Target, menu: PopupMenu) -> PopupMenu {
+    let Some(sessions) = sessions(target) else {
         return menu;
     };
+    let name = target.program.name();
     // Greyed out, rather than gone, when every session is already open here.
     let attach: Vec<PopupItem> = sessions
         .iter()
-        .filter(|name| !attached_here(model, name))
-        .map(|name| PopupItem::new(format!("tmux-attach:{name}"), name.as_str()))
+        .filter(|session| !attached_here(model, target, session))
+        .map(|session| PopupItem::new(format!("{name}-attach:{session}"), session.as_str()))
         .collect();
     let open = !attach.is_empty();
-    let tmux = PopupMenu::new()
-        .item(PopupItem::new("tmux-new", "New Session"))
-        .item(PopupItem::new("tmux-named", "New Named Session…"))
+    let submenu = PopupMenu::new()
+        .item(PopupItem::new(format!("{name}-new"), "New Session"))
+        .item(PopupItem::new(
+            format!("{name}-named"),
+            "New Named Session…",
+        ))
         .separator()
         .submenu_enabled("Attach Session", PopupMenu::new().items(attach), open);
-    menu.separator().submenu("tmux", tmux)
+    menu.separator().submenu(name, submenu)
+}
+
+/// A menu id from [`program_menu`]. True when it was one.
+pub(crate) fn menu_action(model: &mut Model, id: &str) -> bool {
+    let Some((program, action)) = id.split_once('-') else {
+        return false;
+    };
+    let Some(program) = Program::from_name(program) else {
+        return false;
+    };
+    let target = Target::local(program);
+    match action {
+        "new" => open_session(model, &target, Session::New),
+        "named" => ask_name(model, target),
+        _ => match action.strip_prefix("attach:") {
+            Some(session) => open_session(model, &target, Session::Attach(session)),
+            None => return false,
+        },
+    }
+    true
 }
 
 /// One Hidden Windows entry. Its windows, or with several sessions a submenu each. A
@@ -845,48 +889,91 @@ fn hidden(model: &Model, menu: PopupMenu) -> PopupMenu {
     menu.separator().submenu("Hidden Windows", list)
 }
 
-fn attached_here(model: &Model, name: &str) -> bool {
+fn attached_here(model: &Model, target: &Target, session: &str) -> bool {
+    let label = target.label(session);
     model.muxes.iter().any(|mux| {
-        model
-            .tab_groups
-            .iter()
-            .any(|group| group.id == mux.group && group.label == name)
+        mux.target == *target
+            && model
+                .tab_groups
+                .iter()
+                .any(|group| group.id == mux.group && group.label == label)
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::process::Command;
     use std::time::{Duration, Instant};
 
-    /// A tmux server of the test's own, gone with the test.
-    struct Server(String);
+    /// A server of the test's own, gone with the test.
+    struct Server(Target);
 
-    impl Drop for Server {
-        fn drop(&mut self) {
-            let _ = Command::new("tmux")
-                .args(["-L", &self.0, "kill-server"])
-                .stderr(Stdio::null())
-                .status();
+    impl Server {
+        fn run(&self, args: &[&str]) -> Command {
+            let args: Vec<String> = args.iter().map(|arg| (*arg).to_owned()).collect();
+            self.0.command(&args)
         }
     }
 
-    /// A machine without tmux skips these tests rather than failing them.
+    impl Drop for Server {
+        fn drop(&mut self) {
+            let _ = self.run(&["kill-server"]).stderr(Stdio::null()).status();
+        }
+    }
+
     fn attached(name: &str) -> Option<(Server, Model, TabGroupId)> {
-        let installed = Command::new("tmux")
+        attached_on(Program::Tmux, name)
+    }
+
+    /// On the host `RUNE_TERM_SSH_HOST` names; without it the ssh tests skip.
+    fn attached_over_ssh(name: &str) -> Option<(Server, Model, TabGroupId)> {
+        let Ok(host) = std::env::var("RUNE_TERM_SSH_HOST") else {
+            eprintln!("RUNE_TERM_SSH_HOST is not set: skipped");
+            return None;
+        };
+        let server = Server(Target {
+            program: Program::Tmux,
+            host: Some(host),
+            socket: Some(format!("rune-term-{}-{name}", std::process::id())),
+        });
+        let mut model = crate::model::init();
+        delegate::setup(&mut model, Arc::new(|| {}));
+        let args: Vec<String> = [
+            "-f",
+            "/dev/null",
+            "-C",
+            "new-session",
+            "-A",
+            "-s",
+            name,
+            "/bin/sh",
+        ]
+        .iter()
+        .map(|arg| (*arg).to_owned())
+        .collect();
+        let group = attach(&mut model, &server.0, &args).expect("ssh");
+        Some((server, model, group))
+    }
+
+    /// A machine without the program skips these tests rather than failing them.
+    fn attached_on(program: Program, name: &str) -> Option<(Server, Model, TabGroupId)> {
+        let installed = Command::new(program.name())
             .arg("-V")
             .output()
             .is_ok_and(|out| out.status.success());
         if !installed {
-            eprintln!("tmux is not installed: skipped");
+            eprintln!("{} is not installed: skipped", program.name());
             return None;
         }
-        let server = Server(format!("rune-term-{}-{name}", std::process::id()));
+        let server = Server(Target {
+            program,
+            host: None,
+            socket: Some(format!("rune-term-{}-{name}", std::process::id())),
+        });
         let mut model = crate::model::init();
         delegate::setup(&mut model, Arc::new(|| {}));
         let args: Vec<String> = [
-            "-L",
-            &server.0,
             "-f",
             "/dev/null",
             "-C",
@@ -904,7 +991,7 @@ mod tests {
         .iter()
         .map(|arg| (*arg).to_owned())
         .collect();
-        let group = attach(&mut model, &args).expect("tmux");
+        let group = attach(&mut model, &server.0, &args).expect("tmux");
         Some((server, model, group))
     }
 
@@ -940,7 +1027,16 @@ mod tests {
 
     #[test]
     fn a_session_is_a_group_and_its_pane_takes_keys() {
-        let Some((_server, mut model, group)) = attached("keys") else {
+        session_takes_keys(Program::Tmux);
+    }
+
+    #[test]
+    fn a_session_is_a_group_and_its_pane_takes_keys_in_rmux() {
+        session_takes_keys(Program::Rmux);
+    }
+
+    fn session_takes_keys(program: Program) {
+        let Some((_server, mut model, group)) = attached_on(program, "keys") else {
             return;
         };
         assert!(
@@ -1027,9 +1123,7 @@ mod tests {
             return;
         };
         assert!(until(&mut model, |model| model.tabs.len() == 2));
-        let _ = Command::new("tmux")
-            .args(["-L", &server.0, "kill-server"])
-            .status();
+        let _ = server.run(&["kill-server"]).status();
         assert!(
             until(&mut model, |model| model.tabs.len() == 1),
             "the session's tab outlived it"
@@ -1041,7 +1135,16 @@ mod tests {
 
     #[test]
     fn a_divider_drag_resizes_the_pane_in_tmux() {
-        let Some((_server, mut model, _group)) = attached("resize") else {
+        divider_drag_resizes(Program::Tmux);
+    }
+
+    #[test]
+    fn a_divider_drag_resizes_the_pane_in_tmux_in_rmux() {
+        divider_drag_resizes(Program::Rmux);
+    }
+
+    fn divider_drag_resizes(program: Program) {
+        let Some((_server, mut model, _group)) = attached_on(program, "resize") else {
             return;
         };
         assert!(until(&mut model, |model| model.tabs.len() == 2));
@@ -1074,16 +1177,8 @@ mod tests {
         // A two-line prompt that, like readline's, goes back up and redraws itself
         // whenever the pane is resized, after history the screen was cleared into.
         let prompt = r#"p() { printf '\033[1A\r\033[Jprompt\n> '; }; trap p WINCH; printf 'old1\nold2\nold3\n\033[H\033[2Jprompt\n> '; while :; do sleep 0.01; done"#;
-        let out = Command::new("tmux")
-            .args([
-                "-L",
-                &server.0,
-                "split-window",
-                "-v",
-                "-t",
-                "sweep:0.0",
-                prompt,
-            ])
+        let out = server
+            .run(&["split-window", "-v", "-t", "sweep:0.0", prompt])
             .output()
             .unwrap();
         assert!(
@@ -1128,8 +1223,8 @@ mod tests {
             pump(&mut rt, 10);
         }
         pump(&mut rt, 500);
-        let out = Command::new("tmux")
-            .args(["-L", &server.0, "capture-pane", "-p", "-t", "sweep:0.1"])
+        let out = server
+            .run(&["capture-pane", "-p", "-t", "sweep:0.1"])
             .output()
             .unwrap();
         let theirs = String::from_utf8_lossy(&out.stdout).trim_end().to_owned();
@@ -1143,29 +1238,17 @@ mod tests {
             return;
         };
         assert!(until(&mut model, |model| model.tabs.len() == 2));
-        Command::new("tmux")
-            .args([
-                "-L",
-                &server.0,
-                "new-session",
-                "-d",
-                "-s",
-                "work",
-                "/bin/sh",
-            ])
+        server
+            .run(&["new-session", "-d", "-s", "work", "/bin/sh"])
             .status()
             .unwrap();
-        let listed = sessions(&["-L", &server.0]).expect("tmux is installed");
+        let listed = sessions(&server.0).expect("tmux is installed");
         assert!(listed.iter().any(|name| name == "work"), "{listed:?}");
-        let args = [
-            vec!["-L".to_owned(), server.0.clone()],
-            session_args(Session::Attach("work")),
-        ]
-        .concat();
-        let second = attach(&mut model, &args).expect("tmux");
+        let args = session_args(Session::Attach("work"));
+        let second = attach(&mut model, &server.0, &args).expect("tmux");
         assert!(
             until(&mut model, |model| model.tabs.len() == 3
-                && attached_here(model, "work")),
+                && attached_here(model, &server.0, "work")),
             "the session did not come in"
         );
         assert_eq!(model.tabs[model.active].group, Some(second));
@@ -1174,28 +1257,64 @@ mod tests {
 
     #[test]
     fn a_named_session_that_exists_is_attached_not_duplicated() {
-        let Some((server, mut model, _first)) = attached("named") else {
+        named_session_is_attached(Program::Tmux);
+    }
+
+    #[test]
+    fn a_named_session_that_exists_is_attached_not_duplicated_in_rmux() {
+        named_session_is_attached(Program::Rmux);
+    }
+
+    fn named_session_is_attached(program: Program) {
+        let Some((server, mut model, _first)) = attached_on(program, "named") else {
             return;
         };
         assert!(until(&mut model, |model| model.tabs.len() == 2));
-        let args = [
-            vec!["-L".to_owned(), server.0.clone()],
-            session_args(Session::Named("named")),
-        ]
-        .concat();
-        attach(&mut model, &args).expect("tmux");
+        let args = session_args(Session::Named("named"));
+        attach(&mut model, &server.0, &args).expect("tmux");
         assert!(
             until(&mut model, |model| model.tabs.len() == 3),
             "the second client did not come in"
         );
-        assert_eq!(sessions(&["-L", &server.0]).unwrap(), ["named"]);
+        assert_eq!(sessions(&server.0).unwrap(), ["named"]);
+    }
+
+    #[test]
+    fn a_session_over_ssh_is_a_group_named_for_its_host() {
+        let Some((server, mut model, group)) = attached_over_ssh("remote") else {
+            return;
+        };
+        let host = server.0.host.clone().unwrap();
+        assert!(
+            until(&mut model, |model| model.tabs.len() == 2),
+            "the remote window did not become a tab"
+        );
+        let label = &model
+            .tab_groups
+            .iter()
+            .find(|g| g.id == group)
+            .unwrap()
+            .label;
+        assert_eq!(*label, format!("remote@{host}"));
+        let pane = crate::tabs::surface_of(&model.tabs[model.active]).unwrap();
+        model
+            .terminal
+            .get(pane)
+            .unwrap()
+            .surface
+            .text("uname -s; echo $((6*7))\r");
+        assert!(
+            until(&mut model, |model| screen(model, pane).contains("\n42")),
+            "the answer did not come back: {}",
+            screen(&mut model, pane)
+        );
     }
 
     #[test]
     fn a_blank_name_closes_the_prompt_and_starts_nothing() {
         let mut model = crate::model::init();
-        ask_name(&mut model);
-        model.session_name.as_mut().unwrap().text = "  ".to_owned();
+        ask_name(&mut model, Target::local(Program::Tmux));
+        model.session_name.as_mut().unwrap().1.text = "  ".to_owned();
         submit_name(&mut model);
         assert!(model.session_name.is_none());
         assert!(model.muxes.is_empty());
@@ -1214,8 +1333,8 @@ mod tests {
         assert!(model.muxes.is_empty());
         let deadline = Instant::now() + Duration::from_secs(5);
         let attached_clients = || {
-            Command::new("tmux")
-                .args(["-L", &server.0, "list-clients"])
+            server
+                .run(&["list-clients"])
                 .output()
                 .map(|out| out.stdout.len())
                 .unwrap_or(0)
@@ -1224,7 +1343,7 @@ mod tests {
             thread::sleep(Duration::from_millis(20));
         }
         assert_eq!(attached_clients(), 0, "the client did not detach");
-        assert_eq!(sessions(&["-L", &server.0]).unwrap(), ["detach"]);
+        assert_eq!(sessions(&server.0).unwrap(), ["detach"]);
     }
 
     #[test]
@@ -1248,6 +1367,6 @@ mod tests {
             model.muxes[0].hidden.is_empty(),
             "a killed window is not hidden"
         );
-        assert_eq!(sessions(&["-L", &server.0]).unwrap(), ["kill"]);
+        assert_eq!(sessions(&server.0).unwrap(), ["kill"]);
     }
 }

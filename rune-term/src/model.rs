@@ -24,8 +24,8 @@ pub struct Model {
     pub palette: Arc<Palette>,
     pub search: SearchUi,
     pub pending_link_open: Option<String>,
-    /// The name prompt for a new tmux session, while it is open.
-    pub session_name: Option<rune::TextEdit>,
+    /// The name prompt for a new session while it is open, and where the session starts.
+    pub(crate) session_name: Option<(crate::mux::Target, rune::TextEdit)>,
     pub(crate) strip_drag: Option<crate::tabs::StripDrag>,
     /// A drop just ended on the strip. Rune runs the press its release also makes after it.
     pub(crate) strip_dropped: bool,

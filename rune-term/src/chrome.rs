@@ -119,21 +119,28 @@ pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
     if let Some(uri) = &model.pending_link_open {
         root = root.child(confirm_open_link(uri, p));
     }
-    if let Some(name) = &model.session_name {
+    if let Some((target, name)) = &model.session_name {
         let mut layer = Vec::new();
-        name_session(name, &crate::settings_ui::kit(p), &mut layer);
+        name_session(
+            target.program,
+            name,
+            &crate::settings_ui::kit(p),
+            &mut layer,
+        );
         root = root.children(layer);
     }
     root
 }
 
 /// Return or Create starts the session; Escape, Cancel or a click outside drops the name.
-fn name_session(name: &TextEdit, k: &Kit, layer: &mut Vec<El>) {
+fn name_session(program: crate::mux::Program, name: &TextEdit, k: &Kit, layer: &mut Vec<El>) {
     let field = TextInput::new(name)
         .placeholder("Session name")
         .label("Session name")
         .width(None)
-        .on_edit(|model: &mut Model| model.session_name.as_mut().expect("the prompt is open"))
+        .on_edit(|model: &mut Model| {
+            &mut model.session_name.as_mut().expect("the prompt is open").1
+        })
         .on_submit(|model: &mut Model, _tx| crate::mux::submit_name(model))
         .build(k)
         .key("session-name");
@@ -154,7 +161,7 @@ fn name_session(name: &TextEdit, k: &Kit, layer: &mut Vec<El>) {
                 .build(k)
                 .key("create-session"),
         );
-    Dialog::new("name-session", "New tmux session")
+    Dialog::new("name-session", format!("New {} session", program.name()))
         .description("If a session has this name already, it is attached.")
         .width(360.0)
         .fit()
@@ -759,7 +766,10 @@ mod tests {
     #[test]
     fn the_name_prompt_takes_the_typed_name_and_cancel_drops_it() {
         let mut model = host();
-        crate::mux::ask_name(&mut model);
+        crate::mux::ask_name(
+            &mut model,
+            crate::mux::Target::local(crate::mux::Program::Tmux),
+        );
         let mut rt = Runtime::new(model, view, (800.0, 500.0), Env::new(true, 1.0));
         rt.frame(0.0);
         assert!(rt.find("session-name").is_some(), "the field is drawn");
@@ -768,7 +778,7 @@ mod tests {
             mods: rune::Mods::default(),
         });
         rt.frame(0.0);
-        assert_eq!(rt.state.session_name.as_ref().unwrap().text, "work");
+        assert_eq!(rt.state.session_name.as_ref().unwrap().1.text, "work");
         let (x, y) = rt.find("cancel-name-session").expect("the cancel button");
         rt.pointer_down(x, y);
         rt.pointer_up(x, y);

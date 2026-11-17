@@ -29,6 +29,15 @@ struct Gui {
     #[arg(long = "tmux", value_name = "SESSION")]
     tmux: Option<String>,
 
+    /// Attach the rmux session SESSION, as `--tmux` does.
+    #[arg(long = "rmux", value_name = "SESSION")]
+    rmux: Option<String>,
+
+    /// Run the `--tmux` or `--rmux` session on HOST, over ssh. HOST is what
+    /// `ssh` takes: a name, `user@host`, or an alias from ~/.ssh/config.
+    #[arg(long = "ssh", value_name = "HOST")]
+    ssh: Option<String>,
+
     /// Arguments forwarded to Rune's tooling layer.
     ///
     /// Everything after this flag is passed through, including flags like
@@ -90,9 +99,30 @@ impl Gui {
             rune::tooling::Args::parse_from(vec!["--help".to_owned()]);
             return;
         }
-        if let Some(session) = self.tmux {
-            let args = ["-C", "new-session", "-A", "-s", &session];
-            crate::mux::queue(args.iter().map(|arg| (*arg).to_owned()).collect());
+        use crate::mux::{Program, Session, Target};
+        let session = match (self.tmux, self.rmux) {
+            (Some(_), Some(_)) => {
+                eprintln!("rune-term: --tmux and --rmux attach one session; pass one");
+                std::process::exit(2);
+            }
+            (Some(session), None) => Some((Program::Tmux, session)),
+            (None, Some(session)) => Some((Program::Rmux, session)),
+            (None, None) => None,
+        };
+        match (session, self.ssh) {
+            (Some((program, session)), host) => {
+                let target = Target {
+                    program,
+                    host,
+                    socket: None,
+                };
+                crate::mux::queue(target, Session::Named(&session));
+            }
+            (None, Some(_)) => {
+                eprintln!("rune-term: --ssh runs a --tmux or --rmux session; pass one");
+                std::process::exit(2);
+            }
+            (None, None) => {}
         }
         crate::app::run_with_rune_args(self.rune_args);
     }
