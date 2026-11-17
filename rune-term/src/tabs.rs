@@ -7,6 +7,7 @@ use librio::SurfaceId;
 use rune::Tx;
 
 use crate::chrome::{Leaf, LeafId, Node, Tab, TabGroupId};
+use crate::closing::{self, Close};
 use crate::delegate;
 use crate::model::Model;
 
@@ -101,11 +102,6 @@ pub fn cycle(model: &mut Model, delta: i32) -> bool {
     select(model, next)
 }
 
-/// Close the selected tab. The last one closes the window.
-pub fn close_active(model: &mut Model, tx: &mut Tx) {
-    close(model, model.active, tx);
-}
-
 /// A session's pane splits in the session; any other in this tab.
 pub fn split(model: &mut Model, axis: crate::split::Axis, tx: &mut Tx) {
     if crate::mux::split(model, axis) {
@@ -128,25 +124,34 @@ pub fn has_panes(model: &Model) -> bool {
 
 /// Close the focused pane, or the tab when it has no other.
 pub fn close_pane(model: &mut Model, tx: &mut Tx) {
-    if crate::mux::kills(model, model.active) && crate::mux::kill_pane(model) {
-        return;
-    }
-    if !has_panes(model) {
-        close_active(model, tx);
-        return;
-    }
-    if let Some(id) = focused_surface(&model.tabs[model.active]) {
-        delegate::drop_closed(model, id, tx);
+    let index = model.active;
+    let close = if crate::mux::kills(model, index) {
+        crate::mux::pane_close(model)
+    } else if has_panes(model) {
+        focused_surface(&model.tabs[index]).map(Close::Pane)
+    } else {
+        None
+    };
+    if let Some(close) = close.or_else(|| closing::tab(model, index)) {
+        closing::request(model, close, tx);
     }
 }
 
 /// The tab's close button: a session's window is killed unless its profile
 /// keeps it, hidden; any other tab closes.
 pub fn close_tab(model: &mut Model, index: usize, tx: &mut Tx) {
-    if crate::mux::kills(model, index) {
-        crate::mux::kill_window(model, index);
-    } else {
-        close(model, index, tx);
+    let close = crate::mux::kills(model, index)
+        .then(|| crate::mux::window_close(model, index))
+        .flatten();
+    if let Some(close) = close.or_else(|| closing::tab(model, index)) {
+        closing::request(model, close, tx);
+    }
+}
+
+/// The tab menu's Close Window: a session's window ends, whatever its profile says.
+pub fn kill_window(model: &mut Model, index: usize, tx: &mut Tx) {
+    if let Some(close) = crate::mux::window_close(model, index) {
+        closing::request(model, close, tx);
     }
 }
 
@@ -521,7 +526,8 @@ mod tests {
         assert!(model.active < model.tabs.len());
         assert_eq!(shown(&model), active_surface(&model));
         assert!(shown(&model) == s0 || shown(&model) == s2);
-        close_active(&mut model, &mut Tx::default());
+        let active = model.active;
+        close(&mut model, active, &mut Tx::default());
         assert_eq!(model.tabs.len(), 1);
         assert_eq!(model.active, 0);
     }

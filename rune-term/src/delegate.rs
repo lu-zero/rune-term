@@ -107,6 +107,11 @@ enum HostEvent {
         group: crate::chrome::TabGroupId,
         reason: String,
     },
+    /// The programs a session's close would end, as the multiplexer named them.
+    Running {
+        close: crate::closing::Close,
+        running: Vec<String>,
+    },
 }
 
 struct Delegate {
@@ -221,6 +226,20 @@ impl Shared {
 
     pub(crate) fn push_mux_lost(&self, group: crate::chrome::TabGroupId, reason: String) {
         self.push(HostEvent::MuxLost { group, reason });
+    }
+
+    pub(crate) fn push_running(&self, close: crate::closing::Close, running: Vec<String>) {
+        self.push(HostEvent::Running { close, running });
+    }
+
+    #[cfg(feature = "pty")]
+    pub(crate) fn running(&self, id: SurfaceId) -> Option<String> {
+        self.links.lock().expect("links").get(&id)?.running()
+    }
+
+    #[cfg(not(feature = "pty"))]
+    pub(crate) fn running(&self, _id: SurfaceId) -> Option<String> {
+        None
     }
 
     pub(crate) fn note_rearm(&self) {
@@ -490,6 +509,9 @@ fn apply(model: &mut Model, event: HostEvent, tx: &mut Tx) -> bool {
         HostEvent::Close(id) => drop_closed(model, id, tx),
         HostEvent::Mux { group, update } => crate::mux::apply(model, group, update, tx),
         HostEvent::MuxLost { group, reason } => crate::mux::lost(model, group, &reason, tx),
+        HostEvent::Running { close, running } => {
+            crate::closing::answered(model, close, running, tx)
+        }
         HostEvent::Clipboard { kind, len, .. } => {
             eprintln!("clipboard write dropped ({kind:?}, {len} bytes)");
             #[cfg(all(test, not(feature = "pty")))]
@@ -811,6 +833,24 @@ mod pty_tests {
         assert!(
             closes(&shared, surface.id()),
             "the pane waited for the background job"
+        );
+    }
+
+    #[test]
+    fn a_shell_at_its_prompt_runs_nothing_and_a_job_in_front_is_named() {
+        let (shared, _engine, idle) = shell("read line");
+        assert!(within(5, || shared
+            .links
+            .lock()
+            .unwrap()
+            .contains_key(&idle.id())));
+        std::thread::sleep(Duration::from_millis(200));
+        assert_eq!(shared.running(idle.id()), None);
+        let (shared, _engine, busy) = shell("set -m; sleep 30");
+        assert!(
+            within(5, || shared.running(busy.id()).as_deref() == Some("sleep")),
+            "{:?}",
+            shared.running(busy.id())
         );
     }
 

@@ -53,6 +53,8 @@ pub struct Settings {
     /// When both names are set, the system appearance picks one instead of [`Self::theme`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub adaptive_theme: Option<AdaptiveTheme>,
+    /// Ask before a close ends a program other than a shell at its prompt.
+    pub confirm_close: bool,
 }
 
 impl Default for Settings {
@@ -62,6 +64,7 @@ impl Default for Settings {
             font_size: DEFAULT_FONT_SIZE,
             theme: DEFAULT_THEME.to_owned(),
             adaptive_theme: None,
+            confirm_close: true,
         }
     }
 }

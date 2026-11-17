@@ -42,7 +42,9 @@ The numbers are that plan's.
       tmux, and the window with its last pane, as iTerm2 and WezTerm do;
       so does the tab's close button. A session profile set to detach on
       close hides the window instead, still running. The group label's
-      menu detaches the session.
+      menu detaches the session. A close that would end a program other than a shell
+      asks first: a local pane by its foreground process group, a session's
+      by `#{pane_current_command}`.
 - [x] **11. Selection and clipboard.** A drag the program did not take
       selects cells. Two clicks select a word and three select a line.
       The copy chord copies that text, and paste calls `Surface::paste`.

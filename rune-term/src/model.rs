@@ -28,6 +28,7 @@ pub struct Model {
     pub(crate) name_prompt: Option<crate::mux::NamePrompt>,
     /// What went wrong opening or keeping a session, until it is closed.
     pub(crate) notice: Option<crate::chrome::Notice>,
+    pub(crate) closing: Option<crate::closing::Closing>,
     pub(crate) strip_drag: Option<crate::tabs::StripDrag>,
     /// A drop just ended on the strip. Rune runs the press its release also makes after it.
     pub(crate) strip_dropped: bool,
@@ -84,6 +85,7 @@ pub fn init() -> Model {
         pending_link_open: None,
         name_prompt: None,
         notice: None,
+        closing: None,
         strip_drag: None,
         strip_dropped: false,
         settings: None,

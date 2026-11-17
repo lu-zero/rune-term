@@ -19,6 +19,7 @@ use term_mux::tmux::{self, Update, Window};
 use term_mux::Layout;
 
 use crate::chrome::{Leaf, LeafId, Node, Tab, TabGroup, TabGroupId};
+use crate::closing::Close;
 use crate::delegate::{self, Shared};
 use crate::model::Model;
 use crate::split::Axis;
@@ -1028,7 +1029,6 @@ pub(crate) fn window_of(model: &Model, index: usize) -> Option<(usize, u32)> {
     Some((mux, tab.window?))
 }
 
-/// tmux closes the window and its shells. The tab goes when tmux reports it gone.
 /// Closing tab `index` kills its window: a session's tab whose link is up and
 /// whose profile does not keep windows on close.
 pub(crate) fn kills(model: &Model, index: usize) -> bool {
@@ -1047,38 +1047,78 @@ pub(crate) fn kills(model: &Model, index: usize) -> bool {
     !lost && !detach
 }
 
-/// The selected tab is a session's, and its link is up.
-pub(crate) fn live(model: &Model) -> bool {
-    focused(model).is_some_and(|(index, ..)| {
-        let group = model.muxes[index].group;
-        !model
-            .tab_groups
-            .iter()
-            .any(|entry| entry.id == group && entry.lost)
-    })
+/// The selected tab's focused pane, closed in its session.
+pub(crate) fn pane_close(model: &Model) -> Option<Close> {
+    let (index, _, pane) = focused(model)?;
+    let group = model.muxes[index].group;
+    Some(Close::SessionPane { group, pane })
 }
 
-/// tmux kills the focused pane, and the window with its last one, as iTerm2's
-/// close does. The tab goes when tmux reports the window gone.
-pub(crate) fn kill_pane(model: &Model) -> bool {
-    if !live(model) {
-        return false;
-    }
-    let Some((index, _, pane)) = focused(model) else {
-        return false;
+/// Tab `index`'s window, closed in its session.
+pub(crate) fn window_close(model: &Model, index: usize) -> Option<Close> {
+    let (at, window) = window_of(model, index)?;
+    let group = model.muxes[at].group;
+    Some(Close::SessionWindow { group, window })
+}
+
+/// tmux kills the pane, and its window with the last one, or the window, as
+/// iTerm2's close does. The tab goes when tmux reports the window gone.
+pub(crate) fn kill(model: &Model, close: Close) {
+    let (group, command) = match close {
+        Close::SessionPane { group, pane } => (group, tmux::kill_pane(pane)),
+        Close::SessionWindow { group, window } => (group, tmux::kill_window(window)),
+        Close::Pane(_) | Close::Tab(_) | Close::Hide { .. } => return,
     };
-    let _ = model.muxes[index]
-        .input
-        .send(tmux::kill_pane(pane).into_bytes());
-    true
+    if let Some(mux) = model.muxes.iter().find(|mux| mux.group == group) {
+        let _ = mux.input.send(command.into_bytes());
+    }
 }
 
-pub(crate) fn kill_window(model: &Model, index: usize) {
-    if let Some((mux, window)) = window_of(model, index) {
-        let _ = model.muxes[mux]
-            .input
-            .send(tmux::kill_window(window).into_bytes());
-    }
+/// Asks the multiplexer, off the main thread, what other than a shell runs
+/// where `close` would end it. An answer that does not come reads as nothing.
+pub(crate) fn ask_running(model: &Model, close: Close) {
+    let (group, args) = match close {
+        Close::SessionPane { group, pane } => (
+            group,
+            ["display-message", "-p", "-t", &format!("%{pane}"), CURRENT].map(String::from),
+        ),
+        Close::SessionWindow { group, window } => (
+            group,
+            ["list-panes", "-t", &format!("@{window}"), "-F", CURRENT].map(String::from),
+        ),
+        Close::Pane(_) | Close::Tab(_) | Close::Hide { .. } => return,
+    };
+    let Some(mux) = model.muxes.iter().find(|mux| mux.group == group) else {
+        return;
+    };
+    let mut command = mux.target.command(&args);
+    let shared = Arc::clone(&model.shared);
+    thread::spawn(move || {
+        let out = command.stdin(Stdio::null()).stderr(Stdio::null()).output();
+        let running = out
+            .ok()
+            .filter(|out| out.status.success())
+            .map(|out| {
+                String::from_utf8_lossy(&out.stdout)
+                    .lines()
+                    .map(str::trim)
+                    .filter(|name| !name.is_empty() && !is_shell(name))
+                    .map(str::to_owned)
+                    .collect()
+            })
+            .unwrap_or_default();
+        shared.push_running(close, running);
+    });
+}
+
+const CURRENT: &str = "#{pane_current_command}";
+
+/// A pane whose command is one of these is at its prompt, or close enough.
+fn is_shell(name: &str) -> bool {
+    const SHELLS: [&str; 12] = [
+        "bash", "zsh", "sh", "fish", "dash", "ksh", "mksh", "tcsh", "csh", "nu", "elvish", "xonsh",
+    ];
+    SHELLS.contains(&name.trim_start_matches('-'))
 }
 
 /// The session keeps running in tmux. Every tab of it goes from here.
@@ -1598,7 +1638,8 @@ mod tests {
         );
 
         let window = model.tabs[model.active].window;
-        crate::tabs::close_active(&mut model, &mut Tx::default());
+        let active = model.active;
+        crate::tabs::close(&mut model, active, &mut Tx::default());
         assert_eq!(model.tabs.len(), 1);
         assert!(model.terminal.get(first).is_none());
         let menu = format!("{}:{}", group.0, window.unwrap());
@@ -2223,6 +2264,42 @@ mod tests {
     }
 
     #[test]
+    fn closing_a_pane_that_runs_a_program_asks_first() {
+        let Some((server, mut model, _group)) = attached("busy") else {
+            return;
+        };
+        assert!(until(&mut model, |model| model.tabs.len() == 2));
+        let pane = crate::tabs::surface_of(&model.tabs[model.active]).unwrap();
+        model.terminal.get(pane).unwrap().surface.text("sleep 30\r");
+        let current = || {
+            let out = server
+                .run(&[
+                    "display-message",
+                    "-p",
+                    "-t",
+                    "busy",
+                    "#{pane_current_command}",
+                ])
+                .output()
+                .unwrap();
+            String::from_utf8_lossy(&out.stdout).trim().to_owned()
+        };
+        assert!(until(&mut model, |_| current() == "sleep"), "{}", current());
+        crate::tabs::close_pane(&mut model, &mut Tx::default());
+        assert!(
+            until(&mut model, |model| model.closing.is_some()),
+            "it did not ask"
+        );
+        assert_eq!(model.closing.as_ref().unwrap().running, ["sleep"]);
+        assert_eq!(model.tabs.len(), 2, "nothing closed while it asks");
+        crate::closing::confirm(&mut model, &mut Tx::default());
+        assert!(
+            until(&mut model, |model| model.tabs.len() == 1),
+            "Close kept the window"
+        );
+    }
+
+    #[test]
     fn the_close_button_kills_a_window_unless_its_profile_detaches() {
         let Some((server, mut model, _group)) = attached("on-close") else {
             return;
@@ -2287,7 +2364,7 @@ mod tests {
         assert!(until(&mut model, |model| model.tabs.len() == 3));
         let index = model.active;
         let window = model.tabs[index].window;
-        kill_window(&model, index);
+        crate::tabs::kill_window(&mut model, index, &mut Tx::default());
         assert!(
             until(&mut model, |model| model.tabs.len() == 2),
             "the killed window kept its tab"

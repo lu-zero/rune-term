@@ -16,7 +16,7 @@ use crate::delegate::Shared;
 
 pub struct PtyLink {
     // Dropping the Pty hangs up and reaps the shell.
-    _pty: Pty,
+    pty: Pty,
     input: mpsc::Sender<Vec<u8>>,
     sizes: mpsc::Sender<Winsize>,
     winsize: Winsize,
@@ -92,11 +92,22 @@ impl PtyLink {
                 }
             })?;
         Ok(Self {
-            _pty: pty,
+            pty,
             input,
             sizes,
             winsize: (desc.cols, desc.rows, desc.pixel_width, desc.pixel_height),
         })
+    }
+
+    /// The program in the foreground, unless it is the shell itself.
+    pub fn running(&self) -> Option<String> {
+        let (fd, shell) = (*self.pty.child.id, *self.pty.child.pid);
+        let group = unsafe { libc::tcgetpgrp(fd) };
+        if group <= 0 || group == shell {
+            return None;
+        }
+        Some(teletypewriter::foreground_process_name(fd, shell as u32))
+            .filter(|name| !name.is_empty())
     }
 
     pub fn write(&self, bytes: &[u8]) {
