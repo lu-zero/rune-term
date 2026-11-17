@@ -254,6 +254,10 @@ pub fn select_layout(window: u32, layout: &Layout) -> String {
     )
 }
 
+pub fn kill_pane(pane: u32) -> String {
+    format!("kill-pane -t %{pane}\n")
+}
+
 pub fn kill_window(window: u32) -> String {
     format!("kill-window -t @{window}\n")
 }

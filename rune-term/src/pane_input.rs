@@ -155,7 +155,18 @@ pub fn on_secondary_mark(
         .item(rune::PopupItem::new("paste", "Paste"))
         .separator()
         .item(rune::PopupItem::new("search", "Search"))
-        .item(rune::PopupItem::new("new-tab", "New Tab"));
+        .item(rune::PopupItem::new("new-tab", "New Tab"))
+        .separator()
+        .item(rune::PopupItem::new("split-right", "Split Right").key_equivalent(shortcut("cmd+d")))
+        .item(
+            rune::PopupItem::new("split-down", "Split Down")
+                .key_equivalent(shortcut("cmd+shift+d")),
+        );
+    if crate::tabs::has_panes(model) || crate::mux::live(model) {
+        menu = menu.item(
+            rune::PopupItem::new("close-pane", "Close Pane").key_equivalent(shortcut("cmd+w")),
+        );
+    }
     menu = crate::mux::menu(model, menu);
     let default_name = model.config.default_profile_name().to_owned();
     let mut names: Vec<String> = model.config.profile_names().map(str::to_owned).collect();
@@ -185,6 +196,10 @@ pub fn on_secondary_mark(
     );
 }
 
+fn shortcut(text: &str) -> rune::Shortcut {
+    text.parse().expect("a shortcut")
+}
+
 fn context_action(model: &mut Model, mark: u32, id: &str, tx: &mut Tx) {
     match id {
         "copy" => {
@@ -204,8 +219,9 @@ fn context_action(model: &mut Model, mark: u32, id: &str, tx: &mut Tx) {
             }
             crate::tabs::reveal(model, tx);
         }
-        "split-right" => crate::mux::split(model, crate::split::Axis::Horizontal),
-        "split-down" => crate::mux::split(model, crate::split::Axis::Vertical),
+        "split-right" => crate::tabs::split(model, crate::split::Axis::Horizontal, tx),
+        "split-down" => crate::tabs::split(model, crate::split::Axis::Vertical, tx),
+        "close-pane" => crate::tabs::close_pane(model, tx),
         _ if crate::mux::menu_action(model, id) => {}
         _ if id.starts_with("show-window:") => {
             if crate::mux::show(model, &id["show-window:".len()..]) {
@@ -342,8 +358,17 @@ fn handle_app_chord(
         return true;
     }
     if code == term_input::PhysicalKeyCode::KeyW {
-        crate::tabs::close_active(model, tx);
+        crate::tabs::close_pane(model, tx);
         crate::tabs::reveal(model, tx);
+        return true;
+    }
+    if code == term_input::PhysicalKeyCode::KeyD {
+        let axis = if mods.shift {
+            crate::split::Axis::Vertical
+        } else {
+            crate::split::Axis::Horizontal
+        };
+        crate::tabs::split(model, axis, tx);
         return true;
     }
     if let Some(digit) = core_input::tab_digit(code) {
@@ -616,6 +641,74 @@ mod tests {
         assert_eq!(model.terminal.len(), 1);
         assert_eq!(model.active, 0);
         assert_eq!(model.terminal.primary().unwrap().surface.id(), first);
+    }
+
+    #[test]
+    fn command_d_splits_and_command_w_closes_a_pane_before_the_tab() {
+        if !cfg!(target_os = "macos") {
+            return;
+        }
+        let mut model = host();
+        let cmd = rune::Mods {
+            logo: true,
+            cmd: true,
+            ..rune::Mods::default()
+        };
+        let shift_cmd = rune::Mods { shift: true, ..cmd };
+        let first = model.terminal.primary().unwrap().surface.id();
+        let panes = |model: &Model| crate::tabs::surfaces_of(&model.tabs[0].root);
+        assert!(press(
+            &mut model,
+            Code::KeyD,
+            cmd,
+            None,
+            rune::Mods::default()
+        ));
+        let crate::chrome::Node::Split { axis, .. } = &model.tabs[0].root else {
+            panic!("no split");
+        };
+        assert_eq!(*axis, crate::split::Axis::Horizontal);
+        let right = panes(&model)[1];
+        assert_eq!(
+            crate::tabs::surface_of(&model.tabs[0]),
+            Some(right),
+            "the new pane has focus"
+        );
+        assert!(press(
+            &mut model,
+            Code::KeyD,
+            shift_cmd,
+            None,
+            rune::Mods::default()
+        ));
+        assert_eq!(panes(&model).len(), 3);
+        assert!(model.shared.take_output().is_empty(), "the shell got no D");
+
+        assert!(press(
+            &mut model,
+            Code::KeyW,
+            cmd,
+            None,
+            rune::Mods::default()
+        ));
+        assert!(press(
+            &mut model,
+            Code::KeyW,
+            cmd,
+            None,
+            rune::Mods::default()
+        ));
+        assert_eq!(model.tabs.len(), 1, "the tab stays while it has a pane");
+        assert_eq!(panes(&model), [first]);
+        assert_eq!(model.terminal.len(), 1);
+        assert!(press(
+            &mut model,
+            Code::KeyW,
+            cmd,
+            None,
+            rune::Mods::default()
+        ));
+        assert!(model.tabs.is_empty());
     }
 
     #[test]

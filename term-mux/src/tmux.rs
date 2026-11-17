@@ -8,8 +8,8 @@ use crate::layout::{Axis, Layout};
 mod client;
 
 pub use client::{
-    capture, kill_window, new_window, panes, refresh_client, resize_pane, select, select_layout,
-    send_keys, sizes, split_window, Client, Update, Window, LIST_WINDOWS,
+    capture, kill_pane, kill_window, new_window, panes, refresh_client, resize_pane, select,
+    select_layout, send_keys, sizes, split_window, Client, Update, Window, LIST_WINDOWS,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]

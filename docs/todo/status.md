@@ -35,7 +35,11 @@ The numbers are that plan's.
       whole cells, and neither side gives up a leaf's last cell. A window
       resize scales the tree from the layout the user left, so each split
       keeps its proportion; a session's windows get the same through
-      `select-layout`.
+      `select-layout`. Cmd+D splits right and Shift+Cmd+D down, as the pane
+      menu's Split items do; the new pane takes focus. Cmd+W and Close
+      Pane close the focused pane, focus goes across its divider, and the
+      tab closes with its last pane. On a session tab they kill the pane in
+      tmux, and the window with its last pane, as iTerm2 and WezTerm do.
 - [x] **11. Selection and clipboard.** A drag the program did not take
       selects cells. Two clicks select a word and three select a line.
       The copy chord copies that text, and paste calls `Surface::paste`.

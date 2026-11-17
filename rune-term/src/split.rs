@@ -101,6 +101,25 @@ pub(crate) fn first_leaf(node: &Node) -> LeafId {
     }
 }
 
+/// The leaf nearest the one whose `surface` is `id`, across the divider beside it.
+pub(crate) fn neighbour(node: &Node, surface: SurfaceId) -> Option<LeafId> {
+    let Node::Split { left, right, .. } = node else {
+        return None;
+    };
+    match (left.as_ref(), right.as_ref()) {
+        (Node::Leaf(leaf), other) if leaf.surface == surface => Some(first_leaf(other)),
+        (other, Node::Leaf(leaf)) if leaf.surface == surface => Some(last_leaf(other)),
+        _ => neighbour(left, surface).or_else(|| neighbour(right, surface)),
+    }
+}
+
+fn last_leaf(node: &Node) -> LeafId {
+    match node {
+        Node::Leaf(leaf) => leaf.id,
+        Node::Split { right, .. } => last_leaf(right),
+    }
+}
+
 fn join(axis: Axis, left: Detach, right: Detach) -> Detach {
     match (left, right) {
         (Detach::Missing(left), Detach::Missing(right)) => split_detach(axis, left, right, true),
