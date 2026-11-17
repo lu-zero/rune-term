@@ -1218,6 +1218,58 @@ mod tests {
         assert_eq!(saved.session.as_deref(), Some("work"));
     }
 
+    fn shows(rt: &Runtime<SettingsModel>, label: &str) -> bool {
+        rt.elements()
+            .into_iter()
+            .any(|el| el.text.as_deref() == Some(label))
+    }
+
+    #[test]
+    fn a_session_backend_swaps_the_shell_fields_for_its_host() {
+        let mut rt = runtime(model("backend"));
+        rt.frame(0.0);
+        assert!(shows(&rt, "Shell program") && !shows(&rt, "Host"));
+        press(&mut rt, "profile-backend-trigger");
+        press(&mut rt, "option2");
+        assert_eq!(rt.state.config.profile("Default").unwrap().backend, "rmux");
+        assert!(shows(&rt, "Host") && shows(&rt, "Session") && !shows(&rt, "Shell program"));
+        rt.state.profile.host.text = " thalia ".to_owned();
+        profiles::save(&mut rt.state);
+        let saved = rt.state.config.profile("Default").unwrap();
+        assert_eq!(saved.host.as_deref(), Some("thalia"));
+        assert_eq!(saved.session, None);
+    }
+
+    #[test]
+    fn a_profile_the_terminal_saves_survives_the_next_write_here() {
+        let mut rt = runtime(model("terminal-saved"));
+        rt.frame(0.0);
+        profiles::create(&mut rt.state);
+        let selected = rt.state.selected;
+        let shown = rt.state.config.profiles.keys().nth(selected).cloned();
+        let dir = rt.state.config.dir();
+        let mut terminal = ConfigFile::open(&dir).unwrap();
+        terminal.ensure_profile("A first");
+        terminal.save().unwrap();
+        profiles::add(
+            &mut rt.state,
+            "A first".to_owned(),
+            crate::settings::Profile::default(),
+        );
+        assert_eq!(
+            rt.state
+                .config
+                .profiles
+                .keys()
+                .nth(rt.state.selected)
+                .cloned(),
+            shown
+        );
+        rt.state.profile.font_size.text = "16".to_owned();
+        profiles::save(&mut rt.state);
+        assert!(ConfigFile::open(&dir).unwrap().profile("A first").is_some());
+    }
+
     #[test]
     fn the_arrow_keys_move_the_selection() {
         let mut rt = runtime(model("arrows"));

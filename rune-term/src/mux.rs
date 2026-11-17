@@ -289,10 +289,19 @@ fn save_profile(model: &mut Model, group: TabGroupId, name: &str) -> Result<(), 
     profile.session = mux.session.clone();
     profile.shell = None;
     profile.cwd = None;
-    model.config.profiles.insert(name.to_owned(), profile);
+    model
+        .config
+        .profiles
+        .insert(name.to_owned(), profile.clone());
     if let Err(err) = model.config.save() {
         model.config.profiles.remove(name);
         return Err(format!("Could not save: {err}"));
+    }
+    if let Some(settings) = &model.settings {
+        let name = name.to_owned();
+        settings.update(move |settings, _tx| {
+            crate::settings_ui::profiles::add(settings, name, profile)
+        });
     }
     Ok(())
 }

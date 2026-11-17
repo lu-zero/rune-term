@@ -142,8 +142,9 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       `backend` is `tmux` or `rmux` attaches its `session` (a new one when
       unset), on its ssh `host` when it has one; its tabs take the profile.
       A session tab's menu saves the group as such a profile, and
-      `--profile NAME` opens one. The settings window keeps those fields but
-      does not edit them. Per-tab/per-pane setting application (font/theme
+      `--profile NAME` opens one. The settings window edits the backend,
+      and for a session its host and name in place of the shell fields; a
+      profile a tab saves reaches its open copy of the config. Per-tab/per-pane setting application (font/theme
       are currently model-global) remains. A tab group (a labelled group of
       tabs in the strip) is in the tree, ready for a multiplexer session group.
       Pressing its label collapses it to `name | count` and the selected tab.

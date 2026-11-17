@@ -24,6 +24,11 @@ pub struct ProfileDraft {
     pub cwd: TextEdit,
     pub shell_program: TextEdit,
     pub shell_args: TextEdit,
+    /// `local`, or the multiplexer a session profile attaches.
+    pub backend: String,
+    pub backend_open: bool,
+    pub host: TextEdit,
+    pub session: TextEdit,
 }
 
 impl ProfileDraft {
@@ -66,6 +71,10 @@ impl ProfileDraft {
             cwd: TextEdit::new(profile.cwd.clone().unwrap_or_default()),
             shell_program: TextEdit::new(shell_program),
             shell_args: TextEdit::new(shell_args),
+            backend: profile.backend.clone(),
+            backend_open: false,
+            host: TextEdit::new(profile.host.clone().unwrap_or_default()),
+            session: TextEdit::new(profile.session.clone().unwrap_or_default()),
         }
     }
 
@@ -136,8 +145,9 @@ impl ProfileDraft {
                 theme: non_empty(&self.theme),
                 shell,
                 cwd: non_empty(&self.cwd.text),
-                // The form does not show what a session profile attaches.
-                ..self.saved.clone()
+                backend: self.backend.clone(),
+                host: non_empty(&self.host.text),
+                session: non_empty(&self.session.text),
             },
         ))
     }
@@ -167,6 +177,7 @@ pub fn editor(
     cx: &Cx<SettingsModel>,
 ) -> El {
     let draft = &model.profile;
+    let attaches = draft.backend != "local";
     let body = col()
         .w_full()
         .grow(1.0)
@@ -246,63 +257,135 @@ pub fn editor(
                         .grow(1.0)
                         .min_w(0.0),
                 ),
+        );
+    let backend = Field::new()
+        .label("Backend")
+        .control(backend_select(kit, model, overlays, cx))
+        .build(kit)
+        .grow(1.0)
+        .min_w(0.0);
+    let body = if attaches {
+        body.child(
+            row()
+                .w_full()
+                .gap(12.0)
+                .child(backend)
+                .child(half(text_field(
+                    kit,
+                    "Session",
+                    &draft.session,
+                    "A new one each time",
+                    |m| &mut m.profile.session,
+                    reflect_session,
+                ))),
+        )
+        .child(text_field(
+            kit,
+            "Host",
+            &draft.host,
+            "This machine",
+            |m| &mut m.profile.host,
+            reflect_host,
+        ))
+    } else {
+        body.child(
+            row()
+                .w_full()
+                .gap(12.0)
+                .child(backend)
+                .child(half(text_field(
+                    kit,
+                    "Working directory",
+                    &draft.cwd,
+                    "Use current directory",
+                    |m| &mut m.profile.cwd,
+                    reflect_cwd,
+                ))),
         )
         .child(
             row()
                 .w_full()
                 .gap(12.0)
-                .child(
-                    Field::new()
-                        .label("Shell program")
-                        .control(
-                            super::when_finished(
-                                TextInput::new(&draft.shell_program)
-                                    .placeholder("Default shell")
-                                    .width(None)
-                                    .on_edit(|m: &mut SettingsModel| &mut m.profile.shell_program),
-                                reflect_shell_program,
-                            )
-                            .build(kit),
-                        )
-                        .build(kit)
-                        .grow(1.0)
-                        .min_w(0.0),
-                )
-                .child(
-                    Field::new()
-                        .label("Shell arguments")
-                        .control(
-                            super::when_finished(
-                                TextInput::new(&draft.shell_args)
-                                    .placeholder("-l")
-                                    .width(None)
-                                    .on_edit(|m: &mut SettingsModel| &mut m.profile.shell_args),
-                                reflect_shell_args,
-                            )
-                            .build(kit),
-                        )
-                        .build(kit)
-                        .grow(1.0)
-                        .min_w(0.0),
-                ),
+                .child(half(text_field(
+                    kit,
+                    "Shell program",
+                    &draft.shell_program,
+                    "Default shell",
+                    |m| &mut m.profile.shell_program,
+                    reflect_shell_program,
+                )))
+                .child(half(text_field(
+                    kit,
+                    "Shell arguments",
+                    &draft.shell_args,
+                    "-l",
+                    |m| &mut m.profile.shell_args,
+                    reflect_shell_args,
+                ))),
         )
-        .child(
-            Field::new()
-                .label("Working directory")
-                .control(
-                    super::when_finished(
-                        TextInput::new(&draft.cwd)
-                            .placeholder("Use current directory")
-                            .width(None)
-                            .on_edit(|m: &mut SettingsModel| &mut m.profile.cwd),
-                        reflect_cwd,
-                    )
-                    .build(kit),
-                )
-                .build(kit),
-        );
+    };
     super::with_actions(actions(kit, model), body)
 }
+
+fn text_field(
+    kit: &Kit,
+    label: &str,
+    edit: &TextEdit,
+    placeholder: &str,
+    field: fn(&mut SettingsModel) -> &mut TextEdit,
+    done: fn(&mut SettingsModel),
+) -> El {
+    Field::new()
+        .label(label)
+        .control(
+            super::when_finished(
+                TextInput::new(edit)
+                    .placeholder(placeholder)
+                    .width(None)
+                    .on_edit(field),
+                done,
+            )
+            .build(kit),
+        )
+        .build(kit)
+}
+
+fn half(field: El) -> El {
+    field.grow(1.0).min_w(0.0)
+}
+
+/// Whether the profile runs a shell here or attaches a tmux or rmux session.
+fn backend_select(
+    kit: &Kit,
+    model: &SettingsModel,
+    overlays: &mut Vec<El>,
+    cx: &Cx<SettingsModel>,
+) -> El {
+    let mut select = Select::new("profile-backend", &BACKENDS)
+        .label("Backend")
+        .appearance(SelectAppearance::Field)
+        .current(Some(model.profile.backend.as_str()))
+        .fill()
+        .open(model.profile.backend_open);
+    if let Some([width, _]) = cx.layout_size("profile-backend-trigger") {
+        select = select.menu_width(width);
+    }
+    select
+        .on_toggle(|m: &mut SettingsModel| {
+            m.profile.backend_open = !m.profile.backend_open;
+        })
+        .on_close(|m: &mut SettingsModel| {
+            m.profile.backend_open = false;
+        })
+        .on_choose(|m: &mut SettingsModel, value: &str, _tx| {
+            m.profile.backend = value.to_owned();
+            m.profile.backend_open = false;
+            reflect_backend(m);
+        })
+        .build(kit, overlays)
+}
+
+const BACKENDS: [&str; 3] = ["local", "tmux", "rmux"];
 
 /// The theme the profile uses, chosen from the built-in and the custom ones.
 /// An empty theme inherits the global one.
@@ -510,6 +593,34 @@ pub(crate) fn reflect_cwd(model: &mut SettingsModel) {
     });
 }
 
+fn reflect_backend(model: &mut SettingsModel) {
+    reflect_field(model, |draft, profile| {
+        let changed = profile.backend != draft.backend;
+        profile.backend = draft.backend.clone();
+        Ok(changed)
+    });
+}
+
+fn reflect_host(model: &mut SettingsModel) {
+    reflect_field(model, |draft, profile| {
+        let host = non_empty(&draft.host.text);
+        show(&mut draft.host, host.as_deref().unwrap_or(""));
+        let changed = profile.host != host;
+        profile.host = host;
+        Ok(changed)
+    });
+}
+
+fn reflect_session(model: &mut SettingsModel) {
+    reflect_field(model, |draft, profile| {
+        let session = non_empty(&draft.session.text);
+        show(&mut draft.session, session.as_deref().unwrap_or(""));
+        let changed = profile.session != session;
+        profile.session = session;
+        Ok(changed)
+    });
+}
+
 fn reflect_profile_theme(model: &mut SettingsModel) {
     reflect_field(model, |draft, profile| {
         let theme = non_empty(&draft.theme);
@@ -658,6 +769,20 @@ pub fn create(model: &mut SettingsModel) {
     select_by_name(model, &name);
     if super::write_config(model) {
         super::push(model);
+    }
+}
+
+/// A profile the terminal saved. The window's own config would drop it on its
+/// next write, and the row the editor shows stays selected.
+pub(crate) fn add(model: &mut SettingsModel, name: String, profile: Profile) {
+    let selected = (model.tab == super::Tab::Profiles)
+        .then(|| selected_name(model))
+        .flatten();
+    model.config.profiles.insert(name, profile);
+    if let Some(index) =
+        selected.and_then(|name| model.config.profiles.keys().position(|key| *key == name))
+    {
+        model.selected = index;
     }
 }
 
