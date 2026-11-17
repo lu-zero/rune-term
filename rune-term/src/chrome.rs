@@ -135,6 +135,11 @@ pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
         name_prompt(prompt, &crate::settings_ui::kit(p), &mut layer);
         root = root.children(layer);
     }
+    if let Some(closing) = &model.closing {
+        let mut layer = Vec::new();
+        confirm_close(closing, &crate::settings_ui::kit(p), &mut layer);
+        root = root.children(layer);
+    }
     if let Some(notice) = &model.notice {
         let k = crate::settings_ui::kit(p);
         let toast = Toast::new("notice", notice.title.as_str())
@@ -207,6 +212,47 @@ fn name_prompt(prompt: &crate::mux::NamePrompt, k: &Kit, layer: &mut Vec<El>) {
                 .child(field)
                 .child(buttons),
         )
+        .build(k, layer);
+}
+
+/// Close ends what runs; Cancel, Escape or a click outside keeps it.
+fn confirm_close(closing: &crate::closing::Closing, k: &Kit, layer: &mut Vec<El>) {
+    use crate::closing::Close;
+    let title = match closing.close {
+        Close::Pane(_) | Close::SessionPane { .. } => "Close this pane?",
+        Close::Tab(_) | Close::Hide { .. } => "Close this tab?",
+        Close::SessionWindow { .. } => "Close this window?",
+    };
+    let names = closing.running.join(", ");
+    let verb = if closing.running.len() == 1 {
+        "is"
+    } else {
+        "are"
+    };
+    let buttons = row()
+        .w_full()
+        .gap(8.0)
+        .justify_end()
+        .child(
+            Button::new("Cancel")
+                .on_press(|model: &mut Model| model.closing = None)
+                .build(k)
+                .key("cancel-close"),
+        )
+        .child(
+            Button::new("Close")
+                .variant(ButtonVariant::Danger)
+                .on_press_tx(crate::closing::confirm)
+                .build(k)
+                .key("confirm-close"),
+        );
+    Dialog::new("confirm-close-dialog", title)
+        .description(format!("{names} {verb} still running in it."))
+        .width(360.0)
+        .fit()
+        .open(true)
+        .on_close(|model: &mut Model| model.closing = None)
+        .child(col().w_full().pl(16.0).pr(16.0).pb(16.0).child(buttons))
         .build(k, layer);
 }
 
@@ -645,7 +691,7 @@ fn group_menu(model: &Model, group: TabGroupId, at: rune::PointerPress, tx: &mut
 fn tab_action(model: &mut Model, index: usize, picked: Option<&str>, tx: &mut Tx) {
     match picked {
         Some("hide" | "close") => crate::tabs::close(model, index, tx),
-        Some("kill") => crate::mux::kill_window(model, index),
+        Some("kill") => crate::tabs::kill_window(model, index, tx),
         Some("reconnect") => crate::mux::reconnect(model, index),
         Some("detach") => crate::mux::detach(model, index, tx),
         Some("save-profile") => crate::mux::ask_profile_name(model, index),
@@ -881,6 +927,37 @@ mod tests {
         rt.pointer_up(x, y);
         rt.frame(0.0);
         assert!(rt.state.notice.is_none());
+    }
+
+    #[test]
+    fn a_close_that_would_end_a_program_waits_for_close_or_cancel() {
+        use crate::closing::answered;
+        let mut model = host();
+        crate::tabs::open(&mut model);
+        let mut rt = Runtime::new(model, view, (800.0, 500.0), Env::new(true, 1.0));
+        let running = || vec!["vim".to_owned()];
+        rt.update(|model, tx| {
+            let close = crate::closing::tab(model, 1).unwrap();
+            answered(model, close, running(), tx);
+        });
+        rt.frame(0.0);
+        assert_eq!(rt.state.tabs.len(), 2, "it asks first");
+        let (x, y) = rt.find("cancel-close").expect("the dialog");
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        rt.frame(0.0);
+        assert!(rt.state.closing.is_none());
+        assert_eq!(rt.state.tabs.len(), 2, "Cancel keeps it");
+        rt.update(|model, tx| {
+            let close = crate::closing::tab(model, 1).unwrap();
+            answered(model, close, running(), tx);
+        });
+        rt.frame(0.0);
+        let (x, y) = rt.find("confirm-close").expect("the dialog");
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        rt.frame(0.0);
+        assert_eq!(rt.state.tabs.len(), 1, "Close closes it");
     }
 
     #[test]

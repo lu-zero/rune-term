@@ -5,6 +5,7 @@ mod app;
 mod chrome;
 mod chrome_view;
 pub mod cli;
+mod closing;
 mod delegate;
 mod grid_pass;
 #[cfg(feature = "pty")]
