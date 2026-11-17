@@ -137,6 +137,7 @@ pub fn on_secondary_mark(
     scale: f32,
     tx: &mut Tx,
 ) {
+    crate::chrome_view::focus_mark(model, mark, tx);
     let Some(host) = host_mut(model, mark) else {
         return;
     };
