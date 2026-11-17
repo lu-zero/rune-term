@@ -3,7 +3,7 @@
 //! A half-typed value stays in the draft.
 
 use rune::{col, row, Cx, El, ScrollSpec, TextEdit};
-use rune_kit::{Field, Kit, Select, SelectAppearance, TextInput};
+use rune_kit::{Field, Kit, SegmentedControl, Select, SelectAppearance, TextInput};
 
 use super::SettingsModel;
 use crate::settings::{self, Profile, ShellSpec};
@@ -29,8 +29,7 @@ pub struct ProfileDraft {
     pub backend_open: bool,
     pub host: TextEdit,
     pub session: TextEdit,
-    pub on_close: settings::OnClose,
-    pub on_close_open: bool,
+    pub on_close: Option<settings::OnClose>,
 }
 
 impl ProfileDraft {
@@ -78,7 +77,6 @@ impl ProfileDraft {
             host: TextEdit::new(profile.host.clone().unwrap_or_default()),
             session: TextEdit::new(profile.session.clone().unwrap_or_default()),
             on_close: profile.on_close,
-            on_close_open: false,
         }
     }
 
@@ -299,7 +297,7 @@ pub fn editor(
                 .child(half(
                     Field::new()
                         .label("On close")
-                        .control(on_close_select(kit, model, overlays, cx))
+                        .control(on_close(kit, model.profile.on_close))
                         .build(kit),
                 )),
         )
@@ -403,39 +401,27 @@ fn backend_select(
 
 const BACKENDS: [&str; 3] = ["local", "tmux", "rmux"];
 
-/// Whether closing a session's tab or last pane kills the window or keeps it running, hidden.
-fn on_close_select(
-    kit: &Kit,
-    model: &SettingsModel,
-    overlays: &mut Vec<El>,
-    cx: &Cx<SettingsModel>,
-) -> El {
-    let mut select = Select::new("profile-on-close", &settings::OnClose::NAMES)
+/// Whether closing a session's tab or last pane kills the window, keeps it
+/// running, hidden, or does what the General tab says.
+fn on_close(kit: &Kit, current: Option<settings::OnClose>) -> El {
+    use settings::OnClose;
+    let at = match current {
+        None => 0,
+        Some(OnClose::Kill) => 1,
+        Some(OnClose::Detach) => 2,
+    };
+    SegmentedControl::new(&["Default", "Kill", "Detach"], Some(at))
         .label("On close")
-        .appearance(SelectAppearance::Field)
-        .current(Some(model.profile.on_close.name()))
-        .fill()
-        .open(model.profile.on_close_open);
-    if let Some([width, _]) = cx.layout_size("profile-on-close-trigger") {
-        select = select.menu_width(width);
-    }
-    select
-        .on_toggle(|m: &mut SettingsModel| {
-            m.profile.on_close_open = !m.profile.on_close_open;
-        })
-        .on_close(|m: &mut SettingsModel| {
-            m.profile.on_close_open = false;
-        })
-        .on_choose(|m: &mut SettingsModel, value: &str, _tx| {
-            m.profile.on_close = settings::OnClose::from_name(value);
-            m.profile.on_close_open = false;
+        .width(None)
+        .on_pick(|m: &mut SettingsModel, at, _tx| {
+            m.profile.on_close = [None, Some(OnClose::Kill), Some(OnClose::Detach)][at];
             reflect_field(m, |draft, profile| {
                 let changed = profile.on_close != draft.on_close;
                 profile.on_close = draft.on_close;
                 Ok(changed)
             });
         })
-        .build(kit, overlays)
+        .build(kit)
 }
 
 /// The theme the profile uses, chosen from the built-in and the custom ones.

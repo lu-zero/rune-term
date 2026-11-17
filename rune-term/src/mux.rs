@@ -1040,10 +1040,7 @@ pub(crate) fn kills(model: &Model, index: usize) -> bool {
         .tab_groups
         .iter()
         .any(|entry| entry.id == mux.group && entry.lost);
-    let detach = model
-        .config
-        .profile(&mux.profile)
-        .is_some_and(|profile| profile.on_close == crate::settings::OnClose::Detach);
+    let detach = model.config.on_close(&mux.profile) == crate::settings::OnClose::Detach;
     !lost && !detach
 }
 
@@ -2331,7 +2328,7 @@ mod tests {
             "keep".to_owned(),
             crate::settings::Profile {
                 backend: "tmux".to_owned(),
-                on_close: crate::settings::OnClose::Detach,
+                on_close: Some(crate::settings::OnClose::Detach),
                 ..Default::default()
             },
         );
