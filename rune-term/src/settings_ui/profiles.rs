@@ -134,9 +134,10 @@ impl ProfileDraft {
                 font_family,
                 font_size,
                 theme: non_empty(&self.theme),
-                backend: "local".to_owned(),
                 shell,
                 cwd: non_empty(&self.cwd.text),
+                // The form does not show what a session profile attaches.
+                ..self.saved.clone()
             },
         ))
     }

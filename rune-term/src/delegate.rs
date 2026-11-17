@@ -328,6 +328,7 @@ impl SurfaceDelegate for Delegate {
 
 pub fn setup(model: &mut Model, waker: Waker) {
     model.shared.set_waker(waker);
+    crate::mux::start_queued_profile(model);
     let profile = model
         .tabs
         .get(model.active)

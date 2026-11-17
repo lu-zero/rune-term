@@ -102,10 +102,15 @@ pub struct Profile {
     pub font_family: String,
     pub font_size: Option<f32>,
     pub theme: Option<String>,
-    /// Backend kind. "local" is the default (in-process PTY via librio).
+    /// Backend kind: "local", the default, a shell on a PTY; "tmux" or "rmux", a session.
     pub backend: String,
     pub shell: Option<ShellSpec>,
     pub cwd: Option<String>,
+    /// The ssh host a "tmux" or "rmux" session runs on; without one it runs here.
+    pub host: Option<String>,
+    /// The session a "tmux" or "rmux" profile attaches, created when missing.
+    /// Without one each open starts a new session.
+    pub session: Option<String>,
 }
 
 impl Default for Profile {
@@ -117,6 +122,8 @@ impl Default for Profile {
             backend: "local".to_owned(),
             shell: None,
             cwd: None,
+            host: None,
+            session: None,
         }
     }
 }
@@ -506,7 +513,7 @@ impl ConfigFile {
     pub fn validate_backend(&self, name: &str) -> Result<(), String> {
         let resolved = self.resolve_profile(name);
         match resolved.backend.as_str() {
-            "local" => Ok(()),
+            "local" | "tmux" | "rmux" => Ok(()),
             other => Err(format!("backend '{other}' is not available")),
         }
     }
@@ -1007,9 +1014,11 @@ args = ["-l"]
     }
 
     #[test]
-    fn validate_backend_accepts_local_and_rejects_unknown() {
+    fn validate_backend_accepts_local_and_sessions_and_rejects_unknown() {
         let mut cfg = ConfigFile::default();
         assert!(cfg.validate_backend(DEFAULT_PROFILE).is_ok());
+        cfg.ensure_profile("Work").backend = "rmux".to_owned();
+        assert!(cfg.validate_backend("Work").is_ok());
         cfg.ensure_profile("Remote").backend = "ssh".to_owned();
         assert!(cfg.validate_backend("Remote").is_err());
     }

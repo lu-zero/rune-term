@@ -1197,6 +1197,28 @@ mod tests {
     }
 
     #[test]
+    fn saving_a_session_profile_keeps_the_session_it_attaches() {
+        let dir = std::env::temp_dir()
+            .join("rune-term-settings-ui-test")
+            .join("session-profile");
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut config = ConfigFile::default().at_dir(dir);
+        let profile = config.ensure_profile("Default");
+        profile.backend = "tmux".to_owned();
+        profile.host = Some("box".to_owned());
+        profile.session = Some("work".to_owned());
+        let mut rt = runtime(SettingsModel::with_config(config, None));
+        rt.frame(0.0);
+        rt.state.profile.font_size.text = "15".to_owned();
+        profiles::save(&mut rt.state);
+        let saved = rt.state.config.profile("Default").unwrap();
+        assert_eq!(saved.font_size, Some(15.0));
+        assert_eq!(saved.backend, "tmux");
+        assert_eq!(saved.host.as_deref(), Some("box"));
+        assert_eq!(saved.session.as_deref(), Some("work"));
+    }
+
+    #[test]
     fn the_arrow_keys_move_the_selection() {
         let mut rt = runtime(model("arrows"));
         rt.frame(0.0);

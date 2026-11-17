@@ -138,9 +138,13 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       (and pane context menu entries) creates a tab for a selected profile,
       falling back to the default for unknown names. The settings window's
       profiles tab views profiles, sets the default, renames, duplicates,
-      creates, edits and deletes them, all persisted. Per-tab/per-pane setting
-      application (font/theme are currently model-global) and full
-      creation-time backend semantics remain. A tab group (a labelled group of
+      creates, edits and deletes them, all persisted. A profile whose
+      `backend` is `tmux` or `rmux` attaches its `session` (a new one when
+      unset), on its ssh `host` when it has one; its tabs take the profile.
+      A session tab's menu saves the group as such a profile, and
+      `--profile NAME` opens one. The settings window keeps those fields but
+      does not edit them. Per-tab/per-pane setting application (font/theme
+      are currently model-global) remains. A tab group (a labelled group of
       tabs in the strip) is in the tree, ready for a multiplexer session group.
       Pressing its label collapses it to `name | count` and the selected tab.
       Dragging a tab reorders the strip: a group's tab moves only among that
@@ -195,7 +199,7 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       either on a host as `ssh -T -o BatchMode=yes HOST tmux -C …`, each
       argument quoted for the far shell; the group is `session@host`.
       Remote sessions are not listed in the menu, and a dropped link is
-      not reconnected. Design:
+      not reconnected; a saved profile reopens a remote one. Design:
       [`multiplexer-sessions.md`](./multiplexer-sessions.md).
 - [ ] **24. Backend adapters and composition.** Fat/lean packaging (features
       and/or `rune-term-*` helpers) with progressive adapters: local, rmux

@@ -23,7 +23,13 @@ use crate::model::Model;
 use crate::split::Axis;
 pub(crate) use target::{Program, Target};
 
-static QUEUED: Mutex<Option<(Target, Vec<String>)>> = Mutex::new(None);
+/// What the command line asked to open once the window is up.
+enum Queued {
+    Session(Target, Vec<String>),
+    Profile(String),
+}
+
+static QUEUED: Mutex<Option<Queued>> = Mutex::new(None);
 /// Above any group a test or the strip made by hand.
 static NEXT_GROUP: AtomicU32 = AtomicU32::new(1 << 16);
 
@@ -34,6 +40,10 @@ const EARLY_CAP: usize = 1 << 20;
 pub(crate) struct Mux {
     pub group: TabGroupId,
     target: Target,
+    /// The session's name once the multiplexer reports it.
+    session: Option<String>,
+    /// The profile its tabs take.
+    profile: String,
     input: mpsc::Sender<Vec<u8>>,
     panes: Arc<Mutex<Panes>>,
     windows: Vec<Window>,
@@ -67,15 +77,48 @@ struct Panes {
 
 /// The session `setup` attaches.
 pub(crate) fn queue(target: Target, session: Session) {
-    *QUEUED.lock().expect("tmux") = Some((target, session_args(session)));
+    *QUEUED.lock().expect("tmux") = Some(Queued::Session(target, session_args(session)));
+}
+
+/// The profile `setup` opens: a session one attaches, any other is the first tab's.
+pub(crate) fn queue_profile(name: String) {
+    *QUEUED.lock().expect("tmux") = Some(Queued::Profile(name));
+}
+
+/// Before the first tab's shell starts: a queued profile that is not a session
+/// becomes that tab's profile.
+pub(crate) fn start_queued_profile(model: &mut Model) {
+    let mut queued = QUEUED.lock().expect("tmux");
+    let Some(Queued::Profile(name)) = &*queued else {
+        return;
+    };
+    let Some(profile) = model.config.profile(name) else {
+        eprintln!("rune-term: no profile named '{name}'");
+        *queued = None;
+        return;
+    };
+    if Program::from_name(profile.backend.trim()).is_some() {
+        return;
+    }
+    if let Some(tab) = model.tabs.get_mut(model.active) {
+        tab.profile = name.clone();
+    }
+    *queued = None;
+    drop(queued);
+    crate::tabs::apply_active_profile(model);
 }
 
 pub(crate) fn attach_queued(model: &mut Model) {
-    let Some((target, args)) = QUEUED.lock().expect("tmux").take() else {
-        return;
-    };
-    if let Err(err) = attach(model, &target, &args) {
-        eprintln!("rune-term: {}: {err}", target.program.name());
+    match QUEUED.lock().expect("tmux").take() {
+        Some(Queued::Session(target, args)) => {
+            if let Err(err) = attach(model, &target, &args) {
+                eprintln!("rune-term: {}: {err}", target.program.name());
+            }
+        }
+        Some(Queued::Profile(name)) => {
+            open_profile(model, &name);
+        }
+        None => {}
     }
 }
 
@@ -93,6 +136,31 @@ pub(crate) fn sessions(target: &Target) -> Option<Vec<String>> {
             .map(str::to_owned)
             .collect(),
     )
+}
+
+/// What a name prompt names: a session to start, or a profile that reopens a group.
+pub(crate) enum Naming {
+    Session(Target),
+    Profile(TabGroupId),
+}
+
+pub(crate) struct NamePrompt {
+    pub naming: Naming,
+    pub edit: rune::TextEdit,
+    /// Why the last name was refused.
+    pub error: Option<String>,
+}
+
+impl NamePrompt {
+    fn new(naming: Naming, text: &str) -> Self {
+        let mut edit = rune::TextEdit::new(text);
+        edit.focused = true;
+        Self {
+            naming,
+            edit,
+            error: None,
+        }
+    }
 }
 
 pub(crate) enum Session<'a> {
@@ -113,6 +181,45 @@ fn session_args(session: Session) -> Vec<String> {
     [vec!["-C".to_owned()], args].concat()
 }
 
+/// Where a profile whose backend is tmux or rmux runs, and the session it names.
+fn profile_target(profile: &crate::settings::Profile) -> Option<(Target, Option<String>)> {
+    let program = Program::from_name(profile.backend.trim())?;
+    let non_empty = |field: &Option<String>| {
+        field
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+    };
+    let target = Target {
+        program,
+        host: non_empty(&profile.host),
+        socket: None,
+    };
+    Some((target, non_empty(&profile.session)))
+}
+
+/// A profile whose backend is tmux or rmux: its session, here or on its host.
+/// False for any other backend.
+pub(crate) fn open_profile(model: &mut Model, name: &str) -> bool {
+    let Some((target, session)) = model.config.profile(name).and_then(profile_target) else {
+        return false;
+    };
+    let session = match &session {
+        Some(session) => Session::Named(session),
+        None => Session::New,
+    };
+    match attach(model, &target, &session_args(session)) {
+        Ok(group) => {
+            if let Some(mux) = model.muxes.iter_mut().find(|mux| mux.group == group) {
+                mux.profile = name.to_owned();
+            }
+        }
+        Err(err) => eprintln!("rune-term: {}: {err}", target.program.name()),
+    }
+    true
+}
+
 /// From the menu. The session's windows arrive as tabs once tmux lists them.
 pub(crate) fn open_session(model: &mut Model, target: &Target, session: Session) {
     if let Err(err) = attach(model, target, &session_args(session)) {
@@ -121,20 +228,73 @@ pub(crate) fn open_session(model: &mut Model, target: &Target, session: Session)
 }
 
 pub(crate) fn ask_name(model: &mut Model, target: Target) {
-    let mut edit = rune::TextEdit::new("");
-    edit.focused = true;
-    model.session_name = Some((target, edit));
+    model.name_prompt = Some(NamePrompt::new(Naming::Session(target), ""));
 }
 
-/// The name the prompt holds. An empty name starts nothing.
-pub(crate) fn submit_name(model: &mut Model) {
-    let Some((target, edit)) = model.session_name.take() else {
+/// The prompt to save the tab's group as a profile, named for its session.
+pub(crate) fn ask_profile_name(model: &mut Model, index: usize) {
+    let Some((mux, _)) = window_of(model, index) else {
         return;
     };
-    let name = edit.text.trim();
-    if !name.is_empty() {
-        open_session(model, &target, Session::Named(name));
+    let mux = &model.muxes[mux];
+    let name = mux
+        .target
+        .label(mux.session.as_deref().unwrap_or(mux.target.program.name()));
+    model.name_prompt = Some(NamePrompt::new(Naming::Profile(mux.group), &name));
+}
+
+/// The name the prompt holds. An empty session name starts nothing; a refused
+/// profile name keeps the prompt open with the reason.
+pub(crate) fn submit_name(model: &mut Model) {
+    let Some(prompt) = model.name_prompt.take() else {
+        return;
+    };
+    let name = prompt.edit.text.trim().to_owned();
+    match &prompt.naming {
+        Naming::Session(target) => {
+            if !name.is_empty() {
+                open_session(model, target, Session::Named(&name));
+            }
+        }
+        Naming::Profile(group) => {
+            if let Err(err) = save_profile(model, *group, &name) {
+                model.name_prompt = Some(NamePrompt {
+                    error: Some(err),
+                    ..prompt
+                });
+            }
+        }
     }
+}
+
+/// A profile that attaches the group's session again, here or on its host, with
+/// the font and theme its tabs have.
+fn save_profile(model: &mut Model, group: TabGroupId, name: &str) -> Result<(), String> {
+    if !crate::settings::name_ok(name) {
+        return Err(format!("'{name}' cannot name a profile"));
+    }
+    if model.config.profile(name).is_some() {
+        return Err(format!("A profile named '{name}' exists"));
+    }
+    let Some(mux) = model.muxes.iter().find(|mux| mux.group == group) else {
+        return Err("The session is gone".to_owned());
+    };
+    let mut profile = model
+        .config
+        .profile(&mux.profile)
+        .cloned()
+        .unwrap_or_default();
+    profile.backend = mux.target.program.name().to_owned();
+    profile.host = mux.target.host.clone();
+    profile.session = mux.session.clone();
+    profile.shell = None;
+    profile.cwd = None;
+    model.config.profiles.insert(name.to_owned(), profile);
+    if let Err(err) = model.config.save() {
+        model.config.profiles.remove(name);
+        return Err(format!("Could not save: {err}"));
+    }
+    Ok(())
 }
 
 /// `args` follow the program and its socket, and include `-C`.
@@ -179,6 +339,8 @@ pub(crate) fn attach(
     model.muxes.push(Mux {
         group,
         target: target.clone(),
+        session: None,
+        profile: model.config.default_profile_name().to_owned(),
         input,
         panes,
         windows: Vec::new(),
@@ -286,6 +448,7 @@ pub(crate) fn apply(model: &mut Model, group: TabGroupId, update: Update, tx: &m
         Update::Output { .. } => false,
         Update::Session(name) => {
             let label = model.muxes[index].target.label(&name);
+            model.muxes[index].session = Some(name);
             if let Some(entry) = model.tab_groups.iter_mut().find(|g| g.id == group) {
                 entry.label = label;
             }
@@ -424,7 +587,7 @@ fn sync_tabs(model: &mut Model, index: usize) {
                     .iter()
                     .rposition(|tab| tab.group == Some(group))
                     .map_or(model.tabs.len(), |last| last + 1);
-                let profile = model.config.default_profile_name().to_owned();
+                let profile = model.muxes[index].profile.clone();
                 model.tabs.insert(
                     at,
                     Tab {
@@ -1311,12 +1474,72 @@ mod tests {
     }
 
     #[test]
+    fn a_saved_session_reopens_from_its_profile() {
+        let Some((server, mut model, group)) = attached("saved") else {
+            return;
+        };
+        let dir = std::env::temp_dir().join(format!("rune-term-profile-{}", std::process::id()));
+        model.config = crate::settings::ConfigFile::default().at_dir(&dir);
+        assert!(until(&mut model, |model| model.muxes[0].session.is_some()
+            && model.tabs.iter().any(|tab| tab.group == Some(group))));
+        let index = model
+            .tabs
+            .iter()
+            .position(|tab| tab.group == Some(group))
+            .unwrap();
+        ask_profile_name(&mut model, index);
+        assert_eq!(model.name_prompt.as_ref().unwrap().edit.text, "saved");
+        submit_name(&mut model);
+        assert!(model.name_prompt.is_none(), "the name was taken");
+        let profile = model.config.profile("saved").expect("the profile");
+        let (target, session) = profile_target(profile).expect("a session profile");
+        assert_eq!(
+            target,
+            Target {
+                socket: None,
+                ..server.0.clone()
+            }
+        );
+        assert_eq!(session.as_deref(), Some("saved"));
+        let on_disk = crate::settings::ConfigFile::open(&dir).unwrap();
+        assert_eq!(on_disk.profile("saved"), Some(profile));
+
+        ask_profile_name(&mut model, index);
+        submit_name(&mut model);
+        let refused = model
+            .name_prompt
+            .as_ref()
+            .expect("a taken name keeps the prompt");
+        assert!(refused
+            .error
+            .as_deref()
+            .is_some_and(|err| err.contains("exists")));
+        assert!(model.tab_groups.iter().any(|g| g.id == group));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_local_profile_names_no_session() {
+        assert!(profile_target(&crate::settings::Profile::default()).is_none());
+        let remote = crate::settings::Profile {
+            backend: "rmux".to_owned(),
+            host: Some(" box ".to_owned()),
+            session: Some(String::new()),
+            ..Default::default()
+        };
+        let (target, session) = profile_target(&remote).unwrap();
+        assert_eq!(target.program, Program::Rmux);
+        assert_eq!(target.host.as_deref(), Some("box"));
+        assert_eq!(session, None, "a blank session starts a new one each time");
+    }
+
+    #[test]
     fn a_blank_name_closes_the_prompt_and_starts_nothing() {
         let mut model = crate::model::init();
         ask_name(&mut model, Target::local(Program::Tmux));
-        model.session_name.as_mut().unwrap().1.text = "  ".to_owned();
+        model.name_prompt.as_mut().unwrap().edit.text = "  ".to_owned();
         submit_name(&mut model);
-        assert!(model.session_name.is_none());
+        assert!(model.name_prompt.is_none());
         assert!(model.muxes.is_empty());
     }
 

@@ -5,7 +5,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 use std::ops::Range;
 use std::rc::Rc;
 
-use rune::{col, el, row, text, Color, Cx, Drag, El, Phase, PopupItem, PopupMenu, TextEdit, Tx};
+use rune::{col, el, row, text, Color, Cx, Drag, El, Phase, PopupItem, PopupMenu, Tx};
 use rune_kit::{Button, ButtonVariant, Dialog, Kit, TextInput};
 
 use crate::chrome_view;
@@ -119,27 +119,38 @@ pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
     if let Some(uri) = &model.pending_link_open {
         root = root.child(confirm_open_link(uri, p));
     }
-    if let Some((target, name)) = &model.session_name {
+    if let Some(prompt) = &model.name_prompt {
         let mut layer = Vec::new();
-        name_session(
-            target.program,
-            name,
-            &crate::settings_ui::kit(p),
-            &mut layer,
-        );
+        name_prompt(prompt, &crate::settings_ui::kit(p), &mut layer);
         root = root.children(layer);
     }
     root
 }
 
-/// Return or Create starts the session; Escape, Cancel or a click outside drops the name.
-fn name_session(program: crate::mux::Program, name: &TextEdit, k: &Kit, layer: &mut Vec<El>) {
-    let field = TextInput::new(name)
-        .placeholder("Session name")
-        .label("Session name")
+/// Return or the submit button takes the name; Escape, Cancel or a click outside drops it.
+fn name_prompt(prompt: &crate::mux::NamePrompt, k: &Kit, layer: &mut Vec<El>) {
+    use crate::mux::Naming;
+    let (title, field_label, submit, description) = match &prompt.naming {
+        Naming::Session(target) => (
+            format!("New {} session", target.program.name()),
+            "Session name",
+            "Create",
+            "If a session has this name already, it is attached.".to_owned(),
+        ),
+        Naming::Profile(_) => (
+            "Save as profile".to_owned(),
+            "Profile name",
+            "Save",
+            "The profile attaches this session again, from the pane menu or --profile.".to_owned(),
+        ),
+    };
+    let description = prompt.error.clone().unwrap_or(description);
+    let field = TextInput::new(&prompt.edit)
+        .placeholder(field_label)
+        .label(field_label)
         .width(None)
         .on_edit(|model: &mut Model| {
-            &mut model.session_name.as_mut().expect("the prompt is open").1
+            &mut model.name_prompt.as_mut().expect("the prompt is open").edit
         })
         .on_submit(|model: &mut Model, _tx| crate::mux::submit_name(model))
         .build(k)
@@ -150,23 +161,23 @@ fn name_session(program: crate::mux::Program, name: &TextEdit, k: &Kit, layer: &
         .justify_end()
         .child(
             Button::new("Cancel")
-                .on_press(|model: &mut Model| model.session_name = None)
+                .on_press(|model: &mut Model| model.name_prompt = None)
                 .build(k)
                 .key("cancel-name-session"),
         )
         .child(
-            Button::new("Create")
+            Button::new(submit)
                 .variant(ButtonVariant::Submit)
                 .on_press(crate::mux::submit_name)
                 .build(k)
                 .key("create-session"),
         );
-    Dialog::new("name-session", format!("New {} session", program.name()))
-        .description("If a session has this name already, it is attached.")
+    Dialog::new("name-session", title)
+        .description(description)
         .width(360.0)
         .fit()
         .open(true)
-        .on_close(|model: &mut Model| model.session_name = None)
+        .on_close(|model: &mut Model| model.name_prompt = None)
         .child(
             col()
                 .w_full()
@@ -561,6 +572,7 @@ fn tab_menu(model: &Model, index: usize, at: rune::PointerPress, tx: &mut Tx) {
             .item(PopupItem::new("kill", "Close Window"))
             .separator()
             .item(PopupItem::new("detach", "Detach Session"))
+            .item(PopupItem::new("save-profile", "Save as Profile…"))
     } else {
         PopupMenu::new().item(PopupItem::new("close", "Close Tab"))
     };
@@ -571,6 +583,7 @@ fn tab_menu(model: &Model, index: usize, at: rune::PointerPress, tx: &mut Tx) {
             Some("hide" | "close") => crate::tabs::close(model, index, tx),
             Some("kill") => crate::mux::kill_window(model, index),
             Some("detach") => crate::mux::detach(model, index, tx),
+            Some("save-profile") => crate::mux::ask_profile_name(model, index),
             _ => {}
         },
     );
@@ -778,12 +791,12 @@ mod tests {
             mods: rune::Mods::default(),
         });
         rt.frame(0.0);
-        assert_eq!(rt.state.session_name.as_ref().unwrap().1.text, "work");
+        assert_eq!(rt.state.name_prompt.as_ref().unwrap().edit.text, "work");
         let (x, y) = rt.find("cancel-name-session").expect("the cancel button");
         rt.pointer_down(x, y);
         rt.pointer_up(x, y);
         rt.frame(0.0);
-        assert!(rt.state.session_name.is_none());
+        assert!(rt.state.name_prompt.is_none());
         assert!(rt.state.muxes.is_empty(), "cancel starts nothing");
     }
 

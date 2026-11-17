@@ -33,6 +33,11 @@ struct Gui {
     #[arg(long = "rmux", value_name = "SESSION")]
     rmux: Option<String>,
 
+    /// Open with the profile NAME. A profile whose backend is tmux or rmux
+    /// attaches its session; any other is the first tab's.
+    #[arg(long = "profile", value_name = "NAME")]
+    profile: Option<String>,
+
     /// Run the `--tmux` or `--rmux` session on HOST, over ssh. HOST is what
     /// `ssh` takes: a name, `user@host`, or an alias from ~/.ssh/config.
     #[arg(long = "ssh", value_name = "HOST")]
@@ -109,8 +114,12 @@ impl Gui {
             (None, Some(session)) => Some((Program::Rmux, session)),
             (None, None) => None,
         };
-        match (session, self.ssh) {
-            (Some((program, session)), host) => {
+        match (session, self.ssh, self.profile) {
+            (Some(_), _, Some(_)) => {
+                eprintln!("rune-term: --profile names what to open; drop --tmux or --rmux");
+                std::process::exit(2);
+            }
+            (Some((program, session)), host, None) => {
                 let target = Target {
                     program,
                     host,
@@ -118,11 +127,12 @@ impl Gui {
                 };
                 crate::mux::queue(target, Session::Named(&session));
             }
-            (None, Some(_)) => {
+            (None, Some(_), _) => {
                 eprintln!("rune-term: --ssh runs a --tmux or --rmux session; pass one");
                 std::process::exit(2);
             }
-            (None, None) => {}
+            (None, None, Some(name)) => crate::mux::queue_profile(name),
+            (None, None, None) => {}
         }
         crate::app::run_with_rune_args(self.rune_args);
     }

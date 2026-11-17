@@ -30,6 +30,9 @@ pub fn open_with_profile(model: &mut Model, profile: &str) -> bool {
         profile = model.config.default_profile_name().to_owned();
     }
     apply_profile_for_new_tab(model, &profile);
+    if crate::mux::open_profile(model, &profile) {
+        return true;
+    }
     let (leaf_n, mark) = next_ids(model);
     let id = LeafId(leaf_n);
     let tab_profile = profile.clone();

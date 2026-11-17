@@ -24,8 +24,8 @@ pub struct Model {
     pub palette: Arc<Palette>,
     pub search: SearchUi,
     pub pending_link_open: Option<String>,
-    /// The name prompt for a new session while it is open, and where the session starts.
-    pub(crate) session_name: Option<(crate::mux::Target, rune::TextEdit)>,
+    /// The name prompt for a new session or a saved one, while it is open.
+    pub(crate) name_prompt: Option<crate::mux::NamePrompt>,
     pub(crate) strip_drag: Option<crate::tabs::StripDrag>,
     /// A drop just ended on the strip. Rune runs the press its release also makes after it.
     pub(crate) strip_dropped: bool,
@@ -79,7 +79,7 @@ pub fn init() -> Model {
         palette,
         search: SearchUi::default(),
         pending_link_open: None,
-        session_name: None,
+        name_prompt: None,
         strip_drag: None,
         strip_dropped: false,
         settings: None,
