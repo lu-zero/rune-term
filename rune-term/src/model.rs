@@ -68,6 +68,7 @@ pub fn init() -> Model {
             focused: LeafId(LEAF.0),
             group: None,
             window: None,
+            fit: None,
         }],
         tab_groups: Vec::new(),
         active: 0,

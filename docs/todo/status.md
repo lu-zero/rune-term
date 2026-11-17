@@ -32,7 +32,10 @@ The numbers are that plan's.
       other. The compositor keeps a grid per pane on screen and draws
       each leaf's surface in its own rect. Search, hover, preedit, and
       images stay on the focused pane. Dragging a divider moves it by
-      whole cells, and neither side gives up a leaf's last cell.
+      whole cells, and neither side gives up a leaf's last cell. A window
+      resize scales the tree from the layout the user left, so each split
+      keeps its proportion; a session's windows get the same through
+      `select-layout`.
 - [x] **11. Selection and clipboard.** A drag the program did not take
       selects cells. Two clicks select a word and three select a line.
       The copy chord copies that text, and paste calls `Surface::paste`.

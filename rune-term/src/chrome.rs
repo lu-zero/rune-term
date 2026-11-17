@@ -104,6 +104,9 @@ pub struct Tab {
     pub group: Option<TabGroupId>,
     /// The multiplexer window this tab shows. Its group's backend owns the layout.
     pub window: Option<u32>,
+    /// The tree a window resize scales, and the tree it made last. A root that
+    /// is not the one it made was split or dragged since, and is the new basis.
+    pub fit: Option<(Node, Node)>,
 }
 
 pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {

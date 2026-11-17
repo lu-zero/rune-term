@@ -377,9 +377,14 @@ fn layout_tree(model: &mut Model, slot: (f32, f32), scale: f32, tx: &mut Tx) {
         tx.live_only();
         return;
     }
-    let next = crate::split::distribute(effect.cols, effect.rows, tab.root.clone());
+    let basis = match tab.fit.take() {
+        Some((basis, fitted)) if fitted == tab.root => basis,
+        _ => tab.root.clone(),
+    };
+    let next = crate::split::scale(&basis, effect.cols, effect.rows);
     let changed = next != tab.root;
-    tab.root = next;
+    tab.root = next.clone();
+    tab.fit = Some((basis, next));
     if !changed {
         tx.live_only();
     }
@@ -724,6 +729,51 @@ mod tests {
         rt.frame(0.0);
         assert_eq!(leaves(&rt.state.tabs[0].root)[0].cols, before + 5);
         assert_eq!(node_cells(&rt.state.tabs[0].root), total);
+    }
+
+    #[test]
+    fn a_window_resized_a_cell_at_a_time_keeps_the_split_proportion() {
+        let mut model = host();
+        assert!(split_focused(&mut model, Axis::Horizontal));
+        let size = (800.0, 500.0);
+        let mut rt =
+            rune::Runtime::new(model, crate::chrome::view, size, rune::Env::new(true, 1.0));
+        rt.frame(0.0);
+        rt.frame(0.0);
+        let bar = rt.presented("divider-").expect("the divider is drawn").0;
+        let (x, y) = (bar[0] + bar[2] / 2.0, bar[1] + bar[3] / 2.0);
+        let pitch = rt.state.cell_points.0;
+        rt.pointer_down(x, y);
+        rt.pointer_move(x - pitch * 20.2, y);
+        rt.pointer_up(x - pitch * 20.2, y);
+        rt.frame(0.0);
+        let sides = |rt: &rune::Runtime<Model>| {
+            let leaves = leaves(&rt.state.tabs[0].root);
+            (leaves[0].cols, leaves[1].cols)
+        };
+        // The drag keeps the tree's width; a resize first fits it to the window.
+        for width in [size.0 + pitch, size.0] {
+            rt.set_viewport((width, size.1), 1.0);
+            rt.frame(0.0);
+        }
+        let before = sides(&rt);
+        for step in 1..=40 {
+            rt.set_viewport((size.0 + pitch * step as f32, size.1), 1.0);
+            rt.frame(0.0);
+        }
+        let (left, right) = sides(&rt);
+        let share = f32::from(before.0) / f32::from(before.0 + before.1);
+        let grown = f32::from(left + right) * share;
+        assert!(
+            (f32::from(left) - grown).abs() <= 1.0,
+            "{before:?} grew to {:?}",
+            (left, right)
+        );
+        for step in (0..40).rev() {
+            rt.set_viewport((size.0 + pitch * step as f32, size.1), 1.0);
+            rt.frame(0.0);
+        }
+        assert_eq!(sides(&rt), before);
     }
 
     #[test]

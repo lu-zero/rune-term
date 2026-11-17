@@ -8,8 +8,8 @@ use crate::layout::{Axis, Layout};
 mod client;
 
 pub use client::{
-    capture, kill_window, new_window, panes, refresh_client, resize_pane, select, send_keys, sizes,
-    split_window, Client, Update, Window, LIST_WINDOWS,
+    capture, kill_window, new_window, panes, refresh_client, resize_pane, select, select_layout,
+    send_keys, sizes, split_window, Client, Update, Window, LIST_WINDOWS,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -203,6 +203,46 @@ fn octal(digits: &[u8]) -> Option<u8> {
 /// `d67e,80x24,0,0{40x24,0,0,0,39x24,41,0[…]}`: a checksum, then the root.
 /// A cell is `WxH,X,Y` followed by `,id` for a pane, `{…}` for side by side,
 /// or `[…]` for stacked.
+/// The layout as tmux writes it, checksum first: what `select-layout` takes.
+pub fn layout_text(layout: &Layout) -> String {
+    let mut body = String::new();
+    write_cell(layout, 0, 0, &mut body);
+    let checksum = body.bytes().fold(0u16, |sum, byte| {
+        (sum >> 1 | (sum & 1) << 15).wrapping_add(u16::from(byte))
+    });
+    format!("{checksum:04x},{body}")
+}
+
+fn write_cell(layout: &Layout, x: u16, y: u16, out: &mut String) {
+    let (cols, rows) = layout.size();
+    out.push_str(&format!("{cols}x{rows},{x},{y}"));
+    let (axis, children) = match layout {
+        Layout::Pane { id, .. } => {
+            out.push_str(&format!(",{id}"));
+            return;
+        }
+        Layout::Split { axis, children, .. } => (axis, children),
+    };
+    let (open, close) = match axis {
+        Axis::Horizontal => ('{', '}'),
+        Axis::Vertical => ('[', ']'),
+    };
+    out.push(open);
+    let (mut x, mut y) = (x, y);
+    for (index, child) in children.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        write_cell(child, x, y, out);
+        let (cols, rows) = child.size();
+        match axis {
+            Axis::Horizontal => x += cols + 1,
+            Axis::Vertical => y += rows + 1,
+        }
+    }
+    out.push(close);
+}
+
 pub fn parse_layout(text: &str) -> Option<Layout> {
     let (_checksum, root) = text.split_once(',')?;
     let mut rest = root.as_bytes();
@@ -314,6 +354,37 @@ mod tests {
                     bytes: b"\x1b[K".to_vec(),
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn a_layout_is_written_back_as_tmux_wrote_it() {
+        for text in [
+            "6b21,80x24,0,0[80x12,0,0{40x12,0,0,0,39x12,41,0,2},80x11,0,13,1]",
+            "ff03,200x30,0,0{60x30,0,0,0,139x30,61,0,1}",
+            "b25d,80x24,0,0,0",
+        ] {
+            assert_eq!(layout_text(&parse_layout(text).unwrap()), text);
+        }
+    }
+
+    #[test]
+    fn a_scaled_layout_keeps_its_proportions_and_a_cell_a_pane() {
+        let layout = parse_layout("61ab,100x30,0,0{30x30,0,0,0,69x30,31,0,1}").unwrap();
+        assert_eq!(
+            layout_text(&layout.scaled(200, 30)),
+            "ff03,200x30,0,0{60x30,0,0,0,139x30,61,0,1}"
+        );
+        let nested =
+            parse_layout("6b21,80x24,0,0[80x12,0,0{40x12,0,0,0,39x12,41,0,2},80x11,0,13,1]")
+                .unwrap();
+        assert_eq!(nested.scaled(80, 24), nested);
+        let Layout::Split { children, .. } = nested.scaled(3, 3) else {
+            panic!("a split");
+        };
+        assert_eq!(
+            children.iter().map(Layout::size).collect::<Vec<_>>(),
+            [(3, 1), (3, 1)]
         );
     }
 

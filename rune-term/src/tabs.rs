@@ -49,6 +49,7 @@ pub fn open_with_profile(model: &mut Model, profile: &str) -> bool {
         focused: id,
         group: None,
         window: None,
+        fit: None,
     });
     model.active = model.tabs.len() - 1;
     let surface = delegate::open_host(model, mark, 0, 0, Some(&profile));

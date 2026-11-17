@@ -247,6 +247,13 @@ pub fn resize_pane(pane: u32, axis: Axis, cells: u16) -> String {
     format!("resize-pane -t %{pane} -{flag} {cells}\n")
 }
 
+pub fn select_layout(window: u32, layout: &Layout) -> String {
+    format!(
+        "select-layout -t @{window} '{}'\n",
+        super::layout_text(layout)
+    )
+}
+
 pub fn kill_window(window: u32) -> String {
     format!("kill-window -t @{window}\n")
 }

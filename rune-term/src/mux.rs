@@ -57,6 +57,10 @@ pub(crate) struct Mux {
     selected: Option<(u32, u32)>,
     /// The last `resize-pane` sent, so a drag does not repeat it on every move.
     resized: Option<(u32, Axis, u16)>,
+    /// Each window's layout as the user left it, which a window resize scales.
+    basis: HashMap<u32, Layout>,
+    /// The scaled layout sent to each window and not reported back yet.
+    sent: HashMap<u32, Layout>,
 }
 
 impl Drop for Mux {
@@ -364,6 +368,8 @@ pub(crate) fn attach(
         reported: None,
         selected: None,
         resized: None,
+        basis: HashMap::new(),
+        sent: HashMap::new(),
     });
     Ok(group)
 }
@@ -527,6 +533,32 @@ pub(crate) fn apply(model: &mut Model, group: TabGroupId, update: Update, tx: &m
     }
 }
 
+/// A window's layout is the basis scaled to its size, the multiplexer's even
+/// resize before the scaled layout sent with that size lands, or the user's
+/// change: a split or a dragged divider, which is the new basis.
+fn keep_basis(mux: &mut Mux, windows: &[Window]) {
+    mux.basis
+        .retain(|id, _| windows.iter().any(|window| window.id == *id));
+    for window in windows {
+        let (cols, rows) = window.layout.size();
+        if let Some(basis) = mux.basis.get(&window.id) {
+            if basis.scaled(cols, rows) == window.layout {
+                if mux.sent.get(&window.id) == Some(&window.layout) {
+                    mux.sent.remove(&window.id);
+                }
+                continue;
+            }
+        }
+        if let Some(sent) = mux.sent.remove(&window.id) {
+            if tmux::panes(&sent) == tmux::panes(&window.layout) {
+                mux.sent.insert(window.id, sent);
+                continue;
+            }
+        }
+        mux.basis.insert(window.id, window.layout.clone());
+    }
+}
+
 /// Mirror the windows. While the strip is on this session, or on its first
 /// listing, the selected tab follows tmux's current window.
 fn follow(model: &mut Model, index: usize, windows: Vec<Window>, tx: &mut Tx) {
@@ -540,6 +572,7 @@ fn follow(model: &mut Model, index: usize, windows: Vec<Window>, tx: &mut Tx) {
     let mux = &mut model.muxes[index];
     mux.hidden
         .retain(|id| windows.iter().any(|window| window.id == *id));
+    keep_basis(mux, &windows);
     mux.windows = windows;
     let now = current(&mux.windows);
     mux.selected = now;
@@ -656,6 +689,7 @@ fn sync_tabs(model: &mut Model, index: usize) {
                         focused,
                         group: Some(group),
                         window: Some(window.id),
+                        fit: None,
                     },
                 );
             }
@@ -1056,9 +1090,18 @@ pub(crate) fn report(model: &mut Model) {
     }
     if let Some((cols, rows)) = size.filter(|size| mux.reported != Some(*size)) {
         mux.reported = Some((cols, rows));
-        let _ = mux
-            .input
-            .send(tmux::refresh_client(cols, rows).into_bytes());
+        let mut commands = tmux::refresh_client(cols, rows);
+        for window in &mux.windows {
+            let Some(basis) = mux.basis.get(&window.id) else {
+                continue;
+            };
+            let scaled = basis.scaled(cols, rows);
+            if matches!(scaled, Layout::Split { .. }) && scaled != window.layout {
+                commands.push_str(&tmux::select_layout(window.id, &scaled));
+                mux.sent.insert(window.id, scaled);
+            }
+        }
+        let _ = mux.input.send(commands.into_bytes());
     }
     if mux.selected != Some((window, pane)) {
         mux.selected = Some((window, pane));
@@ -1630,6 +1673,74 @@ mod tests {
     #[test]
     fn a_pane_split_right_then_down_shows_what_tmux_shows() {
         splits_show_what_tmux_shows("right-down", Axis::Horizontal, Axis::Vertical);
+    }
+
+    #[test]
+    fn a_window_resized_a_cell_at_a_time_keeps_tmux_proportions() {
+        resized_keeps_proportions(Program::Tmux);
+    }
+
+    #[test]
+    fn a_window_resized_a_cell_at_a_time_keeps_rmux_proportions() {
+        resized_keeps_proportions(Program::Rmux);
+    }
+
+    fn resized_keeps_proportions(program: Program) {
+        let Some((server, model, _group)) = attached_on(program, "scale") else {
+            return;
+        };
+        let size = (800.0, 500.0);
+        let mut rt =
+            rune::Runtime::new(model, crate::chrome::view, size, rune::Env::new(true, 1.0));
+        let pump = |rt: &mut rune::Runtime<Model>, ms: u64| {
+            let end = Instant::now() + Duration::from_millis(ms);
+            while Instant::now() < end {
+                rt.update(|model, tx| {
+                    delegate::poll(model, 0.0, tx);
+                });
+                rt.frame(0.0);
+                thread::sleep(Duration::from_millis(5));
+            }
+        };
+        let widths = || {
+            let out = server
+                .run(&["list-panes", "-t", "scale:0", "-F", "#{pane_width}"])
+                .output()
+                .unwrap();
+            String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .map(|line| line.parse::<u16>().unwrap())
+                .collect::<Vec<_>>()
+        };
+        pump(&mut rt, 300);
+        rt.update(|model, _| split(model, Axis::Horizontal));
+        pump(&mut rt, 500);
+        let left = rt.state.muxes[0].surfaces[&0];
+        rt.update(|model, _| {
+            resize(model, left, Axis::Horizontal, 20);
+        });
+        pump(&mut rt, 500);
+        let before = widths();
+        assert_eq!(before.len(), 2);
+        let pitch = rt.state.cell_points.0;
+        for step in 1..=40 {
+            rt.set_viewport((size.0 + pitch * step as f32, size.1), 1.0);
+            pump(&mut rt, 20);
+        }
+        pump(&mut rt, 500);
+        let grown = widths();
+        let share = f32::from(before[0]) / f32::from(before[0] + before[1]);
+        let expected = f32::from(grown[0] + grown[1]) * share;
+        assert!(
+            (f32::from(grown[0]) - expected).abs() <= 1.0,
+            "{before:?} grew to {grown:?}"
+        );
+        for step in (0..40).rev() {
+            rt.set_viewport((size.0 + pitch * step as f32, size.1), 1.0);
+            pump(&mut rt, 20);
+        }
+        pump(&mut rt, 500);
+        assert_eq!(widths(), before);
     }
 
     /// A split inside a split keeps to its own cells, and each pane shows tmux's.

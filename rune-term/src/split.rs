@@ -204,6 +204,46 @@ pub fn distribute(total_cols: u16, total_rows: u16, tree: Node) -> Node {
     adjust(tree, Axis::Vertical, rows as i32 - cur_rows as i32)
 }
 
+/// `basis` at `cols` by `rows`, each split keeping the proportion of its two
+/// sides. Scaled from the same basis, a drag one cell at a time does not drift.
+pub fn scale(basis: &Node, cols: u16, rows: u16) -> Node {
+    let (min_cols, min_rows) = min_size(basis);
+    scale_to(basis, cols.max(min_cols), rows.max(min_rows))
+}
+
+fn scale_to(node: &Node, cols: u16, rows: u16) -> Node {
+    match node {
+        Node::Leaf(leaf) => Node::Leaf(Leaf {
+            cols,
+            rows,
+            ..leaf.clone()
+        }),
+        Node::Split { axis, left, right } => {
+            let total = u32::from(along(*axis, cols, rows) - 1);
+            let (l, r) = (
+                u32::from(measure(left, *axis)),
+                u32::from(measure(right, *axis)),
+            );
+            let (min_l, min_r) = (
+                u32::from(min_along(left, *axis)),
+                u32::from(min_along(right, *axis)),
+            );
+            let share =
+                ((l * total * 2 + l + r) / (2 * (l + r))).clamp(min_l, total - min_r) as u16;
+            let rest = total as u16 - share;
+            let (left, right) = match axis {
+                Axis::Horizontal => (scale_to(left, share, rows), scale_to(right, rest, rows)),
+                Axis::Vertical => (scale_to(left, cols, share), scale_to(right, cols, rest)),
+            };
+            Node::Split {
+                axis: *axis,
+                left: Box::new(left),
+                right: Box::new(right),
+            }
+        }
+    }
+}
+
 fn along(axis: Axis, cols: u16, rows: u16) -> u16 {
     match axis {
         Axis::Horizontal => cols,
