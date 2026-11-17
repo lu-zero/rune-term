@@ -199,8 +199,9 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       when rmux is installed, attach it the same way. `--ssh HOST` runs
       either on a host as `ssh -T -o BatchMode=yes HOST tmux -C …`, each
       argument quoted for the far shell; the group is `session@host`.
-      Remote sessions are not listed in the menu, and a dropped link is
-      not reconnected; a saved profile reopens a remote one. Design:
+      The menu lists the sessions on each host a profile or an open group
+      names, from that host's last answer, asked again in the background
+      each time the menu opens. A dropped link is not reconnected. Design:
       [`multiplexer-sessions.md`](./multiplexer-sessions.md).
 - [ ] **24. Backend adapters and composition.** Fat/lean packaging (features
       and/or `rune-term-*` helpers) with progressive adapters: local, rmux

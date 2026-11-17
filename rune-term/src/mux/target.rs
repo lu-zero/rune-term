@@ -3,7 +3,7 @@
 
 use std::process::Command;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum Program {
     Tmux,
     Rmux,
@@ -26,7 +26,7 @@ impl Program {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Target {
     pub program: Program,
     /// An ssh destination, as `ssh` takes it: a host, `user@host`, or a config alias.
@@ -54,7 +54,7 @@ impl Target {
 
     /// The multiplexer with `args`. On a host, ssh joins its arguments into one
     /// line for the remote shell, so each is quoted. BatchMode keeps ssh from
-    /// waiting on a password prompt nobody can see.
+    /// waiting on a password prompt nobody can see, and the timeout on a host that is down.
     pub fn command(&self, args: &[String]) -> Command {
         let mut line: Vec<&str> = vec![self.program.name()];
         if let Some(socket) = &self.socket {
@@ -69,12 +69,22 @@ impl Target {
             }
             Some(host) => {
                 let mut command = Command::new("ssh");
-                command.args(["-T", "-o", "BatchMode=yes", "--", host]).arg(
-                    line.iter()
-                        .map(|arg| quote(arg))
-                        .collect::<Vec<_>>()
-                        .join(" "),
-                );
+                command
+                    .args([
+                        "-T",
+                        "-o",
+                        "BatchMode=yes",
+                        "-o",
+                        "ConnectTimeout=10",
+                        "--",
+                        host,
+                    ])
+                    .arg(
+                        line.iter()
+                            .map(|arg| quote(arg))
+                            .collect::<Vec<_>>()
+                            .join(" "),
+                    );
                 command
             }
         }
@@ -114,7 +124,18 @@ mod tests {
         assert_eq!(command.get_program(), "ssh");
         let mut args = args(&command);
         let line = args.pop().unwrap();
-        assert_eq!(args, ["-T", "-o", "BatchMode=yes", "--", "box"]);
+        assert_eq!(
+            args,
+            [
+                "-T",
+                "-o",
+                "BatchMode=yes",
+                "-o",
+                "ConnectTimeout=10",
+                "--",
+                "box"
+            ]
+        );
         let out = Command::new("/bin/sh")
             .args([
                 "-c",

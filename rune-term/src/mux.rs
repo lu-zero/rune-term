@@ -3,6 +3,7 @@
 //! mirrors the layout tmux sends back. rmux speaks the same protocol, and
 //! either can run on an ssh host.
 
+mod remote;
 mod target;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -978,28 +979,86 @@ pub(crate) fn menu(model: &Model, mut menu: PopupMenu) -> PopupMenu {
     menu
 }
 
-/// A program's submenu, when it is installed. Its ids are the program's name,
-/// a dash, and the action.
-fn program_menu(model: &Model, target: &Target, menu: PopupMenu) -> PopupMenu {
-    let Some(sessions) = sessions(target) else {
-        return menu;
-    };
-    let name = target.program.name();
-    // Greyed out, rather than gone, when every session is already open here.
-    let attach: Vec<PopupItem> = sessions
-        .iter()
-        .filter(|session| !attached_here(model, target, session))
-        .map(|session| PopupItem::new(format!("{name}-attach:{session}"), session.as_str()))
+/// The hosts a session profile or an open group names, for each program.
+fn remote_targets(model: &Model) -> Vec<Target> {
+    let mut targets: Vec<Target> = model
+        .config
+        .profiles
+        .values()
+        .filter_map(profile_target)
+        .map(|(target, _)| target)
+        .chain(model.muxes.iter().map(|mux| mux.target.clone()))
+        .filter(|target| target.host.is_some() && target.socket.is_none())
         .collect();
-    let open = !attach.is_empty();
-    let submenu = PopupMenu::new()
-        .item(PopupItem::new(format!("{name}-new"), "New Session"))
-        .item(PopupItem::new(
-            format!("{name}-named"),
-            "New Named Session…",
-        ))
-        .separator()
-        .submenu_enabled("Attach Session", PopupMenu::new().items(attach), open);
+    targets.sort_by(|a, b| (a.program.name(), &a.host).cmp(&(b.program.name(), &b.host)));
+    targets.dedup();
+    targets
+}
+
+/// A host's entry in its program's submenu: a new session there, and the sessions it last listed.
+fn host_menu(model: &Model, target: &Target, menu: PopupMenu) -> PopupMenu {
+    let host = target.host.as_deref().expect("a remote target");
+    let id = |action: &str| format!("{}-{action}@{host}", target.program.name());
+    let sessions = match remote::listing(target) {
+        remote::Listed::Missing => {
+            let missing = PopupItem::new(id("missing"), "Not Installed").enabled(false);
+            return menu.submenu(host, PopupMenu::new().item(missing));
+        }
+        remote::Listed::Asking => vec![PopupItem::new(id("asking"), "Listing…").enabled(false)],
+        remote::Listed::Unreachable => {
+            vec![PopupItem::new(id("unreachable"), "Unreachable").enabled(false)]
+        }
+        remote::Listed::Sessions(sessions) => sessions
+            .iter()
+            .filter(|session| !attached_here(model, target, session))
+            .map(|session| PopupItem::new(format!("{}:{session}", id("attach")), session.as_str()))
+            .collect(),
+    };
+    menu.submenu(
+        host,
+        PopupMenu::new()
+            .item(PopupItem::new(id("new"), "New Session"))
+            .separator()
+            .items(sessions),
+    )
+}
+
+/// A program's submenu, when it is installed here or a host names it. Its ids
+/// are the program's name, a dash, and the action.
+fn program_menu(model: &Model, target: &Target, menu: PopupMenu) -> PopupMenu {
+    let name = target.program.name();
+    let remote: Vec<Target> = remote_targets(model)
+        .into_iter()
+        .filter(|remote| remote.program == target.program)
+        .collect();
+    let submenu = match sessions(target) {
+        None if remote.is_empty() => return menu,
+        None => PopupMenu::new(),
+        Some(sessions) => {
+            // Greyed out, rather than gone, when every session is already open here.
+            let attach: Vec<PopupItem> = sessions
+                .iter()
+                .filter(|session| !attached_here(model, target, session))
+                .map(|session| PopupItem::new(format!("{name}-attach:{session}"), session.as_str()))
+                .collect();
+            let open = !attach.is_empty();
+            let submenu = PopupMenu::new()
+                .item(PopupItem::new(format!("{name}-new"), "New Session"))
+                .item(PopupItem::new(
+                    format!("{name}-named"),
+                    "New Named Session…",
+                ))
+                .separator()
+                .submenu_enabled("Attach Session", PopupMenu::new().items(attach), open);
+            match remote.is_empty() {
+                true => submenu,
+                false => submenu.separator(),
+            }
+        }
+    };
+    let submenu = remote
+        .iter()
+        .fold(submenu, |submenu, remote| host_menu(model, remote, submenu));
     menu.separator().submenu(name, submenu)
 }
 
@@ -1011,16 +1070,46 @@ pub(crate) fn menu_action(model: &mut Model, id: &str) -> bool {
     let Some(program) = Program::from_name(program) else {
         return false;
     };
-    let target = Target::local(program);
+    let Some((target, action)) = parse_action(program, action) else {
+        return false;
+    };
     match action {
-        "new" => open_session(model, &target, Session::New),
-        "named" => ask_name(model, target),
-        _ => match action.strip_prefix("attach:") {
-            Some(session) => open_session(model, &target, Session::Attach(session)),
-            None => return false,
-        },
+        Action::New => open_session(model, &target, Session::New),
+        Action::Named => ask_name(model, target),
+        Action::Attach(session) => open_session(model, &target, Session::Attach(session)),
     }
     true
+}
+
+enum Action<'a> {
+    New,
+    Named,
+    Attach(&'a str),
+}
+
+/// `new`, `named`, or `attach:SESSION`; a remote one has `@HOST` after the verb.
+/// tmux turns a `:` in a session name into `_`, so the last one splits.
+fn parse_action(program: Program, action: &str) -> Option<(Target, Action<'_>)> {
+    let (verb, session) = match action.rsplit_once(':') {
+        Some((verb, session)) => (verb, Some(session)),
+        None => (action, None),
+    };
+    let (verb, host) = match verb.split_once('@') {
+        Some((verb, host)) => (verb, Some(host.to_owned())),
+        None => (verb, None),
+    };
+    let action = match (verb, session) {
+        ("new", None) => Action::New,
+        ("named", None) => Action::Named,
+        ("attach", Some(session)) => Action::Attach(session),
+        _ => return None,
+    };
+    let target = Target {
+        program,
+        host,
+        socket: None,
+    };
+    Some((target, action))
 }
 
 /// One Hidden Windows entry. Its windows, or with several sessions a submenu each. A
@@ -1540,6 +1629,47 @@ mod tests {
         assert_eq!(target.program, Program::Rmux);
         assert_eq!(target.host.as_deref(), Some("box"));
         assert_eq!(session, None, "a blank session starts a new one each time");
+    }
+
+    #[test]
+    fn a_profile_host_lists_in_the_menu_once_it_answers() {
+        if sessions(&Target::local(Program::Tmux)).is_none() {
+            eprintln!("tmux is not installed: skipped");
+            return;
+        }
+        let mut model = crate::model::init();
+        model.config.profiles.insert(
+            "far".to_owned(),
+            crate::settings::Profile {
+                backend: "tmux".to_owned(),
+                host: Some("rune-term-test.invalid".to_owned()),
+                ..Default::default()
+            },
+        );
+        let host = "tmux-new@rune-term-test.invalid";
+        assert!(menu(&model, PopupMenu::new()).find(host).is_some());
+        let started = std::time::Instant::now();
+        while menu(&model, PopupMenu::new())
+            .find("tmux-unreachable@rune-term-test.invalid")
+            .is_none()
+        {
+            assert!(
+                started.elapsed() < std::time::Duration::from_secs(15),
+                "no answer"
+            );
+            thread::sleep(std::time::Duration::from_millis(50));
+        }
+    }
+
+    #[test]
+    fn a_remote_attach_names_its_host_and_session() {
+        let (target, action) = parse_action(Program::Rmux, "attach@me@box:a@b").unwrap();
+        assert_eq!(target.host.as_deref(), Some("me@box"));
+        assert!(matches!(action, Action::Attach("a@b")));
+        let (target, action) = parse_action(Program::Tmux, "attach:a@b").unwrap();
+        assert_eq!(target.host, None);
+        assert!(matches!(action, Action::Attach("a@b")));
+        assert!(parse_action(Program::Tmux, "unreachable@box").is_none());
     }
 
     #[test]
