@@ -41,7 +41,8 @@ The numbers are that plan's.
       tab closes with its last pane. On a session tab they kill the pane in
       tmux, and the window with its last pane, as iTerm2 and WezTerm do;
       so does the tab's close button. A session profile set to detach on
-      close hides the window instead, still running. The group label's
+      close hides the window instead, still running, as does General's
+      default for a profile that does not choose. The group label's
       menu detaches the session. A close that would end a program other than a shell
       asks first: a local pane by its foreground process group, a session's
       by `#{pane_current_command}`.
@@ -82,7 +83,9 @@ The numbers are that plan's.
       (Cmd+,) opens on its own, built with rune-kit and drawn in the terminal's
       own palette. It has a profiles list and a themes list that behave the
       same: apply, save, revert, duplicate, delete and create, with the theme
-      on screen the one the editor is showing. The editor shows Name, Author,
+      on screen the one the editor is showing. A General tab, with no list,
+      holds what is the app's: asking before a close ends a program, and what
+      closing a session tab does. The editor shows Name, Author,
       and Source, then Basic beside UI, then ANSI, Cube, and Gray. Those rows
       stack as the window narrows, and the cube flows by group. ANSI is the
       normal row, then the bright row. The cube and the

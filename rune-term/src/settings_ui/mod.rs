@@ -4,6 +4,7 @@
 //! config, writes it back, and pushes an applied change into the terminal
 //! window, which owns the running grid.
 
+pub mod general;
 pub mod profiles;
 pub mod themes;
 
@@ -63,6 +64,7 @@ pub enum Tab {
     #[default]
     Profiles,
     Themes,
+    General,
 }
 
 /// The settings window's state.
@@ -127,6 +129,7 @@ fn save_on_close(model: &mut SettingsModel, _tx: &mut Tx) {
     let changed = match model.tab {
         Tab::Profiles => profiles::commit(model),
         Tab::Themes => themes::commit(model),
+        Tab::General => false,
     };
     if changed && write_config(model) {
         model.previewed = None;
@@ -209,6 +212,7 @@ fn list_len(model: &SettingsModel) -> usize {
     match model.tab {
         Tab::Profiles => model.config.profiles.len(),
         Tab::Themes => themes::names(&model.config).len(),
+        Tab::General => 0,
     }
 }
 
@@ -217,6 +221,7 @@ fn row_key(model: &SettingsModel, index: usize) -> String {
     match model.tab {
         Tab::Profiles => format!("profile-{index}"),
         Tab::Themes => format!("theme-{index}"),
+        Tab::General => String::new(),
     }
 }
 
@@ -241,6 +246,7 @@ fn reload_draft(model: &mut SettingsModel) {
     match model.tab {
         Tab::Profiles => model.profile = profiles::ProfileDraft::from_selected(model),
         Tab::Themes => model.theme = themes::ThemeDraft::from_selected(model),
+        Tab::General => {}
     }
     preview_selected(model);
 }
@@ -250,6 +256,7 @@ fn preview_selected(model: &mut SettingsModel) {
     match model.tab {
         Tab::Profiles => profiles::preview_theme(model),
         Tab::Themes => themes::preview_selected(model),
+        Tab::General => restore(model),
     }
 }
 
@@ -259,6 +266,7 @@ pub fn show_tab(model: &mut SettingsModel, tab: Tab) {
     model.selected = match tab {
         Tab::Profiles => 0,
         Tab::Themes => themes::index_of(&model.config, &model.config.settings.theme),
+        Tab::General => 0,
     };
     model.status = None;
     reload_draft(model);
@@ -267,20 +275,18 @@ pub fn show_tab(model: &mut SettingsModel, tab: Tab) {
 pub fn view(model: &SettingsModel, cx: &mut Cx<SettingsModel>) -> El {
     let kit = kit(&previewed_palette(model));
     let mut overlays = Vec::new();
+    let mut main = row().w_full().grow(1.0).min_h(0.0);
+    if model.tab != Tab::General {
+        main = main
+            .child(sidebar(&kit, model))
+            .child(el().w(1.0).h_full().fill(kit.c.border_muted));
+    }
     let body = col()
         .w_full()
         .h_full()
         .fill(kit.c.page)
         .child(toolbar(&kit, model, cx))
-        .child(
-            row()
-                .w_full()
-                .grow(1.0)
-                .min_h(0.0)
-                .child(sidebar(&kit, model))
-                .child(el().w(1.0).h_full().fill(kit.c.border_muted))
-                .child(editor(&kit, model, &mut overlays, cx)),
-        );
+        .child(main.child(editor(&kit, model, &mut overlays, cx)));
     rune_kit::root(body, overlays)
 }
 
@@ -306,6 +312,14 @@ fn toolbar(kit: &Kit, model: &SettingsModel, cx: &mut Cx<SettingsModel>) -> El {
             model.tab == Tab::Themes,
             tab_h,
             Tab::Themes,
+        ))
+        .child(section(
+            kit,
+            "General",
+            "section-general",
+            model.tab == Tab::General,
+            tab_h,
+            Tab::General,
         ))
         .child(el().grow(1.0));
     if let Some(status) = model.status.clone() {
@@ -380,6 +394,7 @@ fn list(kit: &Kit, model: &SettingsModel) -> El {
                 list = list.child(theme_row(kit, model, index, name));
             }
         }
+        Tab::General => {}
     }
     list
 }
@@ -402,6 +417,7 @@ fn add_row(kit: &Kit) -> El {
         .on_press(move |m: &mut SettingsModel| match m.tab {
             Tab::Profiles => profiles::create(m),
             Tab::Themes => themes::create_theme(m),
+            Tab::General => {}
         })
         .child(text("+").font(kit.ty.ui_medium).color(kit.c.text_muted))
 }
@@ -566,6 +582,7 @@ fn editor(kit: &Kit, model: &SettingsModel, overlays: &mut Vec<El>, cx: &Cx<Sett
     match model.tab {
         Tab::Profiles => profiles::editor(kit, model, overlays, cx),
         Tab::Themes => themes::editor(kit, model, overlays),
+        Tab::General => general::editor(kit, model),
     }
 }
 
@@ -1239,15 +1256,44 @@ mod tests {
         assert_eq!(saved.host.as_deref(), Some("thalia"));
         assert_eq!(saved.session, None);
         assert!(shows(&rt, "On close"));
-        assert_eq!(saved.on_close, crate::settings::OnClose::Kill);
-        press(&mut rt, "profile-on-close-trigger");
-        press(&mut rt, "option1");
+        assert_eq!(saved.on_close, None);
+        press(&mut rt, "segment2");
         let dir = rt.state.config.dir();
         let written = ConfigFile::open(&dir).unwrap();
         assert_eq!(
             written.profile("Default").unwrap().on_close,
-            crate::settings::OnClose::Detach
+            Some(crate::settings::OnClose::Detach)
         );
+    }
+
+    #[test]
+    fn the_general_tab_saves_what_the_app_does_and_a_profile_overrides_it() {
+        use crate::settings::OnClose;
+        let mut rt = runtime(model("general"));
+        rt.frame(0.0);
+        press(&mut rt, "section-general");
+        assert_eq!(rt.state.tab, Tab::General);
+        assert!(rt.find("add-row").is_none(), "no list on this tab");
+        // The page slides in; it takes input where it lands.
+        rt.frame(2.0);
+        press(&mut rt, "confirm-close");
+        press(&mut rt, "segment1");
+        let written = ConfigFile::open(&rt.state.config.dir()).unwrap();
+        assert!(!written.settings.confirm_close);
+        assert_eq!(written.settings.on_close, OnClose::Detach);
+        assert_eq!(
+            written.on_close("Default"),
+            OnClose::Detach,
+            "a profile without its own follows"
+        );
+        let mut config = written;
+        config.profiles.get_mut("Default").unwrap().on_close = Some(OnClose::Kill);
+        assert_eq!(
+            config.on_close("Default"),
+            OnClose::Kill,
+            "a profile's own wins"
+        );
+        assert_eq!(config.on_close("missing"), OnClose::Detach);
     }
 
     #[test]

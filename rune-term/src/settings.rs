@@ -55,6 +55,8 @@ pub struct Settings {
     pub adaptive_theme: Option<AdaptiveTheme>,
     /// Ask before a close ends a program other than a shell at its prompt.
     pub confirm_close: bool,
+    /// What closing a session's tab or last pane does, unless its profile says.
+    pub on_close: OnClose,
 }
 
 impl Default for Settings {
@@ -65,6 +67,7 @@ impl Default for Settings {
             theme: DEFAULT_THEME.to_owned(),
             adaptive_theme: None,
             confirm_close: true,
+            on_close: OnClose::Kill,
         }
     }
 }
@@ -114,9 +117,10 @@ pub struct Profile {
     /// The session a "tmux" or "rmux" profile attaches, created when missing.
     /// Without one each open starts a new session.
     pub session: Option<String>,
-    /// What closing a "tmux" or "rmux" tab or pane does to the window.
-    #[serde(skip_serializing_if = "OnClose::is_kill")]
-    pub on_close: OnClose,
+    /// What closing a "tmux" or "rmux" tab or pane does to the window; without
+    /// one, [`Settings::on_close`] says.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub on_close: Option<OnClose>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -127,25 +131,6 @@ pub enum OnClose {
     Kill,
     /// The window keeps running, hidden, and the menu shows it again.
     Detach,
-}
-
-impl OnClose {
-    pub const NAMES: [&str; 2] = ["kill", "detach"];
-
-    fn is_kill(&self) -> bool {
-        *self == OnClose::Kill
-    }
-
-    pub fn name(self) -> &'static str {
-        Self::NAMES[self as usize]
-    }
-
-    pub fn from_name(name: &str) -> Self {
-        match name {
-            "detach" => OnClose::Detach,
-            _ => OnClose::Kill,
-        }
-    }
 }
 
 impl Default for Profile {
@@ -159,7 +144,7 @@ impl Default for Profile {
             cwd: None,
             host: None,
             session: None,
-            on_close: OnClose::Kill,
+            on_close: None,
         }
     }
 }
@@ -175,6 +160,13 @@ pub struct Resolved {
 }
 
 impl ConfigFile {
+    /// What closing a tab of a session opened with `profile` does.
+    pub fn on_close(&self, profile: &str) -> OnClose {
+        self.profile(profile)
+            .and_then(|profile| profile.on_close)
+            .unwrap_or(self.settings.on_close)
+    }
+
     pub fn load() -> Self {
         let dir = config_dir();
         match Self::open(&dir) {
