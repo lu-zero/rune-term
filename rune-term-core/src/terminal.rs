@@ -170,6 +170,7 @@ impl State {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         palette: Arc<Palette>,
+        face: &term_grid::Face,
         search_pattern: &str,
         hover_active_mods: bool,
     ) -> RenderReport {
@@ -204,6 +205,7 @@ impl State {
                     device,
                     queue,
                     palette.clone(),
+                    face,
                     search_pattern,
                     hover.as_ref(),
                     preedit.as_ref(),
@@ -217,6 +219,7 @@ impl State {
                     device,
                     queue,
                     palette.clone(),
+                    face,
                     "",
                     None,
                     None,

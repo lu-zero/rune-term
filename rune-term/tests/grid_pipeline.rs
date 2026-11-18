@@ -27,11 +27,25 @@ fn an_unsized_upload_leaves_no_cells_behind() {
     let format = wgpu::TextureFormat::Rgba8Unorm;
     let mut grid = GridRenderer::new(&gpu.device, &gpu.queue, format);
     let mut source = GrayGrid::new();
-    grid.upload(&gpu.device, &gpu.queue, &mut source, (16, 16), true);
+    grid.upload(
+        &gpu.device,
+        &gpu.queue,
+        &mut source,
+        &term_grid::Face::bundled(),
+        (16, 16),
+        true,
+    );
     assert!(!grid.is_empty(), "the grid holds the first shell's cells");
     // A shell with no size yet has no cells. The old ones belong to the last
     // shell, so the pane must not keep them.
-    grid.upload(&gpu.device, &gpu.queue, &mut source, (0, 0), true);
+    grid.upload(
+        &gpu.device,
+        &gpu.queue,
+        &mut source,
+        &term_grid::Face::bundled(),
+        (0, 0),
+        true,
+    );
     assert!(grid.is_empty(), "the pane kept the last shell's cells");
 }
 
@@ -43,7 +57,14 @@ fn render(gpu: &rune::render::Gpu, srgb_blend: bool) -> ([u8; 4], [u8; 4]) {
     };
     let mut grid = GridRenderer::new(&gpu.device, &gpu.queue, format);
     let mut source = GrayGrid::new();
-    grid.upload(&gpu.device, &gpu.queue, &mut source, (16, 16), true);
+    grid.upload(
+        &gpu.device,
+        &gpu.queue,
+        &mut source,
+        &term_grid::Face::bundled(),
+        (16, 16),
+        true,
+    );
     grid.publish(
         &gpu.queue,
         DrawSlot {

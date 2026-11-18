@@ -698,11 +698,7 @@ fn apply(model: &mut Model, config: &ConfigFile, tx: &mut Tx) {
         .map(|tab| tab.profile.clone())
         .unwrap_or_default();
     let resolved = config.resolve_profile(&profile);
-    let resized = (resolved.font_size - model.font_size).abs() > f32::EPSILON;
-    if resized {
-        model.font_size = resolved.font_size;
-        model.cell_points = crate::metrics::cell_points_for(resolved.font_size);
-    }
+    let resized = crate::metrics::apply_font(model, &resolved);
     model.palette = config.resolve_palette_for(&profile);
     model.config = config.clone();
     model.terminal.invalidate_theme();

@@ -125,6 +125,7 @@ fn an_unsized_shell_leaves_the_pane_empty() {
         &gpu.device,
         &gpu.queue,
         palette.clone(),
+        &term_grid::Face::bundled(),
         "",
         None,
         None,
@@ -142,6 +143,7 @@ fn an_unsized_shell_leaves_the_pane_empty() {
         &gpu.device,
         &gpu.queue,
         palette,
+        &term_grid::Face::bundled(),
         "",
         None,
         None,
@@ -207,6 +209,7 @@ fn every_pane_on_screen_fills_its_own_grid() {
         &gpu.device,
         &gpu.queue,
         rune_term_core::theme::default_palette(),
+        &term_grid::Face::bundled(),
         "",
         false,
     );

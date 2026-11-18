@@ -1,4 +1,4 @@
-//! macOS cascade for codepoints Cascadia Code NF does not cover.
+//! macOS cascade for codepoints the face does not cover, cascading from Cascadia Code NF.
 //! CoreText picks the system font, including color emoji, and draws it.
 //! The emoji file stays on disk.
 

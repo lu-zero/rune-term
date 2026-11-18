@@ -1,5 +1,5 @@
 //! One 2048² gray atlas, plus a color atlas for system emoji.
-//! The face is Cascadia Code NF, the file Rio ships. ASCII is rasterized up
+//! The face is the profile's family, Cascadia Code NF by default. ASCII is rasterized up
 //! front. Every other covered codepoint is rasterized on demand into the
 //! same cell. A codepoint the face does not cover is drawn by the macOS
 //! cascade. The face is OFL; see `CascadiaCode-LICENSE.txt`.
@@ -10,30 +10,29 @@ use swash::scale::image::Image;
 use swash::scale::{Render, ScaleContext, Source};
 use swash::{FontRef, NormalizedCoord};
 
-pub const ATLAS_SIZE: u32 = 2048;
+use crate::face::Face;
 
-/// Same bytes Sugarloaf embeds. Vendored so a clone builds without the Rio tree.
-const FONT: &[u8] = include_bytes!("../CascadiaCodeNF.ttf");
+pub const ATLAS_SIZE: u32 = 2048;
 
 /// Rio's default font size, in points.
 const DEFAULT_FACE_PX: f32 = 14.0;
 
-/// Cell pitch of the regular face at 14 points.
+/// Cell pitch of the bundled face at 14 points.
 pub fn face_cell() -> (f32, f32) {
-    face_cell_for(DEFAULT_FACE_PX)
+    face_cell_for(&Face::bundled(), DEFAULT_FACE_PX)
 }
 
-/// Cell pitch of the regular face at `font_size` points, in points. Width is the
+/// Cell pitch of `face` at `font_size` points, in points. Width is the
 /// ASCII advance. Height is Rio's line box: ascent, descent, and twice the
 /// line gap. Icon glyphs in the Nerd Font file are wider than that advance
 /// and do not set the cell.
-pub fn face_cell_for(font_size: f32) -> (f32, f32) {
+pub fn face_cell_for(face: &Face, font_size: f32) -> (f32, f32) {
     let font_size = if font_size.is_finite() && font_size > 0.0 {
         font_size
     } else {
         DEFAULT_FACE_PX
     };
-    let Some(font) = FontRef::from_index(FONT, 0) else {
+    let Some(font) = face.font() else {
         let scale = font_size / DEFAULT_FACE_PX;
         return (
             (8.0 * scale).ceil().max(1.0),
@@ -101,6 +100,7 @@ pub struct Atlas {
     body: f32,
     upem: f32,
     has_font: bool,
+    face: Face,
 }
 
 impl Atlas {
@@ -113,12 +113,17 @@ impl Atlas {
     /// The cell pitch is fixed by the winsize math, so the face scales
     /// down until it sits inside that pitch.
     pub fn with_cell(cell_w: u32, cell_h: u32) -> Self {
+        Self::with_face(Face::bundled(), cell_w, cell_h)
+    }
+
+    /// [`Self::with_cell`] in `face`.
+    pub fn with_face(face: Face, cell_w: u32, cell_h: u32) -> Self {
         let cell_w = cell_w.max(1);
         let cell_h = cell_h.max(1);
         let mut pixels = vec![0u8; (ATLAS_SIZE * ATLAS_SIZE) as usize];
         let mut ascii = [None; 95];
         let cols = (ATLAS_SIZE / cell_w).max(1);
-        let Some(font) = FontRef::from_index(FONT, 0) else {
+        let Some(font) = face.font() else {
             return Self::empty(pixels, ascii, (cell_w, cell_h), cols);
         };
         let coords = regular_coords(&font);
@@ -217,6 +222,7 @@ impl Atlas {
             body,
             upem,
             has_font: true,
+            face,
         }
     }
 
@@ -241,7 +247,12 @@ impl Atlas {
             body: 0.0,
             upem: 1.0,
             has_font: false,
+            face: Face::bundled(),
         }
+    }
+
+    pub fn face(&self) -> &Face {
+        &self.face
     }
 
     pub fn cell(&self) -> (u32, u32) {
@@ -312,7 +323,8 @@ impl Atlas {
         if !self.has_font || self.ppem <= 0.0 {
             return None;
         }
-        let font = FontRef::from_index(FONT, 0)?;
+        let face = self.face.clone();
+        let font = face.font()?;
         let gid = font.charmap().map(ch);
         if gid == 0 {
             return self.place_system(ch, cells);
@@ -388,7 +400,8 @@ impl Atlas {
     fn place_system(&mut self, ch: char, cells: u8) -> Option<GlyphRect> {
         #[cfg(target_os = "macos")]
         {
-            let drawn = crate::fallback::draw(FONT, ch, self.ppem.max(self.cell.1 as f32))?;
+            let drawn =
+                crate::fallback::draw(crate::face::BUNDLED, ch, self.ppem.max(self.cell.1 as f32))?;
             let origin = self.alloc(cells)?;
             let slot_w = u32::from(cells) * self.cell.0;
             let slot_h = self.cell.1;

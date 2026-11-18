@@ -96,9 +96,10 @@ The numbers are that plan's.
       names itself
       in a tooltip, and clicking one on a custom theme opens the color editor.
       The config is written back and the change is pushed into the running
-      terminal, where a font size change keeps the grid's cell count and snaps
-      the window. The font family is
-      stored but not yet applied to the atlas, and per-tab setting application
+      terminal, where a font size or family change keeps the grid's cell count
+      and snaps the window. The grid draws the profile's family, the regular
+      face of an installed one, and the bundled Cascadia Code NF when it is not
+      installed; the field is still free text. Per-tab setting application
       remains. Pictures: [`docs/config.md`](../config.md). Design:
       [`settings-profiles.md`](./settings-profiles.md). Follow-on:
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
