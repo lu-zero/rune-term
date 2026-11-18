@@ -243,6 +243,11 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
 
 What Rio still needs, sent and drafted, is [`rio/`](./rio/README.md).
 
+Until these land upstream, `[patch]` builds against forks: Rune and the winit
+it vendors from `lu-zero/rune` branch `physical-key-text`, and librio and
+teletypewriter from `lu-zero/rio` branch `rune-term-on-main`. wgpu is
+pinned at `=30.0.1`; Rune itself takes any 30.x.
+
 - [x] **4. Rune paired text.** `PhysicalInput::Key` carries `text` and
       `consumed_mods` on `lu-zero/rune` branch `physical-key-text`.
 - [x] **Wakeup order and focus reports.** Upstream: the host clears its
