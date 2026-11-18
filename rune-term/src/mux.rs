@@ -3,15 +3,17 @@
 //! mirrors the layout tmux sends back. rmux speaks the same protocol, and
 //! either can run on an ssh host.
 
+mod agent;
 mod remote;
 mod target;
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::io::{self, BufRead, Read, Write};
-use std::process::{ChildStdout, Stdio};
+use std::process::Stdio;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
+use std::time::Duration;
 
 use librio::{Surface, SurfaceDesc, SurfaceId};
 use rune::{PopupItem, PopupMenu, Tx};
@@ -27,7 +29,7 @@ pub(crate) use target::{Program, Target};
 
 /// What the command line asked to open once the window is up.
 enum Queued {
-    Session(Target, Vec<String>),
+    Session(Target, Via, Vec<String>),
     Profile(String),
 }
 
@@ -39,9 +41,29 @@ static NEXT_GROUP: AtomicU32 = AtomicU32::new(1 << 16);
 /// showing a hidden window redraws it from a capture.
 const EARLY_CAP: usize = 1 << 20;
 
+/// How a group reaches its multiplexer: a child's pipes, ssh's among them, or
+/// the agent's roaming link.
+#[derive(Clone)]
+pub(crate) enum Via {
+    Pipes,
+    Agent(agent::Shared),
+}
+
+impl Via {
+    pub fn of(transport: crate::settings::Transport) -> Self {
+        match transport {
+            crate::settings::Transport::Ssh => Via::Pipes,
+            crate::settings::Transport::Agent => Via::Agent(agent::Shared::default()),
+        }
+    }
+}
+
 pub(crate) struct Mux {
     pub group: TabGroupId,
     target: Target,
+    via: Via,
+    /// Reconnections tried since the link was last lost; each waits longer.
+    retries: u32,
     /// The session's name once the multiplexer reports it.
     session: Option<String>,
     /// The profile its tabs take.
@@ -82,8 +104,8 @@ struct Panes {
 }
 
 /// The session `setup` attaches.
-pub(crate) fn queue(target: Target, session: Session) {
-    *QUEUED.lock().expect("tmux") = Some(Queued::Session(target, session_args(session)));
+pub(crate) fn queue(target: Target, via: Via, session: Session) {
+    *QUEUED.lock().expect("tmux") = Some(Queued::Session(target, via, session_args(session)));
 }
 
 /// The profile `setup` opens: a session one attaches, any other is the first tab's.
@@ -122,8 +144,8 @@ fn notify(model: &mut Model, title: String, detail: String) {
 
 pub(crate) fn attach_queued(model: &mut Model) {
     match QUEUED.lock().expect("tmux").take() {
-        Some(Queued::Session(target, args)) => {
-            if let Err(err) = attach(model, &target, &args) {
+        Some(Queued::Session(target, via, args)) => {
+            if let Err(err) = attach_via(model, &target, via, &args) {
                 let title = format!("Could not start {}", target.program.name());
                 notify(model, title, err.to_string());
             }
@@ -242,14 +264,18 @@ fn profile_target(profile: &crate::settings::Profile) -> Option<(Target, Option<
 /// A profile whose backend is tmux or rmux: its session, here or on its host.
 /// False for any other backend.
 pub(crate) fn open_profile(model: &mut Model, name: &str) -> bool {
-    let Some((target, session)) = model.config.profile(name).and_then(profile_target) else {
+    let Some(profile) = model.config.profile(name) else {
+        return false;
+    };
+    let via = Via::of(profile.transport);
+    let Some((target, session)) = profile_target(profile) else {
         return false;
     };
     let session = match &session {
         Some(session) => Session::Named(session),
         None => Session::New,
     };
-    match attach(model, &target, &session_args(session)) {
+    match attach_via(model, &target, via, &session_args(session)) {
         Ok(group) => {
             if let Some(mux) = model.muxes.iter_mut().find(|mux| mux.group == group) {
                 mux.profile = name.to_owned();
@@ -352,6 +378,10 @@ fn save_profile(model: &mut Model, group: TabGroupId, name: &str) -> Result<(), 
     profile.backend = mux.target.program.name().to_owned();
     profile.host = mux.target.host.clone();
     profile.server = mux.target.socket.clone();
+    profile.transport = match mux.via {
+        Via::Pipes => crate::settings::Transport::Ssh,
+        Via::Agent(_) => crate::settings::Transport::Agent,
+    };
     profile.session = mux.session.clone();
     profile.shell = None;
     profile.cwd = None;
@@ -378,9 +408,26 @@ pub(crate) fn attach(
     target: &Target,
     args: &[String],
 ) -> io::Result<TabGroupId> {
+    attach_via(model, target, Via::Pipes, args)
+}
+
+fn attach_via(
+    model: &mut Model,
+    target: &Target,
+    via: Via,
+    args: &[String],
+) -> io::Result<TabGroupId> {
     let group = TabGroupId(NEXT_GROUP.fetch_add(1, Ordering::Relaxed));
     let panes = Arc::new(Mutex::new(Panes::default()));
-    let input = link(&model.shared, target, args, group, &panes)?;
+    let input = link(
+        &model.shared,
+        target,
+        &via,
+        args,
+        group,
+        &panes,
+        Duration::ZERO,
+    )?;
     model.tab_groups.push(TabGroup {
         id: group,
         label: target.label(target.program.name()),
@@ -390,6 +437,8 @@ pub(crate) fn attach(
     model.muxes.push(Mux {
         group,
         target: target.clone(),
+        via,
+        retries: 0,
         session: None,
         profile: model.config.default_profile_name().to_owned(),
         input,
@@ -409,55 +458,107 @@ pub(crate) fn attach(
 
 /// The multiplexer, with a thread writing what the group sends it and one
 /// reading what it says back into the group's panes.
+///
+/// The agent's link connects on a thread of its own, after `delay`, so a
+/// reconnection waits out its backoff without holding the window.
 fn link(
     shared: &Arc<Shared>,
     target: &Target,
+    via: &Via,
     args: &[String],
     group: TabGroupId,
     panes: &Arc<Mutex<Panes>>,
+    delay: Duration,
 ) -> io::Result<mpsc::Sender<Vec<u8>>> {
-    let mut child = target
-        .command(args)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
-    let mut stdin = child.stdin.take().expect("piped stdin");
-    let stdout = child.stdout.take().expect("piped stdout");
-    let stderr = child.stderr.take().expect("piped stderr");
-    let complaint = thread::Builder::new()
-        .name(format!("tmux-stderr-{}", group.0))
-        .spawn(move || last_line(stderr))?;
     let (input, queued) = mpsc::channel::<Vec<u8>>();
+    let reader = (Arc::clone(panes), Arc::clone(shared), input.clone());
+    let roam = match via {
+        Via::Pipes => None,
+        Via::Agent(roam) => Some(Arc::clone(roam)),
+    };
+    let Some(roam) = roam else {
+        let mut child = target
+            .command(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+        let stdin = child.stdin.take().expect("piped stdin");
+        let stdout = child.stdout.take().expect("piped stdout");
+        let stderr = child.stderr.take().expect("piped stderr");
+        let complaint = thread::Builder::new()
+            .name(format!("tmux-stderr-{}", group.0))
+            .spawn(move || last_line(stderr))?;
+        write(stdin, queued, group)?;
+        thread::Builder::new()
+            .name(format!("tmux-read-{}", group.0))
+            .spawn(move || {
+                let (panes, shared, input) = reader;
+                match read(stdout, &panes, &shared, &input, group) {
+                    Ok(reason) => {
+                        shared.push_mux(group, Update::Exit(reason));
+                        let _ = child.wait();
+                    }
+                    Err(err) => {
+                        let status = child.wait();
+                        let status =
+                            status.map_or_else(|err| err.to_string(), |status| status.to_string());
+                        let complaint = complaint.join().ok().flatten();
+                        shared.push_mux_lost(group, complaint.or(err).unwrap_or(status));
+                    }
+                }
+            })?;
+        return Ok(input);
+    };
+    let (target, args) = (target.clone(), args.to_vec());
+    let link = agent::supersede(&roam);
+    thread::Builder::new()
+        .name(format!("tmux-roam-{}", group.0))
+        .spawn(move || {
+            thread::sleep(delay);
+            let (panes, shared, input) = reader;
+            if !agent::current(&roam, link) {
+                return;
+            }
+            let client = match agent::connect(&target, &roam, &args) {
+                Ok(client) => client,
+                Err(_) if !agent::current(&roam, link) => return,
+                Err(why) => return shared.push_mux_lost(group, why),
+            };
+            if !agent::current(&roam, link) {
+                return;
+            }
+            let term_roam::Client { reader, writer, .. } = client;
+            if write(writer, queued, group).is_err() {
+                return shared.push_mux_lost(group, "no thread for the link".to_owned());
+            }
+            match read(reader, &panes, &shared, &input, group) {
+                Ok(reason) => shared.push_mux(group, Update::Exit(reason)),
+                Err(err) => shared.push_mux_lost(
+                    group,
+                    err.unwrap_or_else(|| "the agent closed the link".to_owned()),
+                ),
+            }
+        })?;
+    Ok(input)
+}
+
+/// Input for the multiplexer, in the order it was queued.
+fn write(
+    mut to: impl Write + Send + 'static,
+    queued: mpsc::Receiver<Vec<u8>>,
+    group: TabGroupId,
+) -> io::Result<()> {
     thread::Builder::new()
         .name(format!("tmux-write-{}", group.0))
         .spawn(move || {
             for bytes in queued {
-                if stdin.write_all(&bytes).is_err() {
+                if to.write_all(&bytes).is_err() {
                     break;
                 }
             }
         })?;
-    let reader = (Arc::clone(panes), Arc::clone(shared), input.clone());
-    thread::Builder::new()
-        .name(format!("tmux-read-{}", group.0))
-        .spawn(move || {
-            let (panes, shared, input) = reader;
-            match read(stdout, &panes, &shared, &input, group) {
-                Ok(reason) => {
-                    shared.push_mux(group, Update::Exit(reason));
-                    let _ = child.wait();
-                }
-                Err(err) => {
-                    let status = child.wait();
-                    let status =
-                        status.map_or_else(|err| err.to_string(), |status| status.to_string());
-                    let complaint = complaint.join().ok().flatten();
-                    shared.push_mux_lost(group, complaint.or(err).unwrap_or(status));
-                }
-            }
-        })?;
-    Ok(input)
+    Ok(())
 }
 
 /// What ssh or the multiplexer said last on stderr: why it stopped, when it did.
@@ -472,7 +573,7 @@ fn last_line(stderr: impl Read) -> Option<String> {
 
 /// The `%exit` reason, or, when the link ended without one, the read error if any.
 fn read(
-    mut stdout: ChildStdout,
+    mut stdout: impl Read,
     panes: &Mutex<Panes>,
     shared: &Shared,
     input: &mpsc::Sender<Vec<u8>>,
@@ -557,6 +658,12 @@ pub(crate) fn apply(model: &mut Model, group: TabGroupId, update: Update, tx: &m
     let Some(index) = model.muxes.iter().position(|mux| mux.group == group) else {
         return false;
     };
+    if model.muxes[index].retries > 0 {
+        model.muxes[index].retries = 0;
+        if let Some(entry) = model.tab_groups.iter_mut().find(|entry| entry.id == group) {
+            entry.lost = false;
+        }
+    }
     match update {
         Update::Output { .. } => false,
         Update::Session(name) => {
@@ -881,13 +988,21 @@ pub(crate) fn lost(model: &mut Model, group: TabGroupId, reason: &str, tx: &mut 
         ),
     };
     let reached = mux.session.is_some();
-    notify(model, title, reason.to_owned());
+    let roams = matches!(mux.via, Via::Agent(_));
+    let retries = mux.retries;
+    if retries == 0 {
+        notify(model, title, reason.to_owned());
+    }
     if !reached {
         end(model, index, tx);
         return true;
     }
     if let Some(entry) = model.tab_groups.iter_mut().find(|entry| entry.id == group) {
         entry.lost = true;
+    }
+    if roams {
+        model.muxes[index].retries += 1;
+        relink(model, index, Duration::from_secs(1 << retries.min(5)));
     }
     true
 }
@@ -898,32 +1013,48 @@ pub(crate) fn reconnect(model: &mut Model, index: usize) {
     let Some((at, _)) = window_of(model, index) else {
         return;
     };
+    if relink(model, at, Duration::ZERO) {
+        let group = model.muxes[at].group;
+        if let Some(entry) = model.tab_groups.iter_mut().find(|entry| entry.id == group) {
+            entry.lost = false;
+        }
+    }
+}
+
+/// A new link for the group's session, after `delay`. False when none could start.
+fn relink(model: &mut Model, at: usize, delay: Duration) -> bool {
     let mux = &model.muxes[at];
     let Some(session) = mux.session.clone() else {
-        return;
+        return false;
     };
     let args = session_args(Session::Named(&session));
-    let input = match link(&model.shared, &mux.target, &args, mux.group, &mux.panes) {
+    let linked = link(
+        &model.shared,
+        &mux.target,
+        &mux.via,
+        &args,
+        mux.group,
+        &mux.panes,
+        delay,
+    );
+    let input = match linked {
         Ok(input) => input,
         Err(err) => {
             let title = format!("Could not reconnect {}", mux.target.program.name());
             notify(model, title, err.to_string());
-            return;
+            return false;
         }
     };
     let mux = &model.muxes[at];
     for (pane, id) in &mux.surfaces {
         model.shared.route_to_mux(*id, input.clone(), *pane);
     }
-    let group = mux.group;
     let mux = &mut model.muxes[at];
     mux.input = input;
     mux.reported = None;
     mux.selected = None;
     mux.resized = None;
-    if let Some(entry) = model.tab_groups.iter_mut().find(|entry| entry.id == group) {
-        entry.lost = false;
-    }
+    true
 }
 
 /// tmux went away. Its tabs go with it.
@@ -2170,6 +2301,95 @@ mod tests {
     }
 
     #[test]
+    fn a_roaming_link_that_drops_reconnects_by_itself() {
+        if sessions(&Target::local(Program::Tmux)).is_none() {
+            eprintln!("tmux is not installed: skipped");
+            return;
+        }
+        let name = format!("rune-term-{}-roam", std::process::id());
+        let server = Server(Target {
+            socket: Some(name.clone()),
+            ..Target::local(Program::Tmux)
+        });
+        let started = server
+            .run(&[
+                "-f",
+                "/dev/null",
+                "new-session",
+                "-d",
+                "-s",
+                "roam",
+                "/bin/sh",
+            ])
+            .status();
+        assert!(started.is_ok_and(|status| status.success()));
+        let local = std::net::Ipv4Addr::LOCALHOST;
+        let (agent_server, ticket) = term_roam::bind((local, 0).into(), local.into()).unwrap();
+        let socket = name.clone();
+        let spawn: Arc<term_roam::Spawn> = Arc::new(move |args: &[String]| {
+            let mut command = term_roam::Command::new("tmux");
+            command.args(["-L", &socket]).args(args);
+            command
+        });
+        thread::spawn(move || agent_server.run(spawn, Duration::from_secs(5)));
+        let roam = agent::Shared::default();
+        roam.lock().unwrap().ticket = Some(ticket);
+
+        let mut model = crate::model::init();
+        delegate::setup(&mut model, Arc::new(|| {}));
+        let args = session_args(Session::Named("roam"));
+        let group = attach_via(&mut model, &server.0, Via::Agent(roam), &args).unwrap();
+        let label = server.0.label("roam");
+        let shows = |model: &mut Model, lost: bool| {
+            model
+                .tab_groups
+                .iter()
+                .any(|g| g.id == group && g.label == label && g.lost == lost)
+        };
+        assert!(
+            until(&mut model, |model| shows(model, false)),
+            "never attached"
+        );
+
+        // The control client dies without a word, as when the link under it does.
+        let killed = Command::new("pkill")
+            .args(["-KILL", "-f", "--", &format!("-L {name} -C")])
+            .status();
+        assert!(killed.is_ok_and(|status| status.success()));
+        assert!(until(&mut model, |model| shows(model, true)), "never lost");
+        assert!(
+            until(&mut model, |model| shows(model, false)),
+            "never came back"
+        );
+        assert_eq!(model.muxes[0].retries, 0);
+        assert!(model.tabs.iter().any(|tab| tab.group == Some(group)));
+
+        // Reconnect while a retry waits out its backoff: the retry yields.
+        Command::new("pkill")
+            .args(["-KILL", "-f", "--", &format!("-L {name} -C")])
+            .status()
+            .unwrap();
+        assert!(
+            until(&mut model, |model| shows(model, true)),
+            "never lost again"
+        );
+        let index = model
+            .tabs
+            .iter()
+            .position(|tab| tab.group == Some(group))
+            .unwrap();
+        reconnect(&mut model, index);
+        let deadline = Instant::now() + Duration::from_secs(4);
+        while Instant::now() < deadline {
+            delegate::poll(&mut model, 0.0, &mut Tx::default());
+            thread::sleep(Duration::from_millis(20));
+        }
+        let out = server.run(&["list-clients"]).output().unwrap();
+        let clients = String::from_utf8_lossy(&out.stdout).lines().count();
+        assert_eq!(clients, 1, "one control client, not one per link");
+    }
+
+    #[test]
     fn a_server_id_names_it_here_or_on_a_host() {
         let (target, action) = parse_action(Program::Tmux, "attach/work@me@box:a").unwrap();
         assert_eq!(target.host.as_deref(), Some("me@box"));
@@ -2182,6 +2402,12 @@ mod tests {
         );
         assert!(matches!(action, Action::New));
         assert!(parse_action(Program::Tmux, "host/work").is_none());
+        let (target, action) = parse_action(Program::Tmux, "new@::1").unwrap();
+        assert_eq!(target.host.as_deref(), Some("::1"));
+        assert!(matches!(action, Action::New));
+        let (target, action) = parse_action(Program::Tmux, "attach@::1:a").unwrap();
+        assert_eq!(target.host.as_deref(), Some("::1"));
+        assert!(matches!(action, Action::Attach("a")));
     }
 
     #[test]

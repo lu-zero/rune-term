@@ -18,6 +18,7 @@ path = "src/main.rs"
 rune-term-core.workspace = true
 term-control.workspace = true
 term-mux.workspace = true
+term-roam.workspace = true
 rune.workspace = true
 rune-kit.workspace = true
 librio.workspace = true

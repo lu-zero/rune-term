@@ -124,7 +124,7 @@ fn run(options: Options) -> Result<(), String> {
         linger,
     } = options;
     let spawn: Arc<term_roam::Spawn> = Arc::new(move |args: &[String]| {
-        let mut command = tokio::process::Command::new(&program);
+        let mut command = term_roam::Command::new(&program);
         if let Some(socket) = &socket {
             command.args(["-L", socket]);
         }

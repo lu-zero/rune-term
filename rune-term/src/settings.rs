@@ -117,6 +117,9 @@ pub struct Profile {
     /// The tmux or rmux server, by its `-L` name; without one, the default server.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub server: Option<String>,
+    /// How a "tmux" or "rmux" session on a host is reached.
+    #[serde(skip_serializing_if = "Transport::is_ssh")]
+    pub transport: Transport,
     /// The session a "tmux" or "rmux" profile attaches, created when missing.
     /// Without one each open starts a new session.
     pub session: Option<String>,
@@ -136,6 +139,22 @@ pub enum OnClose {
     Detach,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Transport {
+    /// Control mode over ssh, for as long as ssh's connection lasts.
+    #[default]
+    Ssh,
+    /// Through rune-term-agent, which ssh starts and QUIC reaches after, roaming.
+    Agent,
+}
+
+impl Transport {
+    fn is_ssh(&self) -> bool {
+        *self == Transport::Ssh
+    }
+}
+
 impl Default for Profile {
     fn default() -> Self {
         Self {
@@ -147,6 +166,7 @@ impl Default for Profile {
             cwd: None,
             host: None,
             server: None,
+            transport: Transport::Ssh,
             session: None,
             on_close: None,
         }
