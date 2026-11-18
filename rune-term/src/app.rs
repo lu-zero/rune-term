@@ -39,6 +39,7 @@ fn with_settings_window(mut app: App<Model>) -> App<Model> {
         let mut model = model::init();
         model.settings = Some(settings.clone());
         crate::mux::prefetch(&model);
+        term_grid::monospace_families();
         model
     })
 }

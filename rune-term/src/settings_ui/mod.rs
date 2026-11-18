@@ -1119,18 +1119,15 @@ mod tests {
         rt.pointer_down(x, y);
         rt.pointer_up(x, y);
         rt.frame(0.0);
-        // Name, then the theme menu, then the font family.
-        rt.key(rune::KeyEvent {
-            key: Key::Tab,
-            mods: rune::Mods::default(),
-        });
-        rt.frame(0.0);
-        rt.key(rune::KeyEvent {
-            key: Key::Tab,
-            mods: rune::Mods::default(),
-        });
-        rt.frame(0.0);
-        rt.state.profile.font_family.text = "Iosevka".to_owned();
+        // Name, then the theme menu, the font family, and the font size.
+        for _ in 0..3 {
+            rt.key(rune::KeyEvent {
+                key: Key::Tab,
+                mods: rune::Mods::default(),
+            });
+            rt.frame(0.0);
+        }
+        rt.state.profile.font_size.text = "16".to_owned();
         rt.state.profile.shell_program.text = "zsh".to_owned();
         rt.key(rune::KeyEvent {
             key: Key::Enter,
@@ -1138,7 +1135,7 @@ mod tests {
         });
         rt.frame(0.0);
         let profile = rt.state.config.profiles.get("Default").expect("profile");
-        assert_eq!(profile.font_family, "Iosevka");
+        assert_eq!(profile.font_size, Some(16.0));
         assert!(profile.shell.is_none());
         assert_eq!(rt.state.profile.shell_program.text, "zsh");
         assert!(rt.state.profile.is_dirty());
@@ -1149,7 +1146,7 @@ mod tests {
             rt.state.status.as_deref(),
             Some("'nope' is not a font size")
         );
-        assert!(rt.state.config.profiles["Default"].font_size.is_none());
+        assert_eq!(rt.state.config.profiles["Default"].font_size, Some(16.0));
 
         rt.state.profile.cwd.text = "  /tmp ".to_owned();
         profiles::reflect_cwd(&mut rt.state);

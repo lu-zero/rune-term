@@ -1,7 +1,9 @@
 //! The font file the grid draws with: the bundled Cascadia Code NF, or an installed family.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
+use std::thread;
 
 use fontique::{Blob, Collection, CollectionOptions, FontStyle, FontWeight, FontWidth};
 use swash::FontRef;
@@ -61,13 +63,62 @@ impl Face {
     pub(crate) fn font(&self) -> Option<FontRef<'_>> {
         FontRef::from_index(self.data.data(), self.index as usize)
     }
+
+    /// Whether `i`, `M` and `0` advance alike. The `post` table's fixed-pitch flag is not
+    /// trusted: some monospaced families leave it unset.
+    fn monospaced(&self) -> bool {
+        let Some(font) = self.font() else {
+            return false;
+        };
+        let (charmap, metrics) = (font.charmap(), font.glyph_metrics(&[]));
+        let glyphs = ['i', 'M', '0'].map(|ch| charmap.map(ch));
+        if glyphs.contains(&0) {
+            return false;
+        }
+        let [i, m, zero] = glyphs.map(|glyph| metrics.advance_width(glyph));
+        i > 0.0 && i == m && m == zero
+    }
 }
 
-fn installed(family: &str) -> Option<Face> {
+/// The bundled family, then the installed families whose regular face is monospaced, sorted.
+/// None until the scan the first call starts in the background has finished.
+pub fn monospace_families() -> Option<&'static [String]> {
+    static FAMILIES: OnceLock<Vec<String>> = OnceLock::new();
+    static STARTED: AtomicBool = AtomicBool::new(false);
+    if !STARTED.swap(true, Ordering::AcqRel) {
+        thread::spawn(|| FAMILIES.get_or_init(scan));
+    }
+    FAMILIES.get().map(Vec::as_slice)
+}
+
+fn scan() -> Vec<String> {
     let mut collection = Collection::new(CollectionOptions {
         shared: false,
         system_fonts: true,
     });
+    let names: Vec<String> = collection.family_names().map(str::to_owned).collect();
+    let mut families: Vec<String> = names
+        .into_iter()
+        // A dot names a face the system keeps for itself.
+        .filter(|name| !name.starts_with('.') && name != BUNDLED_FAMILY)
+        .filter(|name| installed_in(&mut collection, name).is_some_and(|face| face.monospaced()))
+        .collect();
+    families.sort_by_key(|name| name.to_lowercase());
+    families.insert(0, BUNDLED_FAMILY.to_owned());
+    families
+}
+
+fn installed(family: &str) -> Option<Face> {
+    installed_in(
+        &mut Collection::new(CollectionOptions {
+            shared: false,
+            system_fonts: true,
+        }),
+        family,
+    )
+}
+
+fn installed_in(collection: &mut Collection, family: &str) -> Option<Face> {
     let info = collection.family_by_name(family)?;
     let font = info.match_font(
         FontWidth::NORMAL,
@@ -92,6 +143,15 @@ mod tests {
         let face = Face::load("rune-term no such family");
         assert_eq!(face, Face::bundled());
         assert_eq!(face.family(), BUNDLED_FAMILY);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_list_is_the_bundled_family_then_the_monospaced_ones() {
+        let families = scan();
+        assert_eq!(families[0], BUNDLED_FAMILY);
+        assert!(families.iter().any(|f| f == "Menlo"), "{families:?}");
+        assert!(!families.iter().any(|f| f == "Helvetica"), "{families:?}");
     }
 
     #[cfg(target_os = "macos")]

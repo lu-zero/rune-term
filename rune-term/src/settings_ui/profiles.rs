@@ -2,8 +2,9 @@
 //! on it. A field reaches the config when Enter is pressed or it loses focus.
 //! A half-typed value stays in the draft.
 
-use rune::{col, row, Cx, El, ScrollSpec, TextEdit};
-use rune_kit::{Field, Kit, SegmentedControl, Select, SelectAppearance, TextInput};
+use font_picker::FontPicker;
+use rune::{col, el, row, Cx, El, ScrollSpec, TextEdit};
+use rune_kit::{ComboboxState, Field, Kit, SegmentedControl, Select, SelectAppearance, TextInput};
 
 use super::SettingsModel;
 use crate::settings::{self, Profile, ShellSpec};
@@ -15,7 +16,8 @@ pub struct ProfileDraft {
     /// The name the profile has in the config, before this edit.
     pub original: String,
     pub name: TextEdit,
-    pub font_family: TextEdit,
+    pub font_family: String,
+    pub font_picker: ComboboxState,
     pub font_size: TextEdit,
     /// The theme's name; empty means the global theme.
     pub theme: String,
@@ -68,7 +70,8 @@ impl ProfileDraft {
             saved: profile.clone(),
             original: name.to_owned(),
             name: TextEdit::new(name),
-            font_family: TextEdit::new(profile.font_family.clone()),
+            font_family: profile.font_family.clone(),
+            font_picker: ComboboxState::default(),
             font_size: TextEdit::new(profile.font_size.map(format_size).unwrap_or_default()),
             theme: profile.theme.clone().unwrap_or_default(),
             theme_open: false,
@@ -119,7 +122,7 @@ impl ProfileDraft {
         if !settings::name_ok(&name) {
             return Err(format!("'{name}' cannot be a file name"));
         }
-        let font_family = self.font_family.text.trim().to_owned();
+        let font_family = self.font_family.trim().to_owned();
         if font_family.is_empty() {
             return Err("A profile needs a font family".to_owned());
         }
@@ -242,16 +245,7 @@ pub fn editor(
                 .child(
                     Field::new()
                         .label("Font family")
-                        .control(
-                            super::when_finished(
-                                TextInput::new(&draft.font_family)
-                                    .placeholder("Cascadia Code NF")
-                                    .width(None)
-                                    .on_edit(|m: &mut SettingsModel| &mut m.profile.font_family),
-                                reflect_font_family,
-                            )
-                            .build(kit),
-                        )
+                        .control(font_picker(kit, model, overlays, cx))
                         .build(kit)
                         .grow(1.0)
                         .min_w(0.0),
@@ -654,13 +648,34 @@ fn reflect_field(
     }
 }
 
-fn reflect_font_family(model: &mut SettingsModel) {
+/// The families the grid can draw, as the field the box around it leaves room for.
+fn font_picker(
+    kit: &Kit,
+    model: &SettingsModel,
+    overlays: &mut Vec<El>,
+    cx: &Cx<SettingsModel>,
+) -> El {
+    let mut picker = FontPicker::new(
+        "profile-font",
+        &model.profile.font_picker,
+        term_grid::monospace_families(),
+        |m: &mut SettingsModel| &mut m.profile.font_picker,
+    )
+    .current(&model.profile.font_family)
+    .note(term_grid::BUNDLED_FAMILY, "Bundled")
+    .on_choose(|m: &mut SettingsModel, family, _tx| choose_font_family(m, family));
+    if let Some([width, _]) = cx.layout_size("profile-font-box") {
+        picker = picker.width(width);
+    }
+    el().key("profile-font-box")
+        .w_full()
+        .child(picker.build(kit, overlays))
+}
+
+pub(crate) fn choose_font_family(model: &mut SettingsModel, family: &str) {
     reflect_field(model, |draft, profile| {
-        let family = draft.font_family.text.trim().to_owned();
-        if family.is_empty() {
-            return Err("A profile needs a font family".to_owned());
-        }
-        show(&mut draft.font_family, &family);
+        draft.font_family = family.to_owned();
+        let family = family.to_owned();
         let changed = profile.font_family != family;
         profile.font_family = family;
         Ok(changed)

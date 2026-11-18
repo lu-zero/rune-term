@@ -99,7 +99,9 @@ The numbers are that plan's.
       terminal, where a font size or family change keeps the grid's cell count
       and snaps the window. The grid draws the profile's family, the regular
       face of an installed one, and the bundled Cascadia Code NF when it is not
-      installed; the field is still free text. Per-tab setting application
+      installed. The editor picks it from the bundled family and the installed
+      monospaced ones, searchable, with `font-picker` over rune-kit's
+      `Combobox`. Per-tab setting application
       remains. Pictures: [`docs/config.md`](../config.md). Design:
       [`settings-profiles.md`](./settings-profiles.md). Follow-on:
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
