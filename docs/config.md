@@ -62,7 +62,12 @@ args = ["-l"]
 - `font_family`: default `"Cascadia Code NF"`. Stored and selectable. The live atlas does not switch face yet; font size does apply.
 - `font_size` (optional): overrides `settings.font_size`.
 - `theme` (optional): a theme name. When it is omitted, the profile inherits. With both `adaptive_theme` names set, that is the desktop appearance, and the field reads `Inherit (Appearance)`. Otherwise it is `settings.theme`, and the field reads `Inherit` and that name. A named theme wins over both. The menu lists theme names. Inherit is the empty value.
-- `backend`: `"local"` only.
+- `backend`: `"local"`, a shell here, or `"tmux"` or `"rmux"`, a session whose windows are a group of tabs. For a session:
+  - `host` (optional): what `ssh` takes; without one the session runs here.
+  - `server` (optional): the multiplexer's `-L` name; without one, its default server. Letters, digits, `-`, `_` and `.`.
+  - `session` (optional): the session to attach, created when missing; without one each open starts a new session.
+  - `transport` (optional): `"ssh"`, the default, or `"agent"`, through rune-term-agent, which roams. See [`agent.md`](agent.md).
+  - `on_close` (optional): `"kill"` or `"detach"`, what closing a tab does to its window; without one, `settings.on_close`.
 - `cwd` (optional): working directory for sessions created with this profile.
 - `[shell]` (optional): `program` and `args`. When `program` is empty and `args` is empty, the platform shell is used.
 

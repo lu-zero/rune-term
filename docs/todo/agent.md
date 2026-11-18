@@ -113,7 +113,8 @@ rune-term ──QUIC, roams──▶ rune-term-agent (HOST) ──rmux -C, rmux-
 - **Wire format.** One crate (`term-roam`) for the frames both sides speak, so
   the local host and the remote agent share it if phase 4 takes the keyframe
   route.
-- **Install.** The user installs the agent on the host, as mosh-server. Copying
-  it over ssh on first use is later, if at all.
+- **Install.** Decided: the host builds its own checkout, `just
+  agent-install`, as [`../agent.md`](../agent.md) describes. Copying a binary over ssh
+  on first use is later, if at all.
 - **Packaging.** `rune-term-agent` is a binary without GUI dependencies, the
   lean half of status item 24.
