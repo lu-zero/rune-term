@@ -61,6 +61,11 @@ struct Attach {
     #[arg(long = "host", value_name = "HOST")]
     host: Option<String>,
 
+    /// Reach the session through rune-term-agent, which follows this machine to a
+    /// new network. ssh only starts it.
+    #[arg(long = "roam")]
+    roam: bool,
+
     /// Attach a session of the server NAME, tmux's `-L`, rather than the default server.
     #[arg(long = "server", value_name = "NAME")]
     server: Option<String>,
@@ -134,7 +139,7 @@ impl Gui {
             }
             Some(Command::Attach(_)) | None => {}
         }
-        use crate::mux::{Program, Session, Target};
+        use crate::mux::{Program, Session, Target, Via};
         match (self.command, self.profile) {
             (Some(Command::Attach(_)), Some(_)) => {
                 eprintln!("rune-term: --profile names what to open; drop it or attach");
@@ -144,6 +149,7 @@ impl Gui {
                 Some(Command::Attach(Attach {
                     rmux,
                     host,
+                    roam,
                     server,
                     session,
                 })),
@@ -155,7 +161,11 @@ impl Gui {
                     host,
                     socket: server,
                 };
-                crate::mux::queue(target, Session::Named(&session));
+                let transport = match roam {
+                    true => crate::settings::Transport::Agent,
+                    false => crate::settings::Transport::Ssh,
+                };
+                crate::mux::queue(target, Via::of(transport), Session::Named(&session));
             }
             (_, Some(name)) => crate::mux::queue_profile(name),
             (_, None) => {}
@@ -185,12 +195,13 @@ mod tests {
             Attach {
                 rmux: false,
                 host: None,
+                roam: false,
                 server: None,
                 session: "work".to_owned()
             }
         );
         let Some(Command::Attach(attach)) = parse(&[
-            "attach", "--rmux", "--host", "thalia", "--server", "w", "work",
+            "attach", "--rmux", "--host", "thalia", "--roam", "--server", "w", "work",
         ])
         .command
         else {
@@ -201,6 +212,7 @@ mod tests {
             Attach {
                 rmux: true,
                 host: Some("thalia".to_owned()),
+                roam: true,
                 server: Some("w".to_owned()),
                 session: "work".to_owned()
             }

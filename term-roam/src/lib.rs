@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 
 pub use client::{connect, Client, Reader, Writer};
 pub use server::{bind, Server, Spawn};
+/// What a [`Spawn`] makes: the agent runs it on its own runtime.
+pub use tokio::process::Command;
 
 const ALPN: &[u8] = b"rune-term-agent/1";
 const SERVER_NAME: &str = "rune-term-agent";

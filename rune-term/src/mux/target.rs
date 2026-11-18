@@ -75,6 +75,11 @@ impl Target {
             line.extend(["-L", socket]);
         }
         line.extend(args.iter().map(String::as_str));
+        self.run(&line)
+    }
+
+    /// `line`, a program and its arguments, here or on the host.
+    pub fn run(&self, line: &[&str]) -> Command {
         match &self.host {
             None => {
                 let mut command = Command::new(line[0]);

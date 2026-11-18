@@ -31,6 +31,7 @@ pub struct ProfileDraft {
     pub server: TextEdit,
     pub session: TextEdit,
     pub on_close: Option<settings::OnClose>,
+    pub transport: settings::Transport,
 }
 
 impl ProfileDraft {
@@ -79,6 +80,7 @@ impl ProfileDraft {
             server: TextEdit::new(profile.server.clone().unwrap_or_default()),
             session: TextEdit::new(profile.session.clone().unwrap_or_default()),
             on_close: profile.on_close,
+            transport: profile.transport,
         }
     }
 
@@ -158,6 +160,7 @@ impl ProfileDraft {
                 server,
                 session: non_empty(&self.session.text),
                 on_close: self.on_close,
+                transport: self.transport,
             },
         ))
     }
@@ -311,12 +314,21 @@ pub fn editor(
                 ))),
         )
         .child(
-            row().w_full().gap(12.0).child(half(
-                Field::new()
-                    .label("On close")
-                    .control(on_close(kit, model.profile.on_close))
-                    .build(kit),
-            )),
+            row()
+                .w_full()
+                .gap(12.0)
+                .child(half(
+                    Field::new()
+                        .label("On close")
+                        .control(on_close(kit, model.profile.on_close))
+                        .build(kit),
+                ))
+                .child(half(
+                    Field::new()
+                        .label("Transport")
+                        .control(transport(kit, model.profile.transport))
+                        .build(kit),
+                )),
         )
     } else {
         body.child(
@@ -435,6 +447,27 @@ fn on_close(kit: &Kit, current: Option<settings::OnClose>) -> El {
             reflect_field(m, |draft, profile| {
                 let changed = profile.on_close != draft.on_close;
                 profile.on_close = draft.on_close;
+                Ok(changed)
+            });
+        })
+        .build(kit)
+}
+
+/// ssh for as long as its connection lasts, or the agent, which roams.
+fn transport(kit: &Kit, current: settings::Transport) -> El {
+    use settings::Transport;
+    let at = match current {
+        Transport::Ssh => 0,
+        Transport::Agent => 1,
+    };
+    SegmentedControl::new(&["ssh", "Agent"], Some(at))
+        .label("Transport")
+        .width(None)
+        .on_pick(|m: &mut SettingsModel, at, _tx| {
+            m.profile.transport = [Transport::Ssh, Transport::Agent][at];
+            reflect_field(m, |draft, profile| {
+                let changed = profile.transport != draft.transport;
+                profile.transport = draft.transport;
                 Ok(changed)
             });
         })

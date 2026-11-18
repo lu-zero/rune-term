@@ -4,7 +4,7 @@
 |---|---|
 | Author | _draft_ |
 | Date | 2026-11-18 |
-| Status | Decided in outline; phase 0 done, phase 1 next |
+| Status | Decided in outline; phases 0 and 1 built |
 | Scope | A lean process that holds terminals for the UI: on an ssh host, over a roaming link; here, across UI restarts |
 
 ## Goal

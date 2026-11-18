@@ -12,5 +12,4 @@ path = "src/main.rs"
 
 [dependencies]
 term-roam.workspace = true
-tokio.workspace = true
 winnow-args.workspace = true
