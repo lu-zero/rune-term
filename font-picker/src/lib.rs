@@ -1,241 +1,101 @@
-//! A small font picker/list helper for Rune UIs.
-//!
-//! `rune-term` currently renders with a bundled/known font configuration, so
-//! this crate focuses on selecting a font family name from available choices.
+//! A font family picker in rune-kit's shape: a [`Combobox`] over the families an app can draw,
+//! which keeps the chosen family listed while the families are still being found.
 
-use rune::{col, el, text, Color, El, Key, KeyEvent, ScrollSpec, TextStyle, Tx};
+use std::rc::Rc;
 
-/// A simple in-memory font source.
-#[derive(Clone, Debug, Default)]
-pub struct FontCatalog {
-    pub families: Vec<String>,
+use rune::{El, Tx};
+use rune_kit::{Combobox, ComboboxOption, ComboboxState, Kit};
+
+type Access<S> = Rc<dyn for<'a> Fn(&'a mut S) -> &'a mut ComboboxState>;
+type Choose<S> = Rc<dyn Fn(&mut S, &str, &mut Tx)>;
+
+/// `FontPicker::new("font", &s.fonts, families, |s: &mut App| &mut s.fonts)`, where
+/// `families` is `None` while the app is still finding them.
+pub struct FontPicker<S> {
+    key: String,
+    state: ComboboxState,
+    families: Option<Vec<String>>,
+    access: Access<S>,
+    current: String,
+    notes: Vec<(String, String)>,
+    width: f32,
+    choose: Option<Choose<S>>,
 }
 
-impl FontCatalog {
-    pub fn new(mut families: Vec<String>) -> Self {
-        families.sort();
-        families.dedup();
-        Self { families }
-    }
-
-    /// Built-in families known to rune-term today.
-    pub fn builtin() -> Self {
-        Self::new(vec![
-            "Cascadia Code NF".to_owned(),
-            "Monaco".to_owned(),
-            "Menlo".to_owned(),
-            "SF Mono".to_owned(),
-        ])
-    }
-
-    /// Enumerate system font families (when available), with common slot names
-    /// prepended. Falls back to [`Self::builtin`] on unsupported platforms or if
-    /// enumeration yields nothing.
-    pub fn system() -> Self {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            use std::sync::OnceLock;
-            static CATALOG: OnceLock<FontCatalog> = OnceLock::new();
-            CATALOG
-                .get_or_init(|| {
-                    use fontique::{Collection, CollectionOptions};
-                    let mut collection = Collection::new(CollectionOptions {
-                        shared: false,
-                        system_fonts: true,
-                    });
-                    let mut families: Vec<String> =
-                        collection.family_names().map(str::to_owned).collect();
-                    families.sort();
-                    families.dedup();
-                    if !families.is_empty() {
-                        let mut all = vec![
-                            "System Mono (platform)".to_owned(),
-                            "Mono (app slot)".to_owned(),
-                            "Sans (app slot)".to_owned(),
-                        ];
-                        all.extend(families);
-                        Self::new(all)
-                    } else {
-                        let mut catalog = Self::builtin();
-                        catalog
-                            .families
-                            .insert(0, "System Mono (platform)".to_owned());
-                        catalog
-                    }
-                })
-                .clone()
-        }
-        #[cfg(target_arch = "wasm32")]
-        {
-            let mut catalog = Self::builtin();
-            catalog
-                .families
-                .insert(0, "System Mono (platform)".to_owned());
-            catalog
+impl<S: 'static> FontPicker<S> {
+    pub fn new(
+        key: impl Into<String>,
+        state: &ComboboxState,
+        families: Option<&[String]>,
+        access: impl for<'a> Fn(&'a mut S) -> &'a mut ComboboxState + 'static,
+    ) -> Self {
+        Self {
+            key: key.into(),
+            state: state.clone(),
+            families: families.map(<[String]>::to_vec),
+            access: Rc::new(access),
+            current: String::new(),
+            notes: Vec::new(),
+            width: 280.0,
+            choose: None,
         }
     }
 
-    pub fn filter(&self, query: &str) -> Vec<String> {
-        let q = query.trim().to_lowercase();
-        if q.is_empty() {
-            return self.families.clone();
-        }
-        self.families
-            .iter()
-            .filter(|f| f.to_lowercase().contains(&q))
-            .cloned()
-            .collect()
+    /// The chosen family. It is listed even when `families` lacks it.
+    pub fn current(mut self, family: &str) -> Self {
+        self.current = family.to_owned();
+        self
     }
-}
 
-fn family_for(name: &str) -> rune::tok::Family {
-    match name {
-        "System Mono (platform)" => rune::tok::Family::SystemMono,
-        "Mono (app slot)" => rune::tok::Family::Mono,
-        "Sans (app slot)" => rune::tok::Family::Sans,
-        _ => {
-            let name: &'static str = Box::leak(name.to_owned().into_boxed_str());
-            rune::tok::Family::Named(name)
-        }
+    /// Text after `family`'s name in the list ("Bundled").
+    pub fn note(mut self, family: &str, note: &str) -> Self {
+        self.notes.push((family.to_owned(), note.to_owned()));
+        self
     }
-}
 
-/// Render a list of font choices where each row previews its font.
-///
-/// `active` is the highlighted item. Click or Enter confirms (`on_pick`),
-/// arrow keys move the highlight (`on_active`).
-pub fn family_list<S, Pick, Active>(
-    families: &[String],
-    active: &str,
-    on_pick: Pick,
-    on_active: Active,
-) -> El
-where
-    S: 'static,
-    Pick: Fn(&mut S, &str) + 'static + Clone,
-    Active: Fn(&mut S, &str) + 'static + Clone,
-{
-    let mut items = col().w_full().gap(2.0);
-    for family in families {
-        let is_active = family == active;
-        let pick = on_pick.clone();
-        let _activate = &on_active;
-        let label = family.clone();
-        let style =
-            TextStyle::new(14.0, if is_active { 500.0 } else { 400.0 }).family(family_for(&label));
-        let row = el()
-            .key(format!("font-item-{}", label.replace(' ', "_")))
-            .role("option")
-            .w_full()
-            .h(32.0)
-            .items_center()
-            .pl(10.0)
-            .pr(10.0)
-            .radius(4.0)
-            .fill(if is_active {
-                Color {
-                    r: 0.2,
-                    g: 0.35,
-                    b: 0.55,
-                    a: 1.0,
+    /// The field's and the list's width, 280 by default.
+    pub fn width(mut self, width: f32) -> Self {
+        self.width = width;
+        self
+    }
+
+    pub fn on_choose(mut self, choose: impl Fn(&mut S, &str, &mut Tx) + 'static) -> Self {
+        self.choose = Some(Rc::new(choose));
+        self
+    }
+
+    pub fn build(self, k: &Kit, layer: &mut Vec<El>) -> El {
+        let listing = self.families.is_none();
+        let mut families = self.families.unwrap_or_default();
+        if !self.current.is_empty() && !families.contains(&self.current) {
+            families.insert(0, self.current.clone());
+        }
+        let mut options: Vec<ComboboxOption> = families
+            .into_iter()
+            .map(|family| {
+                let mut option = ComboboxOption::new(&family, &family);
+                if let Some((_, note)) = self.notes.iter().find(|(f, _)| *f == family) {
+                    option.detail = note.clone();
                 }
-            } else {
-                Color::TRANSPARENT
+                option
             })
-            .hover(if is_active {
-                Color {
-                    r: 0.2,
-                    g: 0.35,
-                    b: 0.55,
-                    a: 1.0,
-                }
-            } else {
-                Color {
-                    r: 1.0,
-                    g: 1.0,
-                    b: 1.0,
-                    a: 0.06,
-                }
-            })
-            .on_press({
-                let pick = pick.clone();
-                let label = label.clone();
-                move |s: &mut S| pick(s, &label)
-            })
-            .child(
-                text(format!("{label}  —  AaBbCc 0123 λ"))
-                    .font(style)
-                    .color(Color::WHITE)
-                    .truncate(),
-            );
-        items = items.child(row);
+            .collect();
+        if listing {
+            let mut row = ComboboxOption::new(format!("{}-listing", self.key), "Listing fonts…");
+            row.disabled = true;
+            options.push(row);
+        }
+        let access = self.access;
+        let mut combobox =
+            Combobox::new(&self.key, &self.state, &options, move |s: &mut S| access(s))
+                .label("Font family")
+                .current(Some(&self.current))
+                .width(self.width)
+                .search_placeholder("Search fonts")
+                .empty_message("No font matches");
+        if let Some(choose) = self.choose {
+            combobox = combobox.on_choose(move |s: &mut S, family, tx| choose(s, family, tx));
+        }
+        combobox.build(k, layer)
     }
-
-    let families_nav = families.to_vec();
-    let active_nav = active.to_owned();
-    let on_pick_nav = on_pick;
-    let on_active_nav = on_active;
-    col()
-        .key("font-list")
-        .role("listbox")
-        .w_full()
-        .min_h(0.0)
-        .grow(1.0)
-        .focusable(true)
-        .on_key(move |s: &mut S, ev: &KeyEvent, _tx: &mut Tx| {
-            if families_nav.is_empty() {
-                return false;
-            }
-            let current = families_nav
-                .iter()
-                .position(|f| f == &active_nav)
-                .unwrap_or(0);
-            match ev.key {
-                Key::Down => {
-                    let next = (current + 1).min(families_nav.len() - 1);
-                    on_active_nav(s, &families_nav[next]);
-                    true
-                }
-                Key::Up => {
-                    let next = current.saturating_sub(1);
-                    on_active_nav(s, &families_nav[next]);
-                    true
-                }
-                Key::Home => {
-                    on_active_nav(s, &families_nav[0]);
-                    true
-                }
-                Key::End => {
-                    on_active_nav(s, &families_nav[families_nav.len() - 1]);
-                    true
-                }
-                Key::PageDown => {
-                    let next = (current + 10).min(families_nav.len() - 1);
-                    on_active_nav(s, &families_nav[next]);
-                    true
-                }
-                Key::PageUp => {
-                    let next = current.saturating_sub(10);
-                    on_active_nav(s, &families_nav[next]);
-                    true
-                }
-                Key::Enter => {
-                    on_pick_nav(s, &families_nav[current]);
-                    true
-                }
-                _ => false,
-            }
-        })
-        .scroll(ScrollSpec {
-            stick_bottom: false,
-        })
-        .child(items)
-}
-
-/// A compact preview row showing sample text in the given style label context.
-pub fn preview(family: &str) -> El {
-    let style = TextStyle::new(14.0, 400.0).family(family_for(family));
-    text(format!("{family} — AaBbCc 0123 λ"))
-        .font(style)
-        .color(Color::WHITE)
 }

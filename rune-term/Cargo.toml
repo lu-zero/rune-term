@@ -20,6 +20,7 @@ term-control.workspace = true
 term-mux.workspace = true
 term-roam.workspace = true
 rune.workspace = true
+font-picker.workspace = true
 rune-kit.workspace = true
 librio.workspace = true
 teletypewriter = { workspace = true, optional = true }

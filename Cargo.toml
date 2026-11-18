@@ -23,6 +23,7 @@ publish = false
 [workspace.dependencies]
 # In-tree crates.
 color-picker = { path = "color-picker" }
+font-picker = { path = "font-picker" }
 rune-term = { path = "rune-term", default-features = false }
 rune-term-core = { path = "rune-term-core", default-features = false }
 term-control = { path = "term-control" }
