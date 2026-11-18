@@ -1,90 +1,43 @@
 # rune-term
 
-A terminal emulator. Rune owns the window. librio owns the PTY, the VT, and
-the render state. The cell grid is a wgpu pass on the device Rune already
-created.
-
-macOS first. The crates are unpublished. This page is about the repository.
-The plan and what is still missing are in [`docs/todo/`](./docs/todo/).
+A terminal emulator. Rune owns the window, librio the VT and render state, and
+the cell grid is a wgpu pass on Rune's device. macOS first; tmux and rmux
+sessions are tab groups. The plan is in [`docs/todo/`](./docs/todo/).
 
 ![Tabs. The pane is a 24-bit hue plane from docs/shots/truecolor.py.](./docs/images/terminal-tabs.png)
 
-Configuration is a directory of TOML files. Cmd+, opens it. The format and
-the window are in [`docs/config.md`](./docs/config.md). `just shots` renders
-these pictures.
-
-![The theme editor](./docs/images/settings-themes.png)
-
-## Crates
-
-- `term-grid`: the cell pass and the atlas. No Rune and no librio.
-- `term-input`: physical keys to `librio::KeyEvent`. No window types.
-- `rune-term`: the binary.
+Configuration is a directory of TOML files that Cmd+, edits:
+[`docs/config.md`](./docs/config.md).
 
 ## Building
 
-`rune` and `librio` are the upstream git dependencies. `[patch]` replaces
-them with [lu-zero/rune](https://github.com/lu-zero/rune) branch
-`physical-key-text` and [lu-zero/rio](https://github.com/lu-zero/rio) branch
-`rune-term-on-main`. winit is the copy vendored in that rune branch, so
-no sibling checkout is needed to build. Cascadia Code NF is vendored in
-`term-grid/`. wgpu is pinned at `=30.0.1`.
-
-### System dependencies
-
-**macOS:** the target platform. Rune uses its Metal GPU backend on Apple
-platforms (system Metal/frameworks), so there are no separate Wayland/X11
-runtime packages to install; the normal macOS/Xcode command-line toolchain is
-expected.
-
-**Linux (Wayland/X11):** building/running the windowed app and linking tests
-that depend on Rune/winit requires the platform input and display libraries.
-At minimum `libxkbcommon` is required (linking fails without it). Depending on
-the session/backend and enabled features, Wayland and/or X11 client libraries
-and common desktop dependencies (e.g. fontconfig/dbus) may also be needed.
-
-Headless GPU tests (`grid_pipeline`, `--no-default-features --test headless`)
-use Rune/wgpu headless rendering and require a working wgpu graphics adapter
-(e.g. Vulkan or OpenGL with appropriate drivers; on headless machines a
-software adapter such as Mesa/lavapipe is often used). Package names vary by
-distribution.
-
 ```
 cargo run -p rune-term
-cargo test -p term-grid --lib
-cargo test -p term-input --lib
-cargo test -p rune-term --lib
-cargo test -p rune-term --test grid_pipeline
-cargo test -p rune-term --no-default-features --test headless
+just check-all
 ```
 
-`cargo run -p rune-term` opens the window. The default feature is `pty`.
-`--no-default-features` is the inject harness and does not spawn a shell.
+`[patch]` takes rune (and its vendored winit) from
+[lu-zero/rune](https://github.com/lu-zero/rune) `physical-key-text` and librio
+from [lu-zero/rio](https://github.com/lu-zero/rio) `rune-term-on-main`. On
+Linux the window needs `libxkbcommon`, and the headless tests a wgpu adapter.
 
-### Shell integration
+## Shell integration
 
-A bash prompt keeps its layout through a resize only with OSC 133 marks. Add
-this to `~/.bashrc`, after `eval "$(starship init bash)"` if you use starship:
+A bash or zsh prompt keeps its layout through a resize with OSC 133 marks. In
+`~/.bashrc`, after starship:
 
 ```
 command -v rune-term >/dev/null && eval "$(rune-term shell-integration bash)"
 ```
 
-For zsh, add `eval "$(rune-term shell-integration zsh)"` to `~/.zshrc`.
+For zsh, `shell-integration zsh` in `~/.zshrc`. `just install-shell-integration DIR`
+writes the scripts as files to source instead.
 
-To source a file instead of running `rune-term` at every shell start, install
-them with `just install-shell-integration /etc/profile.d` (or any directory your
-profile sources): `rune-term.sh` for bash, `rune-term.zsh` to source from a
-zshrc. `install-shell-integration-bash` and `-zsh` install one. Read before
-starship, bash's first prompt goes without marks.
+## Roaming sessions
 
-### Roaming sessions
-
-`rune-term-agent` keeps a tmux or rmux session on an ssh host going across a
-change of network, as mosh does. Install it on the host with
-`just agent-install` in a checkout there; [`docs/agent.md`](docs/agent.md) has the rest.
+`rune-term-agent` keeps a session on an ssh host alive across a change of
+network, as mosh does: [`docs/agent.md`](./docs/agent.md).
 
 ## License
 
-MIT: [`LICENSE`](./LICENSE). Cascadia Code NF is SIL Open Font License 1.1:
-[`term-grid/CascadiaCode-LICENSE.txt`](./term-grid/CascadiaCode-LICENSE.txt).
+MIT. Cascadia Code NF, vendored in `term-grid/`, is SIL OFL 1.1.
