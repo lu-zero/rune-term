@@ -83,7 +83,8 @@ The numbers are that plan's.
       (Cmd+,) opens on its own, built with rune-kit and drawn in the terminal's
       own palette. It has a profiles list and a themes list that behave the
       same: apply, save, revert, duplicate, delete and create, with the theme
-      on screen the one the editor is showing. A General tab, first and where the window opens, with no list,
+      on screen the one the editor is showing. The app menu's Settings… (⌘,)
+      opens it. A General tab, first and where the window opens, with no list,
       holds what is the app's: asking before a close ends a program, and what
       closing a session tab does. A profile picks which Option keys are Alt on
       macOS (left, right or both), as iTerm2's do; one Option key is a Rune
@@ -222,7 +223,7 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       argument quoted for the far shell; the group is `session@host`.
       The menu lists the sessions on each host a profile or an open group
       names, from that host's last answer, asked in the background at start
-      and again each time the menu opens. A host's submenu starts a session there, named or not, and Connect to Host… names a host no profile does, which the menu then lists for the rest of the run. A profile's Server, tmux's `-L` name, picks a server other than the default, here or on its host; the menu lists each such server as it does a host, and `attach --server NAME` takes one. `rune-term sessions [HOST]` prints them, and `rune-term profiles` the profiles `--profile` opens. A link that drops after reaching its session
+      and again each time the menu opens. The menu bar's Session menu starts a session, names one or connects to a host, and hides, closes, reconnects, detaches or saves the selected tab's; it cannot list sessions, as a menu bar item has no submenu in Rune. A host's submenu starts a session there, named or not, and Connect to Host… names a host no profile does, which the menu then lists for the rest of the run. A profile's Server, tmux's `-L` name, picks a server other than the default, here or on its host; the menu lists each such server as it does a host, and `attach --server NAME` takes one. `rune-term sessions [HOST]` prints them, and `rune-term profiles` the profiles `--profile` opens. A link that drops after reaching its session
       greys its group; the tab menu's Reconnect attaches it again into the
       same tabs, and tmux redraws every pane. Why a link failed, ssh's
       last line when it was ssh, shows in a notice in the window. Design:

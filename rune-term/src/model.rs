@@ -35,6 +35,10 @@ pub struct Model {
     pub(crate) strip_dropped: bool,
     /// The settings window. It is the terminal's to open.
     pub settings: Option<AppHandle<SettingsModel>>,
+    /// This window's own app, for its menu bar.
+    pub(crate) terminal_handle: Option<AppHandle<Model>>,
+    /// The Session menu the menu bar holds, until the selected tab needs another.
+    pub(crate) menu_shape: Option<crate::menu::Shape>,
     pub(crate) shared: Arc<Shared>,
     pub(crate) pending_inject: Option<Vec<u8>>,
     /// Child output from `RUNE_TERM_INJECT`, held until the pane has a size so a line is not wrapped at the default 80 columns.
@@ -94,6 +98,8 @@ pub fn init() -> Model {
         strip_drag: None,
         strip_dropped: false,
         settings: None,
+        terminal_handle: None,
+        menu_shape: None,
         shared: std::sync::Arc::clone(&shared),
         pending_inject,
         inject_when_sized,

@@ -466,6 +466,7 @@ pub(crate) fn open_bare(
 }
 
 pub fn poll(model: &mut Model, now: f64, tx: &mut Tx) -> bool {
+    crate::menu::sync(model);
     let events = model.shared.take_events();
     let mut chrome = false;
     for event in events {
