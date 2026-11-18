@@ -38,6 +38,7 @@ fn with_settings_window(mut app: App<Model>) -> App<Model> {
     app.init(move || {
         let mut model = model::init();
         model.settings = Some(settings.clone());
+        crate::mux::prefetch(&model);
         model
     })
 }
