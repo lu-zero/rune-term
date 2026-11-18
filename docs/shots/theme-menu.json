@@ -1,4 +1,5 @@
 [
+  {"t": 0.05, "type": "click", "key": "section-profiles"},
   {"t": 0.25, "type": "click", "key": "profile-theme-trigger"},
   {"t": 0.25, "type": "mark", "name": "end"}
 ]

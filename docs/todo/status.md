@@ -83,7 +83,7 @@ The numbers are that plan's.
       (Cmd+,) opens on its own, built with rune-kit and drawn in the terminal's
       own palette. It has a profiles list and a themes list that behave the
       same: apply, save, revert, duplicate, delete and create, with the theme
-      on screen the one the editor is showing. A General tab, with no list,
+      on screen the one the editor is showing. A General tab, first and where the window opens, with no list,
       holds what is the app's: asking before a close ends a program, and what
       closing a session tab does. A profile picks which Option keys are Alt on
       macOS (left, right or both), as iTerm2's do; one Option key is a Rune

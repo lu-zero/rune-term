@@ -41,6 +41,8 @@ light = "Flexoki Light"
 - `default_profile`: profile used when none is named.
 - `font_size`: default size in points.
 - `theme`: theme used when a profile does not name one and the appearance pair is not in use.
+- `confirm_close`: default `true`. Closing a tab or the window asks first while a program runs in it; a shell at its prompt closes without asking.
+- `on_close`: `"kill"`, the default, or `"detach"`. Closing a session tab kills its tmux or rmux window, or detaches it, which hides the tab and leaves the window running. A session profile's `on_close` wins.
 - `adaptive_theme`: two theme names. When both are non-empty and the profile has no theme, the desktop appearance picks `dark` or `light`. On macOS that is `AppleInterfaceStyle`. Elsewhere, and when the appearance cannot be read, `dark` is used. The pair is not watched while the app is running.
 
 `version` is required. Unknown keys are ignored.
@@ -111,6 +113,12 @@ Cursor and selection colors fall back to an inverted foreground and background. 
 ## Settings window
 
 A field stays in the draft while it is typed and is written when the field is finished: Enter, Tab, or a click elsewhere. Choosing a theme from the menu writes that name immediately. Save writes the whole draft, and so does closing the window. Revert restores the last stored values.
+
+### General
+
+![General: what the app does, not a profile.](images/settings-general.png)
+
+The window opens here. The two settings are `confirm_close` and `on_close` from `config.toml`, saved as they change.
 
 ### Profiles
 
