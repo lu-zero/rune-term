@@ -227,6 +227,12 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       and experimental rmux-roaming/predictive work. Design:
       [`multiplexer-sessions.md`](./multiplexer-sessions.md),
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
+      Roaming, and shells that outlive the UI, are `rune-term-agent`: rmux
+      control mode over QUIC first, then recovery streams, then a local PTY
+      host. Phase 0, the rmux-sdk spike, passed: a keyframe rebuilds a librio
+      surface exactly, and a stalled reader gets one rebase, not a backlog.
+      Phase 1 is next. Design:
+      [`agent.md`](./agent.md).
 
 ## Outside this repository
 
