@@ -34,10 +34,12 @@ pub fn run_with_rune_args(args: impl IntoIterator<Item = String>) {
 /// terminal's handle so an applied change reaches the running grid.
 fn with_settings_window(mut app: App<Model>) -> App<Model> {
     let terminal = app.handle();
+    let menu = app.handle();
     let (settings, _window) = app.window(crate::settings_ui::window(terminal));
     app.init(move || {
         let mut model = model::init();
         model.settings = Some(settings.clone());
+        model.terminal_handle = Some(menu.clone());
         crate::mux::prefetch(&model);
         term_grid::monospace_families();
         model
