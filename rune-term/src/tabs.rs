@@ -541,6 +541,45 @@ mod tests {
     }
 
     #[test]
+    fn each_tab_draws_in_its_own_profiles_font_and_theme() {
+        let mut model = host();
+        let work = model.config.ensure_profile("Work");
+        work.font_size = Some(20.0);
+        work.theme = Some("Dracula".to_owned());
+        let first = (
+            model.font_size,
+            model.cell_points,
+            model.palette.name.clone(),
+        );
+        assert!(open_with_profile(&mut model, "Work"));
+        let second = (
+            model.font_size,
+            model.cell_points,
+            model.palette.name.clone(),
+        );
+        assert_eq!(second.0, 20.0);
+        assert_eq!(second.2, "Dracula");
+        assert!(select(&mut model, 0));
+        assert_eq!(
+            (
+                model.font_size,
+                model.cell_points,
+                model.palette.name.clone()
+            ),
+            first
+        );
+        assert!(select(&mut model, 1));
+        assert_eq!(
+            (
+                model.font_size,
+                model.cell_points,
+                model.palette.name.clone()
+            ),
+            second
+        );
+    }
+
+    #[test]
     fn open_with_unavailable_backend_falls_back_to_default() {
         let mut model = host();
         model.config.ensure_profile("Remote").backend = "ssh".to_owned();

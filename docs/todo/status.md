@@ -101,8 +101,7 @@ The numbers are that plan's.
       face of an installed one, and the bundled Cascadia Code NF when it is not
       installed. The editor picks it from the bundled family and the installed
       monospaced ones, searchable, with `font-picker` over rune-kit's
-      `Combobox`. Per-tab setting application
-      remains. Pictures: [`docs/config.md`](../config.md). Design:
+      `Combobox`. Pictures: [`docs/config.md`](../config.md). Design:
       [`settings-profiles.md`](./settings-profiles.md). Follow-on:
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
 - [x] **17. Box-drawing and braille sprites.** Box drawing, block elements
@@ -147,7 +146,7 @@ The numbers are that plan's.
 These items extend the original plan; designs are drafted, implementation not
 started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
 
-- [~] **20. Profiles and creation.** Named/default profiles and “open with
+- [x] **20. Profiles and creation.** Named/default profiles and “open with
       profile”, applied at session/tab/pane creation (settings, shell/cwd/env),
       then a versioned, capability-validated `backend`/target stanza as the
       uniform creation/attach template. Config supports named profile files
@@ -164,8 +163,10 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       A session tab's menu saves the group as such a profile, and
       `--profile NAME` opens one. The settings window edits the backend,
       and for a session its host and name in place of the shell fields; a
-      profile a tab saves reaches its open copy of the config. Per-tab/per-pane setting application (font/theme
-      are currently model-global) remains. A tab group (a labelled group of
+      profile a tab saves reaches its open copy of the config. Selecting a tab
+      applies its profile's font, size and theme to the window, the chrome
+      included. A tab's panes share its profile: a split is whole cells of
+      one size. A tab group (a labelled group of
       tabs in the strip) is in the tree, ready for a multiplexer session group.
       Pressing its label collapses it to `name | count` and the selected tab.
       Dragging a tab reorders the strip: a group's tab moves only among that
