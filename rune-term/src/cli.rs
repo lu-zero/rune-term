@@ -20,28 +20,10 @@ enum Applet {
 
 #[derive(Args, Debug, Default)]
 struct Gui {
-    /// Print Rune's tooling help (snapshots, scripts, traces, etc.) and exit.
-    #[arg(long = "rune-help")]
-    rune_help: bool,
-
-    /// Attach the tmux session SESSION, creating it if it does not exist. Its
-    /// windows are a group of tabs.
-    #[arg(long = "tmux", value_name = "SESSION")]
-    tmux: Option<String>,
-
-    /// Attach the rmux session SESSION, as `--tmux` does.
-    #[arg(long = "rmux", value_name = "SESSION")]
-    rmux: Option<String>,
-
     /// Open with the profile NAME. A profile whose backend is tmux or rmux
     /// attaches its session; any other is the first tab's.
     #[arg(long = "profile", value_name = "NAME")]
     profile: Option<String>,
-
-    /// Run the `--tmux` or `--rmux` session on HOST, over ssh. HOST is what
-    /// `ssh` takes: a name, `user@host`, or an alias from ~/.ssh/config.
-    #[arg(long = "ssh", value_name = "HOST")]
-    ssh: Option<String>,
 
     /// Arguments forwarded to Rune's tooling layer.
     ///
@@ -58,14 +40,34 @@ struct Gui {
 enum Command {
     /// Print the prompt marks script for a shell, to evaluate from its rc file.
     ShellIntegration(ShellIntegration),
+    /// Attach the tmux session SESSION, creating it if it does not exist. Its
+    /// windows are a group of tabs.
+    Attach(Attach),
     /// Print the tmux and rmux sessions here, or on HOST over ssh, one
     /// `PROGRAM<TAB>SESSION` a line.
     Sessions(Sessions),
+    /// Print the profiles `--profile` takes, one `NAME<TAB>BACKEND` a line.
+    Profiles,
+}
+
+#[derive(Args, Debug, PartialEq)]
+struct Attach {
+    /// Attach an rmux session instead.
+    #[arg(long = "rmux")]
+    rmux: bool,
+
+    /// Run the session on HOST, over ssh. HOST is what `ssh` takes: a name,
+    /// `user@host`, or an alias from ~/.ssh/config.
+    #[arg(long = "host", value_name = "HOST")]
+    host: Option<String>,
+
+    #[arg(positional, value_name = "SESSION")]
+    session: String,
 }
 
 #[derive(Args, Debug)]
 struct Sessions {
-    /// What `ssh` takes, as `--ssh` does.
+    /// What `ssh` takes, as `attach --host` does.
     #[arg(positional, value_name = "HOST")]
     host: Option<String>,
 }
@@ -99,7 +101,7 @@ impl RuneTerm {
 
 impl Gui {
     fn run(self) {
-        match self.command {
+        match &self.command {
             Some(Command::ShellIntegration(ShellIntegration { shell })) => {
                 print!(
                     "{}",
@@ -111,31 +113,34 @@ impl Gui {
                 return;
             }
             Some(Command::Sessions(Sessions { host })) => {
-                std::process::exit(crate::mux::print_sessions(host));
+                std::process::exit(crate::mux::print_sessions(host.clone()));
             }
-            None => {}
-        }
-        if self.rune_help {
-            // Rune prints help and exits.
-            rune::tooling::Args::parse_from(vec!["--help".to_owned()]);
-            return;
+            Some(Command::Profiles) => {
+                let config = crate::settings::ConfigFile::load();
+                let mut names: Vec<_> = config.profile_names().collect();
+                names.sort_unstable();
+                for name in names {
+                    println!("{name}\t{}", config.resolve_profile(name).backend);
+                }
+                return;
+            }
+            Some(Command::Attach(_)) | None => {}
         }
         use crate::mux::{Program, Session, Target};
-        let session = match (self.tmux, self.rmux) {
-            (Some(_), Some(_)) => {
-                eprintln!("rune-term: --tmux and --rmux attach one session; pass one");
+        match (self.command, self.profile) {
+            (Some(Command::Attach(_)), Some(_)) => {
+                eprintln!("rune-term: --profile names what to open; drop it or attach");
                 std::process::exit(2);
             }
-            (Some(session), None) => Some((Program::Tmux, session)),
-            (None, Some(session)) => Some((Program::Rmux, session)),
-            (None, None) => None,
-        };
-        match (session, self.ssh, self.profile) {
-            (Some(_), _, Some(_)) => {
-                eprintln!("rune-term: --profile names what to open; drop --tmux or --rmux");
-                std::process::exit(2);
-            }
-            (Some((program, session)), host, None) => {
+            (
+                Some(Command::Attach(Attach {
+                    rmux,
+                    host,
+                    session,
+                })),
+                None,
+            ) => {
+                let program = if rmux { Program::Rmux } else { Program::Tmux };
                 let target = Target {
                     program,
                     host,
@@ -143,13 +148,49 @@ impl Gui {
                 };
                 crate::mux::queue(target, Session::Named(&session));
             }
-            (None, Some(_), _) => {
-                eprintln!("rune-term: --ssh runs a --tmux or --rmux session; pass one");
-                std::process::exit(2);
-            }
-            (None, None, Some(name)) => crate::mux::queue_profile(name),
-            (None, None, None) => {}
+            (_, Some(name)) => crate::mux::queue_profile(name),
+            (_, None) => {}
         }
         crate::app::run_with_rune_args(self.rune_args);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse(args: &[&str]) -> Gui {
+        let cli =
+            <RuneTerm as Args>::parse_from_argv(["rune-term"].iter().chain(args)).expect("parses");
+        let Applet::Gui(gui) = cli.applet;
+        gui
+    }
+
+    #[test]
+    fn attach_takes_tmux_here_unless_told_rmux_or_a_host() {
+        let Some(Command::Attach(attach)) = parse(&["attach", "work"]).command else {
+            panic!("not an attach");
+        };
+        assert_eq!(
+            attach,
+            Attach {
+                rmux: false,
+                host: None,
+                session: "work".to_owned()
+            }
+        );
+        let Some(Command::Attach(attach)) =
+            parse(&["attach", "--rmux", "--host", "thalia", "work"]).command
+        else {
+            panic!("not an attach");
+        };
+        assert_eq!(
+            attach,
+            Attach {
+                rmux: true,
+                host: Some("thalia".to_owned()),
+                session: "work".to_owned()
+            }
+        );
     }
 }

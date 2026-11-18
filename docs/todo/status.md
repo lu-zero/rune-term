@@ -192,7 +192,7 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       `term-mux` holds the layout in cells and the tmux control-mode parser
       (replies, `%output`, window, layout, session and exit notifications,
       and the layout string), tested on tmux 3.4's own output. P3 is
-      partial: `rune-term --tmux SESSION` runs `tmux -C new-session -A` on
+      partial: `rune-term attach SESSION` runs `tmux -C new-session -A` on
       pipes. The pane menu's tmux submenu starts a session, starts one under a name it
       prompts for (attaching it when the name exists), or attaches one the
       default server lists, other than those already attached here. The session is a tab group, each window a tab, each pane a
@@ -210,13 +210,13 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       `capture-pane`, since this copy's reflow pulls back history tmux
       does not. The pane answers queries tmux
       already answered ([`rio/replies.md`](./rio/replies.md)). rmux speaks
-      the same control mode: `--rmux SESSION` and an rmux submenu, shown
-      when rmux is installed, attach it the same way. `--ssh HOST` runs
+      the same control mode: `attach --rmux SESSION` and an rmux submenu, shown
+      when rmux is installed, attach it the same way. `attach --host HOST` runs
       either on a host as `ssh -T -o BatchMode=yes HOST tmux -C …`, each
       argument quoted for the far shell; the group is `session@host`.
       The menu lists the sessions on each host a profile or an open group
       names, from that host's last answer, asked again in the background
-      each time the menu opens. `rune-term sessions [HOST]` prints them. A link that drops after reaching its session
+      each time the menu opens. `rune-term sessions [HOST]` prints them, and `rune-term profiles` the profiles `--profile` opens. A link that drops after reaching its session
       greys its group; the tab menu's Reconnect attaches it again into the
       same tabs, and tmux redraws every pane. Why a link failed, ssh's
       last line when it was ssh, shows in a notice in the window. Design:
