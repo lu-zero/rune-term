@@ -78,6 +78,12 @@ profile sources): `rune-term.sh` for bash, `rune-term.zsh` to source from a
 zshrc. `install-shell-integration-bash` and `-zsh` install one. Read before
 starship, bash's first prompt goes without marks.
 
+### Roaming sessions
+
+`rune-term-agent` keeps a tmux or rmux session on an ssh host going across a
+change of network, as mosh does. Install it on the host with
+`just agent-install` in a checkout there; [`docs/agent.md`](docs/agent.md) has the rest.
+
 ## License
 
 MIT: [`LICENSE`](./LICENSE). Cascadia Code NF is SIL Open Font License 1.1:

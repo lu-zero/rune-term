@@ -90,3 +90,8 @@ install-shell-integration-zsh dir:
 
 ctl *args:
     cargo run -p rune-term-ctl -- {{args}}
+
+# rune-term-agent into ~/.local/bin, where rune-term looks for it over ssh.
+agent-install:
+    cargo install --force --path rune-term-agent --root "$HOME/.local"
+

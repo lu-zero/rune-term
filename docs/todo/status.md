@@ -234,7 +234,9 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       Phase 1 is built: a profile's Transport, or `attach --roam`, starts
       `rune-term-agent serve` over ssh and reaches control mode over QUIC
       after. A link that drops retries on its own, waiting 1 s and doubling
-      to 32 s, and starts at most one new agent until one answers. Design:
+      to 32 s, and starts at most one new agent until one answers. Tried
+      against an aarch64 Linux host: ticket in 0.3 s, a command's round trip
+      4 ms. Deployment: [`../agent.md`](../agent.md), `just agent-install`. Design:
       [`agent.md`](./agent.md).
 
 ## Outside this repository
