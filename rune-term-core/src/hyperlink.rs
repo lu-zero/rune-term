@@ -32,13 +32,14 @@ pub fn open_mods(mods: Modifiers) -> bool {
     }
 }
 
-/// Web and mail links open, other schemes ask first. A link with no scheme, or a file on
-/// another machine, is refused: the opener would read it as a local path.
+/// Web and mail links open, other schemes ask first. A link with no scheme, a drive letter,
+/// or a file on another machine is refused: the opener would read it as a local path.
 pub fn open_decision(uri: &str) -> OpenDecision {
     let Some((scheme, rest)) = uri.split_once(':') else {
         return OpenDecision::Refuse;
     };
-    let valid = scheme.starts_with(|c: char| c.is_ascii_alphabetic())
+    let valid = scheme.len() > 1
+        && scheme.starts_with(|c: char| c.is_ascii_alphabetic())
         && scheme
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'));

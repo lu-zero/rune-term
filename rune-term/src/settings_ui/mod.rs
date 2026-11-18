@@ -53,7 +53,9 @@ pub(crate) fn link(kit: &Kit, url: String) -> El {
         .child(text("↗").font(kit.ty.small).color(kit.c.text_muted));
     if !url.is_empty() {
         button = button.on_press(move |_m: &mut SettingsModel| {
-            crate::hyperlink::open_uri(&url);
+            if crate::hyperlink::open_decision(&url) == crate::hyperlink::OpenDecision::Open {
+                crate::hyperlink::open_uri(&url);
+            }
         });
     }
     button

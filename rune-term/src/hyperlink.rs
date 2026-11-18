@@ -2,7 +2,7 @@
 
 #[cfg(all(test, not(feature = "pty")))]
 pub use rune_term_core::hyperlink::{capture_opens, take_captured_opens, HoverLink};
-pub use rune_term_core::hyperlink::{open_mods, open_uri};
+pub use rune_term_core::hyperlink::{open_decision, open_mods, open_uri, OpenDecision};
 
 #[cfg(all(test, not(feature = "pty")))]
 mod tests {
@@ -11,7 +11,7 @@ mod tests {
     use crate::grid_source::SurfaceGrid;
     use crate::model;
     use librio::Modifiers;
-    use rune_term_core::hyperlink::{open_decision, resolve, tint, OpenDecision};
+    use rune_term_core::hyperlink::{resolve, tint};
     use term_grid::GridSource;
 
     fn host() -> crate::model::Model {
@@ -122,5 +122,6 @@ mod tests {
         );
         assert_eq!(open_decision("-a Calculator"), OpenDecision::Refuse);
         assert_eq!(open_decision("/tmp/x:1"), OpenDecision::Refuse);
+        assert_eq!(open_decision("C:\\Users\\x"), OpenDecision::Refuse);
     }
 }
