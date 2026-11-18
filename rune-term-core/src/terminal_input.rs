@@ -12,6 +12,7 @@ use crate::surfaces::HostSurface;
 pub enum LinkAction {
     None,
     Opened,
+    Refused,
     Confirm(String),
 }
 
@@ -80,11 +81,16 @@ pub fn try_open_link_at(host: &mut HostSurface, x: f32, y: f32, scale: f32) -> L
     host.selecting = false;
     host.hover_link = None;
     host.hover_probe = None;
-    if hyperlink::open_decision(&link.uri) == OpenDecision::WarnAndOpen {
-        LinkAction::Confirm(link.uri)
-    } else {
-        let _ = hyperlink::open_uri(&link.uri);
-        LinkAction::Opened
+    match hyperlink::open_decision(&link.uri) {
+        OpenDecision::Open => {
+            hyperlink::open_uri(&link.uri);
+            LinkAction::Opened
+        }
+        OpenDecision::Confirm => LinkAction::Confirm(link.uri),
+        OpenDecision::Refuse => {
+            eprintln!("not opening link: {}", link.uri);
+            LinkAction::Refused
+        }
     }
 }
 

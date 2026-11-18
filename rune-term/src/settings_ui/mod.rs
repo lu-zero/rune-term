@@ -53,7 +53,7 @@ pub(crate) fn link(kit: &Kit, url: String) -> El {
         .child(text("↗").font(kit.ty.small).color(kit.c.text_muted));
     if !url.is_empty() {
         button = button.on_press(move |_m: &mut SettingsModel| {
-            let _ = crate::hyperlink::open_uri(&url);
+            crate::hyperlink::open_uri(&url);
         });
     }
     button

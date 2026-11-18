@@ -94,7 +94,7 @@ pub fn on_drag_mark(model: &mut Model, mark: u32, drag: &mut Drag, scale: f32, t
         true,
     );
     match action {
-        core_terminal::LinkAction::Opened => {
+        core_terminal::LinkAction::Opened | core_terminal::LinkAction::Refused => {
             tx.wake_after(Duration::ZERO);
         }
         core_terminal::LinkAction::Confirm(uri) => {
@@ -984,7 +984,8 @@ mod tests {
                 host, phase, x, y, clicks, 0, mods, 1.0, true,
             );
             match action {
-                rune_term_core::terminal_input::LinkAction::Opened => {
+                rune_term_core::terminal_input::LinkAction::Opened
+                | rune_term_core::terminal_input::LinkAction::Refused => {
                     tx.wake_after(Duration::ZERO);
                 }
                 rune_term_core::terminal_input::LinkAction::Confirm(uri) => {

@@ -61,8 +61,9 @@ pub fn sync_active_host(
         palette: palette.clone(),
     };
     let source = selection::tint(source);
+    let accent = palette.accent;
     let source = search::tint(source, &hits, palette);
-    let source = hyperlink::tint(source, hover);
+    let source = hyperlink::tint(source, hover, accent);
     let mut source = ime::overlay(
         source,
         preedit,

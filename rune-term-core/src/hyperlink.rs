@@ -16,15 +16,8 @@ pub struct HoverLink {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OpenDecision {
     Open,
-    WarnAndOpen,
-}
-
-pub fn open_mods_rune(mods: rune::Mods) -> bool {
-    if cfg!(target_os = "macos") {
-        mods.logo && !mods.ctrl && !mods.alt && !mods.shift
-    } else {
-        mods.ctrl && !mods.alt && !mods.shift && !mods.logo
-    }
+    Confirm,
+    Refuse,
 }
 
 /// Modifier+click opens links. Plain interaction stays available for selection
@@ -39,18 +32,48 @@ pub fn open_mods(mods: Modifiers) -> bool {
     }
 }
 
+/// Web and mail links open, other schemes ask first. A link with no scheme, or a file on
+/// another machine, is refused: the opener would read it as a local path.
 pub fn open_decision(uri: &str) -> OpenDecision {
-    let Some((scheme, _)) = uri.split_once(':') else {
-        return OpenDecision::WarnAndOpen;
+    let Some((scheme, rest)) = uri.split_once(':') else {
+        return OpenDecision::Refuse;
     };
-    if scheme.eq_ignore_ascii_case("http")
-        || scheme.eq_ignore_ascii_case("https")
-        || scheme.eq_ignore_ascii_case("mailto")
-    {
-        OpenDecision::Open
-    } else {
-        OpenDecision::WarnAndOpen
+    let valid = scheme.starts_with(|c: char| c.is_ascii_alphabetic())
+        && scheme
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'));
+    if !valid {
+        return OpenDecision::Refuse;
     }
+    match scheme.to_ascii_lowercase().as_str() {
+        "http" | "https" | "mailto" => OpenDecision::Open,
+        "file" if !local_file(rest) => OpenDecision::Refuse,
+        _ => OpenDecision::Confirm,
+    }
+}
+
+fn local_file(rest: &str) -> bool {
+    let Some(authority) = rest.strip_prefix("//") else {
+        return true;
+    };
+    let host = authority.split('/').next().unwrap_or_default();
+    host.is_empty() || host.eq_ignore_ascii_case("localhost") || this_host(host)
+}
+
+#[cfg(unix)]
+fn this_host(host: &str) -> bool {
+    let mut name = [0u8; 256];
+    // SAFETY: the buffer is writable for its whole length.
+    if unsafe { libc::gethostname(name.as_mut_ptr().cast(), name.len()) } != 0 {
+        return false;
+    }
+    let len = name.iter().position(|&b| b == 0).unwrap_or(name.len());
+    std::str::from_utf8(&name[..len]).is_ok_and(|name| name.eq_ignore_ascii_case(host))
+}
+
+#[cfg(not(unix))]
+fn this_host(_host: &str) -> bool {
+    false
 }
 
 #[cfg(not(feature = "pty"))]
@@ -85,20 +108,8 @@ pub fn take_captured_opens() -> Vec<String> {
     TEST_OPENER.with(|slot| slot.borrow_mut().take().unwrap_or_default())
 }
 
-pub fn open_uri(uri: &str) -> bool {
-    open_uri_with(uri, |_| true)
-}
-
-/// Opens `uri` when `confirm_risky` allows it. `WarnAndOpen` schemes are logged
-/// and passed to the hook; safe web schemes open directly.
-pub fn open_uri_with(uri: &str, confirm_risky: impl FnOnce(&str) -> bool) -> bool {
-    let decision = open_decision(uri);
-    if decision == OpenDecision::WarnAndOpen {
-        eprintln!("opening non-web link scheme: {uri}");
-        if !confirm_risky(uri) {
-            return false;
-        }
-    }
+/// Hands `uri` to the desktop. The caller has taken [`open_decision`] into account.
+pub fn open_uri(uri: &str) {
     #[cfg(not(feature = "pty"))]
     {
         let captured = TEST_OPENER.with(|slot| {
@@ -111,7 +122,7 @@ pub fn open_uri_with(uri: &str, confirm_risky: impl FnOnce(&str) -> bool) -> boo
             }
         });
         if captured {
-            return true;
+            return;
         }
     }
     let uri = uri.to_owned();
@@ -119,8 +130,9 @@ pub fn open_uri_with(uri: &str, confirm_risky: impl FnOnce(&str) -> bool) -> boo
         let result = if cfg!(target_os = "macos") {
             std::process::Command::new("open").arg(&uri).spawn()
         } else if cfg!(target_os = "windows") {
-            std::process::Command::new("cmd")
-                .args(["/C", "start", "", &uri])
+            // Not `cmd /C start`: cmd would split the URL at `&`.
+            std::process::Command::new("rundll32")
+                .args(["url.dll,FileProtocolHandler", &uri])
                 .spawn()
         } else {
             std::process::Command::new("xdg-open").arg(&uri).spawn()
@@ -129,7 +141,6 @@ pub fn open_uri_with(uri: &str, confirm_risky: impl FnOnce(&str) -> bool) -> boo
             eprintln!("open link failed: {err}");
         }
     });
-    true
 }
 
 /// Resolve a link under a viewport cell. OSC 8 takes precedence.
@@ -161,16 +172,19 @@ pub fn resolve_surface(
     })
 }
 
-pub fn tint<S: GridSource>(source: S, hover: Option<&HoverLink>) -> Tint<S> {
+/// Underlines the hovered link in the theme's accent.
+pub fn tint<S: GridSource>(source: S, hover: Option<&HoverLink>, accent: u32) -> Tint<S> {
     Tint {
         source,
         hover: hover.cloned(),
+        accent: solid(accent),
     }
 }
 
 pub struct Tint<S> {
     source: S,
     hover: Option<HoverLink>,
+    accent: [u8; 4],
 }
 
 impl<S: GridSource> GridSource for Tint<S> {
@@ -191,8 +205,7 @@ impl<S: GridSource> GridSource for Tint<S> {
         if let Some(hover) = &self.hover {
             if hover.line == line && col >= hover.start && col <= hover.end {
                 sample.underline = true;
-                sample.fg = solid(0x0043_85BE);
-                sample.fg[3] = 255;
+                sample.fg = self.accent;
             }
         }
         sample
