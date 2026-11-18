@@ -31,8 +31,13 @@ checkout of rune-term there:
 just agent-install
 ```
 
-That is `cargo install` of `rune-term-agent` into `~/.local/bin`. Run it again
-after updating the checkout.
+Run it again after updating the checkout. Without `just`:
+
+```sh
+cargo install --force --path rune-term-agent --root ~/.local
+```
+
+Add `--target-dir DIR` when the checkout's `target` cannot be written.
 
 rune-term starts the agent with `~/.local/bin` and `~/.cargo/bin` added to the
 `PATH` of ssh's non-interactive shell, so either install location works
@@ -60,8 +65,9 @@ Save as Profile on a roaming group keeps the transport.
 - The agent listens on a random UDP port, and the client reaches it at the
   address ssh reached the host on (`SSH_CONNECTION`). A firewall on the host
   must let UDP in; there is no fixed port range yet.
-- A host reached through a jump host (`ProxyJump`) advertises its address
-  behind the jump, which the client may not reach. mosh has the same limit.
+- The address is the one the host saw ssh arrive on. A host behind a jump host
+  (`ProxyJump`), NAT or a port forward advertises an address the client may
+  not reach. mosh has the same limit.
 - A link that cannot reach the agent reports `no answer from the agent at
   ADDRESS` in the window: UDP is blocked, or the address is not reachable from
   here.
@@ -71,5 +77,5 @@ Save as Profile on a roaming group keeps the transport.
 - An agent exits a day after its last client, or two minutes after it
   started if no client ever reached it. The session stays with the
   multiplexer either way.
-- An agent never holds your files or keys: it runs as you, and talks only to
-  your multiplexer's own socket.
+- The token is a credential: whoever holds it can do what your shell on the
+  host can. It reaches rune-term only over ssh and is never written to disk.
