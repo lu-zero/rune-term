@@ -253,6 +253,8 @@ pinned at `=30.0.1`; Rune itself takes any 30.x.
 
 - [x] **4. Rune paired text.** `PhysicalInput::Key` carries `text` and
       `consumed_mods` on `lu-zero/rune` branch `physical-key-text`.
+- [x] **Option keys.** `El::ime_option_as_alt` takes left, right or both
+      on the same branch; upstream's takes a bool. Asked in anomalyco/rune#1169.
 - [x] **Wakeup order and focus reports.** Upstream: the host clears its
       flag before `RenderState::update` (#2053), and `Surface::set_focus`
       reports focus (#2051).
