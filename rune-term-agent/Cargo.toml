@@ -1,0 +1,16 @@
+[package]
+name = "rune-term-agent"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Holds a tmux or rmux control client on a host for rune-term, over a link that roams."
+
+[[bin]]
+name = "rune-term-agent"
+path = "src/main.rs"
+
+[dependencies]
+term-roam.workspace = true
+tokio.workspace = true
+winnow-args.workspace = true
