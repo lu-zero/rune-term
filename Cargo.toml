@@ -11,6 +11,7 @@ members = [
     "rune-term-core",
     "rune-term",
     "rune-term-ctl",
+    "rune-term-agent",
 ]
 
 [workspace.package]
@@ -28,6 +29,7 @@ term-control = { path = "term-control" }
 term-grid = { path = "term-grid" }
 term-input = { path = "term-input" }
 term-mux = { path = "term-mux" }
+term-roam = { path = "term-roam" }
 
 rune = { git = "https://github.com/anomalyco/rune", branch = "dev" }
 rune-kit = { git = "https://github.com/anomalyco/rune", branch = "dev", default-features = false }
