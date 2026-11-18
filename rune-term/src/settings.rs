@@ -114,6 +114,9 @@ pub struct Profile {
     pub cwd: Option<String>,
     /// The ssh host a "tmux" or "rmux" session runs on; without one it runs here.
     pub host: Option<String>,
+    /// The tmux or rmux server, by its `-L` name; without one, the default server.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server: Option<String>,
     /// The session a "tmux" or "rmux" profile attaches, created when missing.
     /// Without one each open starts a new session.
     pub session: Option<String>,
@@ -143,6 +146,7 @@ impl Default for Profile {
             shell: None,
             cwd: None,
             host: None,
+            server: None,
             session: None,
             on_close: None,
         }
@@ -602,6 +606,14 @@ pub fn config_path() -> PathBuf {
 }
 
 /// A name that can be the stem of a `profiles/` or `themes/` file.
+/// A server name the menu can carry in its ids, and that names one socket file.
+pub fn server_ok(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'))
+}
+
 pub fn name_ok(name: &str) -> bool {
     if name.is_empty() || name == "." || name == ".." || name.starts_with('.') {
         return false;

@@ -61,6 +61,10 @@ struct Attach {
     #[arg(long = "host", value_name = "HOST")]
     host: Option<String>,
 
+    /// Attach a session of the server NAME, tmux's `-L`, rather than the default server.
+    #[arg(long = "server", value_name = "NAME")]
+    server: Option<String>,
+
     #[arg(positional, value_name = "SESSION")]
     session: String,
 }
@@ -70,6 +74,10 @@ struct Sessions {
     /// What `ssh` takes, as `attach --host` does.
     #[arg(positional, value_name = "HOST")]
     host: Option<String>,
+
+    /// The server NAME's sessions, as `attach --server` takes.
+    #[arg(long = "server", value_name = "NAME")]
+    server: Option<String>,
 }
 
 #[derive(Args, Debug)]
@@ -112,8 +120,8 @@ impl Gui {
                 );
                 return;
             }
-            Some(Command::Sessions(Sessions { host })) => {
-                std::process::exit(crate::mux::print_sessions(host.clone()));
+            Some(Command::Sessions(Sessions { host, server })) => {
+                std::process::exit(crate::mux::print_sessions(host.clone(), server.clone()));
             }
             Some(Command::Profiles) => {
                 let config = crate::settings::ConfigFile::load();
@@ -136,6 +144,7 @@ impl Gui {
                 Some(Command::Attach(Attach {
                     rmux,
                     host,
+                    server,
                     session,
                 })),
                 None,
@@ -144,7 +153,7 @@ impl Gui {
                 let target = Target {
                     program,
                     host,
-                    socket: None,
+                    socket: server,
                 };
                 crate::mux::queue(target, Session::Named(&session));
             }
@@ -167,7 +176,7 @@ mod tests {
     }
 
     #[test]
-    fn attach_takes_tmux_here_unless_told_rmux_or_a_host() {
+    fn attach_takes_tmux_here_unless_told_rmux_a_host_or_a_server() {
         let Some(Command::Attach(attach)) = parse(&["attach", "work"]).command else {
             panic!("not an attach");
         };
@@ -176,11 +185,14 @@ mod tests {
             Attach {
                 rmux: false,
                 host: None,
+                server: None,
                 session: "work".to_owned()
             }
         );
-        let Some(Command::Attach(attach)) =
-            parse(&["attach", "--rmux", "--host", "thalia", "work"]).command
+        let Some(Command::Attach(attach)) = parse(&[
+            "attach", "--rmux", "--host", "thalia", "--server", "w", "work",
+        ])
+        .command
         else {
             panic!("not an attach");
         };
@@ -189,6 +201,7 @@ mod tests {
             Attach {
                 rmux: true,
                 host: Some("thalia".to_owned()),
+                server: Some("w".to_owned()),
                 session: "work".to_owned()
             }
         );
