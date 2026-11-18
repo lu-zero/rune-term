@@ -113,34 +113,22 @@ The numbers are that plan's.
       families this tree targets. Other symbols still come from the face or
       cascade.
 - [ ] **18. Sixel and iTerm2.**
-- [~] **19. Hyperlinks and URL opening.** OSC 8 and detected URLs can be
-      hovered and opened, without breaking mouse-reporting apps or selection.
-      - [~] **19a. OSC 8 hyperlinks.** Reads `RenderState::link_at`/`link_run`
-            and underlines the hovered run via a `GridSource` tint. App-level
-            modifier-hover refresh and pointer cursor affordance are wired when
-            the activation modifier is held over a hovered link; full upstream
-            hover-modifier integration/polish still pending.
-      - [~] **19b. Implicit URL detection.** Uses `librio::Surface::url_at`
-            (OSC 8 takes precedence). Matching scope/punctuation rules follow
-            librio's implementation; rune-term does not add a parallel detector.
-      - [~] **19c. Hit-test and interaction.** Bare motion resolves hover and
-            forces redraw (probe cached by cell); modifier+click (Cmd on macOS,
-            Ctrl elsewhere) opens, clears the local selection, and consumes the
-            gesture before selection/mouse-report handling. `App::on_modifiers`
-            refreshes hover affordance on modifier changes while a link is
-            hovered (pointer cursor when activatable). Pointer/wheel/physical
-            key handlers can target a pane by mark and physical input is wired
-            per pane. Click/focus updates rune-term's focused leaf and shown
-            surface. Observing Rune focus traversal for multi-pane focus sync
-            tracks upstream `anomalyco/rune#106` (`El::on_focus_change`).
-            Native stationary-pointer modifier hover events/cursor affordance
-            still track upstream `anomalyco/rune#393`.
-      - [~] **19d. Open action by host OS.** Spawns `open` (macOS), `xdg-open`
-            (Linux/FreeDesktop), or `cmd /C start` (Windows) on a background
-            thread and logs spawn failures. Non-web schemes are classified and
-            logged; `open_uri_with` provides a confirmation/policy hook. Mod+click
-            prompts for risky/non-web schemes with a modal confirmation; safe web
-            and mailto schemes open directly.
+- [~] **19. Hyperlinks and URL opening.** OSC 8 links come from librio's
+      render state and plain URLs from `Surface::url_at`; OSC 8 wins. The
+      hovered link is underlined in the theme's accent, and with Cmd (Ctrl
+      elsewhere) held it takes a pointer cursor and a click opens it, before
+      selection or mouse reporting see the click.
+      - [x] **Opening.** http, https and mailto open; another scheme asks
+            first. A link with no scheme, or a `file://` naming another host,
+            is refused. `open`, `xdg-open`, or `rundll32` on Windows, which
+            does not split the URL at `&` as `cmd /C start` does.
+      - [ ] **Wrapped links.** Only the hovered row is underlined. OSC 8 can
+            walk the rows here; `url_at` clips to the row, so plain URLs need
+            librio to return the whole span.
+      - [ ] **Where a link goes.** Show the address while Cmd is held, and
+            Open Link and Copy Link in the pane's menu.
+      - [ ] Stationary-pointer modifier hover tracks `anomalyco/rune#393`,
+            multi-pane focus sync `anomalyco/rune#106`.
 
 ## Planned (design drafted)
 

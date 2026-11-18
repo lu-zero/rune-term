@@ -1,12 +1,8 @@
 //! OSC 8 hyperlinks and implicitly detected URLs.
 
 #[cfg(all(test, not(feature = "pty")))]
-pub use rune_term_core::hyperlink::{capture_opens, take_captured_opens};
-#[allow(unused_imports)]
-pub use rune_term_core::hyperlink::{
-    open_decision, open_mods, open_mods_rune, open_uri, open_uri_with, resolve, tint, HoverLink,
-    OpenDecision, Tint,
-};
+pub use rune_term_core::hyperlink::{capture_opens, take_captured_opens, HoverLink};
+pub use rune_term_core::hyperlink::{open_mods, open_uri};
 
 #[cfg(all(test, not(feature = "pty")))]
 mod tests {
@@ -15,6 +11,7 @@ mod tests {
     use crate::grid_source::SurfaceGrid;
     use crate::model;
     use librio::Modifiers;
+    use rune_term_core::hyperlink::{open_decision, resolve, tint, OpenDecision};
     use term_grid::GridSource;
 
     fn host() -> crate::model::Model {
@@ -62,6 +59,7 @@ mod tests {
             host.render.update();
         }
         let palette = model.palette;
+        let accent = palette.accent;
         let host = model.terminal.primary_mut().unwrap();
         let hover = HoverLink {
             line: 0,
@@ -73,9 +71,10 @@ mod tests {
             render: &mut host.render,
             palette,
         };
-        let tinted = tint(source, Some(&hover));
+        let tinted = tint(source, Some(&hover), accent);
         assert!(tinted.cell(0, 0).underline);
         assert!(tinted.cell(0, 4).underline);
+        assert_eq!(tinted.cell(0, 0).fg[..3], accent.to_be_bytes()[1..]);
         assert!(!tinted.cell(0, 6).underline);
     }
 
@@ -108,21 +107,20 @@ mod tests {
     }
 
     #[test]
-    fn open_decision_warns_for_non_web_schemes() {
+    fn web_links_open_others_ask_and_unopenable_ones_are_refused() {
         assert_eq!(open_decision("https://example.com"), OpenDecision::Open);
-        assert_eq!(open_decision("http://example.com"), OpenDecision::Open);
         assert_eq!(open_decision("mailto:test@example.com"), OpenDecision::Open);
-        assert_eq!(open_decision("file:///tmp/x"), OpenDecision::WarnAndOpen);
-        assert_eq!(open_decision("ssh://host"), OpenDecision::WarnAndOpen);
-    }
-
-    #[test]
-    fn open_policy_hook_can_block_risky_schemes() {
-        let (_capture, _opened) = capture_opens();
-        assert!(!open_uri_with("file:///tmp/x", |_| false));
-        assert!(take_captured_opens().is_empty());
-        let (_capture, _opened) = capture_opens();
-        assert!(open_uri_with("file:///tmp/x", |_| true));
-        assert_eq!(take_captured_opens(), vec!["file:///tmp/x".to_string()]);
+        assert_eq!(open_decision("ssh://host"), OpenDecision::Confirm);
+        assert_eq!(open_decision("file:///tmp/x"), OpenDecision::Confirm);
+        assert_eq!(
+            open_decision("file://localhost/tmp/x"),
+            OpenDecision::Confirm
+        );
+        assert_eq!(
+            open_decision("file://elsewhere/tmp/x"),
+            OpenDecision::Refuse
+        );
+        assert_eq!(open_decision("-a Calculator"), OpenDecision::Refuse);
+        assert_eq!(open_decision("/tmp/x:1"), OpenDecision::Refuse);
     }
 }

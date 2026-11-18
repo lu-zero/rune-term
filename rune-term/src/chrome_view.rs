@@ -145,7 +145,10 @@ pub const SINGLE_PANE: &str = "pane";
 
 fn single(model: &Model, scale: f32) -> El {
     let hover_active = model.terminal.primary().is_some_and(|host| {
-        host.hover_link.is_some() && crate::hyperlink::open_mods_rune(model.terminal.held_mods())
+        host.hover_link.is_some()
+            && crate::hyperlink::open_mods(rune_term_core::input::modifiers(
+                model.terminal.held_mods(),
+            ))
     });
     let mut pane = effect(PANE_MARK)
         .key(SINGLE_PANE)
@@ -227,7 +230,10 @@ fn leaf_el(leaf: &Leaf, model: &Model, scale: f32, cell: (f32, f32)) -> El {
     let id = leaf.id;
     let mark = leaf.mark;
     let hover_active = model.terminal.by_mark(mark).is_some_and(|host| {
-        host.hover_link.is_some() && crate::hyperlink::open_mods_rune(model.terminal.held_mods())
+        host.hover_link.is_some()
+            && crate::hyperlink::open_mods(rune_term_core::input::modifiers(
+                model.terminal.held_mods(),
+            ))
     });
     let mut pane = effect(mark)
         .key(format!("pane-{mark}"))
