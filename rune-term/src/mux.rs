@@ -1391,6 +1391,13 @@ pub(crate) fn menu(model: &Model, mut menu: PopupMenu) -> PopupMenu {
     menu
 }
 
+/// Asks every host a profile names for its sessions, so the menu has them the first time it opens.
+pub(crate) fn prefetch(model: &Model) {
+    for target in remote_targets(model) {
+        remote::listing(&target);
+    }
+}
+
 /// The hosts and servers a session profile or an open group names, for each program.
 fn remote_targets(model: &Model) -> Vec<Target> {
     let mut targets: Vec<Target> = model
