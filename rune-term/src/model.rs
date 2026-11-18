@@ -40,6 +40,8 @@ pub struct Model {
     pub(crate) inject_when_sized: Option<Vec<u8>>,
     pub(crate) _ipc: Option<crate::ipc::Server>,
     pub(crate) muxes: Vec<crate::mux::Mux>,
+    /// The hosts Connect to Host named this run, which the menu lists with a profile's.
+    pub(crate) hosts: Vec<crate::mux::Target>,
 }
 
 pub fn init() -> Model {
@@ -94,5 +96,6 @@ pub fn init() -> Model {
         inject_when_sized,
         _ipc: Some(crate::ipc::start(shared)),
         muxes: Vec::new(),
+        hosts: Vec::new(),
     }
 }

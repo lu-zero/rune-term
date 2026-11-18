@@ -161,6 +161,12 @@ fn name_prompt(prompt: &crate::mux::NamePrompt, k: &Kit, layer: &mut Vec<El>) {
             "Create",
             "If a session has this name already, it is attached.".to_owned(),
         ),
+        Naming::Host(program) => (
+            format!("New {} session on a host", program.name()),
+            "Host",
+            "Connect",
+            "What ssh takes: a name, user@host, or an alias from ~/.ssh/config.".to_owned(),
+        ),
         Naming::Profile(_) => (
             "Save as profile".to_owned(),
             "Profile name",

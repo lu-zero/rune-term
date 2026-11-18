@@ -176,9 +176,11 @@ pub(crate) fn print_sessions(host: Option<String>) -> i32 {
     0
 }
 
-/// What a name prompt names: a session to start, or a profile that reopens a group.
+/// What a name prompt names: a session to start, a host to start one on, or a
+/// profile that reopens a group.
 pub(crate) enum Naming {
     Session(Target),
+    Host(Program),
     Profile(TabGroupId),
 }
 
@@ -297,6 +299,27 @@ pub(crate) fn submit_name(model: &mut Model) {
             if !name.is_empty() {
                 open_session(model, target, Session::Named(&name));
             }
+        }
+        Naming::Host(program) => {
+            if name.is_empty() {
+                return;
+            }
+            if name.contains(char::is_whitespace) {
+                model.name_prompt = Some(NamePrompt {
+                    error: Some(format!("'{name}' cannot name a host")),
+                    ..prompt
+                });
+                return;
+            }
+            let target = Target {
+                program: *program,
+                host: Some(name),
+                socket: None,
+            };
+            if !model.hosts.contains(&target) {
+                model.hosts.push(target.clone());
+            }
+            open_session(model, &target, Session::New);
         }
         Naming::Profile(group) => {
             if let Err(err) = save_profile(model, *group, &name) {
@@ -1245,6 +1268,7 @@ fn remote_targets(model: &Model) -> Vec<Target> {
         .filter_map(profile_target)
         .map(|(target, _)| target)
         .chain(model.muxes.iter().map(|mux| mux.target.clone()))
+        .chain(model.hosts.iter().cloned())
         .filter(|target| target.host.is_some() && target.socket.is_none())
         .collect();
     targets.sort_by(|a, b| (a.program.name(), &a.host).cmp(&(b.program.name(), &b.host)));
@@ -1275,6 +1299,7 @@ fn host_menu(model: &Model, target: &Target, menu: PopupMenu) -> PopupMenu {
         host,
         PopupMenu::new()
             .item(PopupItem::new(id("new"), "New Session"))
+            .item(PopupItem::new(id("named"), "New Named Session…"))
             .separator()
             .items(sessions),
     )
@@ -1315,7 +1340,9 @@ fn program_menu(model: &Model, target: &Target, menu: PopupMenu) -> PopupMenu {
     };
     let submenu = remote
         .iter()
-        .fold(submenu, |submenu, remote| host_menu(model, remote, submenu));
+        .fold(submenu, |submenu, remote| host_menu(model, remote, submenu))
+        .separator()
+        .item(PopupItem::new(format!("{name}-host"), "Connect to Host…"));
     menu.separator().submenu(name, submenu)
 }
 
@@ -1333,6 +1360,7 @@ pub(crate) fn menu_action(model: &mut Model, id: &str) -> bool {
     match action {
         Action::New => open_session(model, &target, Session::New),
         Action::Named => ask_name(model, target),
+        Action::Host => model.name_prompt = Some(NamePrompt::new(Naming::Host(program), "")),
         Action::Attach(session) => open_session(model, &target, Session::Attach(session)),
     }
     true
@@ -1341,10 +1369,11 @@ pub(crate) fn menu_action(model: &mut Model, id: &str) -> bool {
 enum Action<'a> {
     New,
     Named,
+    Host,
     Attach(&'a str),
 }
 
-/// `new`, `named`, or `attach:SESSION`; a remote one has `@HOST` after the verb.
+/// `new`, `named`, `host`, or `attach:SESSION`; a remote one has `@HOST` after the verb.
 /// tmux turns a `:` in a session name into `_`, so the last one splits.
 fn parse_action(program: Program, action: &str) -> Option<(Target, Action<'_>)> {
     let (verb, session) = match action.rsplit_once(':') {
@@ -1358,6 +1387,7 @@ fn parse_action(program: Program, action: &str) -> Option<(Target, Action<'_>)> 
     let action = match (verb, session) {
         ("new", None) => Action::New,
         ("named", None) => Action::Named,
+        ("host", None) if host.is_none() => Action::Host,
         ("attach", Some(session)) => Action::Attach(session),
         _ => return None,
     };
@@ -2113,6 +2143,21 @@ mod tests {
         assert_eq!(target.host, None);
         assert!(matches!(action, Action::Attach("a@b")));
         assert!(parse_action(Program::Tmux, "unreachable@box").is_none());
+    }
+
+    #[test]
+    fn a_host_connected_to_stays_in_the_menu_with_its_own_sessions() {
+        let mut model = crate::model::init();
+        assert!(menu_action(&mut model, "rmux-host"));
+        model.name_prompt.as_mut().unwrap().edit.text = "a host".to_owned();
+        submit_name(&mut model);
+        assert!(model.name_prompt.as_ref().unwrap().error.is_some());
+        model.name_prompt.as_mut().unwrap().edit.text = "rune-term-test.invalid".to_owned();
+        submit_name(&mut model);
+        assert!(model.name_prompt.is_none());
+        let menu = menu(&model, PopupMenu::new());
+        assert!(menu.find("rmux-new@rune-term-test.invalid").is_some());
+        assert!(menu.find("rmux-named@rune-term-test.invalid").is_some());
     }
 
     #[test]
