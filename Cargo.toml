@@ -5,6 +5,7 @@ members = [
     "term-input",
     "term-control",
     "term-mux",
+    "term-roam",
     "color-picker",
     "font-picker",
     "rune-term-core",
@@ -42,10 +43,15 @@ fontique = { version = "0.12", default-features = false, features = ["std", "sys
 libc = "0.2"
 okhsl = "1.0.3"
 png = "0.18"
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-ring"] }
+rcgen = { version = "0.14", default-features = false, features = ["crypto", "ring"] }
+ring = "0.17"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 swash = "0.2.10"
 tiny-skia = "0.12"
+tokio = { version = "1", features = ["io-util", "macros", "net", "process", "rt", "sync", "time"] }
 toml = "0.8"
 wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }
 winnow-args = { version = "0.6", default-features = false, features = ["derive", "help-text"] }
