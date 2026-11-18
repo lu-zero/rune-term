@@ -262,8 +262,8 @@ pinned at `=30.0.1`; Rune itself takes any 30.x.
       on the same branch; upstream's takes a bool. Asked in anomalyco/rune#1169.
 - [ ] **Menu bar submenus.** A Rune `MenuItem` has no submenu, and its action
       is a plain function that does not learn the item's id, so the Session
-      menu cannot list the sessions to attach; the pane's menu does. No
-      upstream issue yet.
+      menu cannot list the sessions to attach; the pane's menu does. Asked
+      upstream as anomalyco/rune#1173.
 - [x] **Wakeup order and focus reports.** Upstream: the host clears its
       flag before `RenderState::update` (#2053), and `Surface::set_focus`
       reports focus (#2051).
