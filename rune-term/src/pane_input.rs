@@ -442,6 +442,23 @@ mod tests {
     }
 
     #[test]
+    fn alt_the_text_does_not_spend_sends_escape_first() {
+        let mut model = host();
+        let alt = rune::Mods {
+            alt: true,
+            ..rune::Mods::default()
+        };
+        assert!(press(
+            &mut model,
+            Code::KeyB,
+            alt,
+            Some("b"),
+            rune::Mods::default()
+        ));
+        assert_eq!(model.shared.take_output(), b"\x1bb");
+    }
+
+    #[test]
     fn a_numpad_digit_reaches_the_shell() {
         let mut model = host();
         assert!(press(

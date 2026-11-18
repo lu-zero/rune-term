@@ -69,6 +69,7 @@ args = ["-l"]
   - `transport` (optional): `"ssh"`, the default, or `"agent"`, through rune-term-agent, which roams. See [`agent.md`](agent.md).
   - `on_close` (optional): `"kill"` or `"detach"`, what closing a tab does to its window; without one, `settings.on_close`.
 - `cwd` (optional): working directory for sessions created with this profile.
+- `option_as_alt` (optional, macOS): `"left"`, `"right"` or `"both"`, the Option keys that send Esc and the key, as Meta, rather than the layout's characters (Option+B as `∫`). Without it, both keys type characters. As in iTerm2, one key can stay for accents.
 - `[shell]` (optional): `program` and `args`. When `program` is empty and `args` is empty, the platform shell is used.
 
 ## `themes/<name>.toml`

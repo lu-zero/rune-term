@@ -127,6 +127,8 @@ pub struct Profile {
     /// one, [`Settings::on_close`] says.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub on_close: Option<OnClose>,
+    #[serde(skip_serializing_if = "OptionAsAlt::is_none")]
+    pub option_as_alt: OptionAsAlt,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -149,6 +151,23 @@ pub enum Transport {
     Agent,
 }
 
+/// The Option keys that send Alt, as Meta, rather than the layout's characters. Only macOS reads it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OptionAsAlt {
+    #[default]
+    None,
+    Left,
+    Right,
+    Both,
+}
+
+impl OptionAsAlt {
+    fn is_none(&self) -> bool {
+        *self == OptionAsAlt::None
+    }
+}
+
 impl Transport {
     fn is_ssh(&self) -> bool {
         *self == Transport::Ssh
@@ -169,6 +188,7 @@ impl Default for Profile {
             transport: Transport::Ssh,
             session: None,
             on_close: None,
+            option_as_alt: OptionAsAlt::None,
         }
     }
 }
@@ -184,6 +204,14 @@ pub struct Resolved {
 }
 
 impl ConfigFile {
+    /// The Option keys that are Alt in a tab opened with `profile`.
+    pub fn option_as_alt(&self, profile: &str) -> OptionAsAlt {
+        self.profiles
+            .get(profile)
+            .or_else(|| self.profiles.get(DEFAULT_PROFILE))
+            .map_or(OptionAsAlt::None, |profile| profile.option_as_alt)
+    }
+
     /// What closing a tab of a session opened with `profile` does.
     pub fn on_close(&self, profile: &str) -> OnClose {
         self.profile(profile)
@@ -755,6 +783,17 @@ mod tests {
         assert_eq!(cfg.default_profile_name(), DEFAULT_PROFILE);
         assert!(!cfg.remove_profile(DEFAULT_PROFILE));
         assert!(cfg.profile(DEFAULT_PROFILE).is_some());
+    }
+
+    #[test]
+    fn a_tab_whose_profile_is_gone_takes_the_default_profiles_option_keys() {
+        let mut cfg = ConfigFile::default();
+        cfg.ensure_profile("Work");
+        cfg.profiles.get_mut(DEFAULT_PROFILE).unwrap().option_as_alt = OptionAsAlt::Left;
+        cfg.profiles.get_mut("Work").unwrap().option_as_alt = OptionAsAlt::Both;
+        assert_eq!(cfg.option_as_alt("Work"), OptionAsAlt::Both);
+        assert!(cfg.remove_profile("Work"));
+        assert_eq!(cfg.option_as_alt("Work"), OptionAsAlt::Left);
     }
 
     #[test]
