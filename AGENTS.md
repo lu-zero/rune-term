@@ -25,9 +25,10 @@ comments, and docs: a pattern being there does not make it correct.
   those sources with `https://github.com/lu-zero/rune` branch
   `physical-key-text` and `https://github.com/lu-zero/rio` branch
   `rune-term-on-main`. A local checkout replaces that patch entry
-  with a path. winit is rune's `vendor/winit`, from the same branch: the
-  rune workspace excludes it, but cargo finds any package in a git
-  checkout, so the tree builds without `../rune`. Cascadia Code NF is
+  with a path. winit, parley_engine and the AccessKit adapters are
+  rune's `vendor/` copies, from the same branch: the rune workspace
+  excludes them, but cargo finds any package in a git checkout, so the
+  tree builds without `../rune`. Cascadia Code NF is
   vendored at `term-grid/CascadiaCodeNF.ttf`.
   Never copy WezTerm source in. Never link `sugarloaf`, `rio-window`,
   `rioterm`, `rio-backend`, or WezTerm's `window` or `mux`.

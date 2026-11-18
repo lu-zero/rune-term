@@ -66,6 +66,10 @@ rune-kit = { git = "https://github.com/lu-zero/rune", branch = "physical-key-tex
 librio = { git = "https://github.com/lu-zero/rio", branch = "rune-term-on-main" }
 teletypewriter = { git = "https://github.com/lu-zero/rio", branch = "rune-term-on-main" }
 
-# Rune's vendored winit. Its workspace excludes it, but cargo finds every package in a git checkout.
+# The crates Rune vendors, which an app that builds Rune patches as Rune does. Its workspace
+# excludes them, but cargo finds every package in a git checkout.
 [patch.crates-io]
+accesskit_macos = { git = "https://github.com/lu-zero/rune", branch = "physical-key-text" }
+accesskit_windows = { git = "https://github.com/lu-zero/rune", branch = "physical-key-text" }
+parley_engine = { git = "https://github.com/lu-zero/rune", branch = "physical-key-text" }
 winit = { git = "https://github.com/lu-zero/rune", branch = "physical-key-text" }
