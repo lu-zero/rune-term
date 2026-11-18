@@ -94,7 +94,13 @@ pub fn on_drag_mark(model: &mut Model, mark: u32, drag: &mut Drag, scale: f32, t
         true,
     );
     match action {
-        core_terminal::LinkAction::Opened | core_terminal::LinkAction::Refused => {
+        core_terminal::LinkAction::Open(uri) => {
+            if let Err(err) = tx.open_url(&uri) {
+                eprintln!("not opening link {uri}: {err}");
+            }
+            tx.wake_after(Duration::ZERO);
+        }
+        core_terminal::LinkAction::Refused => {
             tx.wake_after(Duration::ZERO);
         }
         core_terminal::LinkAction::Confirm(uri) => {
@@ -972,31 +978,20 @@ mod tests {
         y: f32,
         clicks: u32,
         mods: librio::Modifiers,
-    ) {
+    ) -> core_terminal::LinkAction {
         let mark = model
             .terminal
             .primary()
             .map(|host| host.mark)
             .unwrap_or(crate::chrome::PANE_MARK);
-        let mut tx = Tx::default();
-        if let Some(host) = model.terminal.by_mark_mut(mark) {
-            let action = rune_term_core::terminal_input::gesture(
-                host, phase, x, y, clicks, 0, mods, 1.0, true,
-            );
-            match action {
-                rune_term_core::terminal_input::LinkAction::Opened
-                | rune_term_core::terminal_input::LinkAction::Refused => {
-                    tx.wake_after(Duration::ZERO);
-                }
-                rune_term_core::terminal_input::LinkAction::Confirm(uri) => {
-                    model.pending_link_open = Some(uri);
-                    tx.wake_after(Duration::ZERO);
-                }
-                rune_term_core::terminal_input::LinkAction::None => {
-                    tx.live_only();
-                }
-            }
+        let Some(host) = model.terminal.by_mark_mut(mark) else {
+            return core_terminal::LinkAction::None;
+        };
+        let action = core_terminal::gesture(host, phase, x, y, clicks, 0, mods, 1.0, true);
+        if let core_terminal::LinkAction::Confirm(uri) = &action {
+            model.pending_link_open = Some(uri.clone());
         }
+        action
     }
 
     fn select_hello(model: &mut Model) {
@@ -1222,15 +1217,15 @@ mod tests {
             );
             host.render.update();
         }
-        let (_capture, _opened) = crate::hyperlink::capture_opens();
         let mods = if cfg!(target_os = "macos") {
             librio::Modifiers::SUPER
         } else {
             librio::Modifiers::CTRL
         };
-        gesture_at(&mut model, Phase::Down, 1.0, 1.0, 1, mods);
-        let opened = crate::hyperlink::take_captured_opens();
-        assert_eq!(opened, vec!["https://example.com".to_string()]);
+        assert_eq!(
+            gesture_at(&mut model, Phase::Down, 1.0, 1.0, 1, mods),
+            core_terminal::LinkAction::Open("https://example.com".into())
+        );
         assert!(
             !model.shared.take_output().starts_with(b"\x1b[<"),
             "mod+click must not produce mouse report"
@@ -1489,7 +1484,6 @@ mod tests {
                 .inject_output(b"\x1b]8;;file:///tmp/x\x07link\x1b]8;;\x07");
             host.render.update();
         }
-        let (_capture, _opened) = crate::hyperlink::capture_opens();
         let mods = if cfg!(target_os = "macos") {
             librio::Modifiers::SUPER
         } else {
@@ -1497,7 +1491,6 @@ mod tests {
         };
         gesture_at(&mut model, Phase::Down, 1.0, 1.0, 1, mods);
         assert_eq!(model.pending_link_open.as_deref(), Some("file:///tmp/x"));
-        assert!(crate::hyperlink::take_captured_opens().is_empty());
         assert!(model.shared.take_output().is_empty());
         assert!(model
             .terminal

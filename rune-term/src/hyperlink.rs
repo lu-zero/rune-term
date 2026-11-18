@@ -1,8 +1,8 @@
 //! OSC 8 hyperlinks and implicitly detected URLs.
 
 #[cfg(all(test, not(feature = "pty")))]
-pub use rune_term_core::hyperlink::{capture_opens, take_captured_opens, HoverLink};
-pub use rune_term_core::hyperlink::{open_decision, open_mods, open_uri, OpenDecision};
+pub use rune_term_core::hyperlink::HoverLink;
+pub use rune_term_core::hyperlink::{open_confirmed, open_mods};
 
 #[cfg(all(test, not(feature = "pty")))]
 mod tests {
@@ -11,7 +11,7 @@ mod tests {
     use crate::grid_source::SurfaceGrid;
     use crate::model;
     use librio::Modifiers;
-    use rune_term_core::hyperlink::{resolve, tint};
+    use rune_term_core::hyperlink::{open_decision, resolve, tint, OpenDecision};
     use term_grid::GridSource;
 
     fn host() -> crate::model::Model {

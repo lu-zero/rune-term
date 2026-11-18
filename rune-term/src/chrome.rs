@@ -314,7 +314,7 @@ fn confirm_open_link(uri: &str, p: &Palette) -> El {
                         .fill(theme::linear(p.accent))
                         .focusable(true)
                         .on_press_tx(move |model: &mut Model, _tx| {
-                            crate::hyperlink::open_uri(&to_open);
+                            crate::hyperlink::open_confirmed(&to_open);
                             model.pending_link_open = None;
                         })
                         .child(text("Open").color(text_color(p))),
