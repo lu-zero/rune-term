@@ -59,7 +59,8 @@ shots:
             --snap "$root/docs/images/$1.png"
         rm -rf "$home"
     }
-    settings settings-profiles settle.json
+    settings settings-general settle.json
+    settings settings-profiles profiles.json
     settings settings-theme-menu theme-menu.json
     settings settings-themes themes.json
     settings settings-color color.json

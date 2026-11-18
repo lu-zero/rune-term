@@ -366,10 +366,16 @@ pub fn editor(
     };
     let body = match cfg!(target_os = "macos") {
         true => body.child(
-            Field::new()
-                .label("Option as Alt")
-                .control(option_as_alt(kit, model.profile.option_as_alt))
-                .build(kit),
+            row()
+                .w_full()
+                .gap(12.0)
+                .child(half(
+                    Field::new()
+                        .label("Option as Alt")
+                        .control(option_as_alt(kit, model.profile.option_as_alt))
+                        .build(kit),
+                ))
+                .child(half(el())),
         ),
         false => body,
     };
@@ -399,7 +405,8 @@ fn text_field(
         .build(kit)
 }
 
-fn half(field: El) -> El {
+/// A field that takes half of its row.
+pub(super) fn half(field: El) -> El {
     field.grow(1.0).min_w(0.0)
 }
 

@@ -62,9 +62,9 @@ pub(crate) fn link(kit: &Kit, url: String) -> El {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Tab {
     #[default]
+    General,
     Profiles,
     Themes,
-    General,
 }
 
 /// The settings window's state.
@@ -299,6 +299,14 @@ fn toolbar(kit: &Kit, model: &SettingsModel, cx: &mut Cx<SettingsModel>) -> El {
         .key("titlebar")
         .child(section(
             kit,
+            "General",
+            "section-general",
+            model.tab == Tab::General,
+            tab_h,
+            Tab::General,
+        ))
+        .child(section(
+            kit,
             "Profiles",
             "section-profiles",
             model.tab == Tab::Profiles,
@@ -312,14 +320,6 @@ fn toolbar(kit: &Kit, model: &SettingsModel, cx: &mut Cx<SettingsModel>) -> El {
             model.tab == Tab::Themes,
             tab_h,
             Tab::Themes,
-        ))
-        .child(section(
-            kit,
-            "General",
-            "section-general",
-            model.tab == Tab::General,
-            tab_h,
-            Tab::General,
         ))
         .child(el().grow(1.0));
     if let Some(status) = model.status.clone() {
@@ -729,7 +729,9 @@ mod tests {
             .join("rune-term-settings-ui-test")
             .join(name);
         let _ = std::fs::remove_dir_all(&dir);
-        SettingsModel::with_config(ConfigFile::default().at_dir(dir), None)
+        let mut model = SettingsModel::with_config(ConfigFile::default().at_dir(dir), None);
+        model.tab = Tab::Profiles;
+        model
     }
 
     fn runtime(model: SettingsModel) -> Runtime<SettingsModel> {
