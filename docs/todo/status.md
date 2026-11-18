@@ -216,7 +216,7 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       argument quoted for the far shell; the group is `session@host`.
       The menu lists the sessions on each host a profile or an open group
       names, from that host's last answer, asked again in the background
-      each time the menu opens. A host's submenu starts a session there, named or not, and Connect to Host… names a host no profile does, which the menu then lists for the rest of the run. `rune-term sessions [HOST]` prints them, and `rune-term profiles` the profiles `--profile` opens. A link that drops after reaching its session
+      each time the menu opens. A host's submenu starts a session there, named or not, and Connect to Host… names a host no profile does, which the menu then lists for the rest of the run. A profile's Server, tmux's `-L` name, picks a server other than the default, here or on its host; the menu lists each such server as it does a host, and `attach --server NAME` takes one. `rune-term sessions [HOST]` prints them, and `rune-term profiles` the profiles `--profile` opens. A link that drops after reaching its session
       greys its group; the tab menu's Reconnect attaches it again into the
       same tabs, and tmux redraws every pane. Why a link failed, ssh's
       last line when it was ssh, shows in a notice in the window. Design:

@@ -46,9 +46,23 @@ impl Target {
 
     /// The group's label before the multiplexer names the session.
     pub fn label(&self, session: &str) -> String {
-        match &self.host {
+        let label = match &self.host {
             Some(host) => format!("{session}@{host}"),
             None => session.to_owned(),
+        };
+        match &self.socket {
+            Some(server) => format!("{label} ({server})"),
+            None => label,
+        }
+    }
+
+    /// The submenu of a target other than this machine's default server.
+    pub fn place(&self) -> String {
+        match (&self.host, &self.socket) {
+            (Some(host), Some(server)) => format!("{host} ({server})"),
+            (Some(host), None) => host.clone(),
+            (None, Some(server)) => format!("Server {server}"),
+            (None, None) => "This machine".to_owned(),
         }
     }
 

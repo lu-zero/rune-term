@@ -153,12 +153,12 @@ pub(crate) fn sessions(target: &Target) -> Option<Vec<String>> {
 
 /// `rune-term sessions`. A program missing here, or on the host, is skipped.
 /// 1 when ssh could not reach the host.
-pub(crate) fn print_sessions(host: Option<String>) -> i32 {
+pub(crate) fn print_sessions(host: Option<String>, server: Option<String>) -> i32 {
     for program in [Program::Tmux, Program::Rmux] {
         let target = Target {
             program,
             host: host.clone(),
-            socket: None,
+            socket: server.clone(),
         };
         match remote::list(&target) {
             remote::Listed::Sessions(sessions) => {
@@ -234,7 +234,7 @@ fn profile_target(profile: &crate::settings::Profile) -> Option<(Target, Option<
     let target = Target {
         program,
         host: non_empty(&profile.host),
-        socket: None,
+        socket: non_empty(&profile.server),
     };
     Some((target, non_empty(&profile.session)))
 }
@@ -351,6 +351,7 @@ fn save_profile(model: &mut Model, group: TabGroupId, name: &str) -> Result<(), 
         .unwrap_or_default();
     profile.backend = mux.target.program.name().to_owned();
     profile.host = mux.target.host.clone();
+    profile.server = mux.target.socket.clone();
     profile.session = mux.session.clone();
     profile.shell = None;
     profile.cwd = None;
@@ -1259,7 +1260,7 @@ pub(crate) fn menu(model: &Model, mut menu: PopupMenu) -> PopupMenu {
     menu
 }
 
-/// The hosts a session profile or an open group names, for each program.
+/// The hosts and servers a session profile or an open group names, for each program.
 fn remote_targets(model: &Model) -> Vec<Target> {
     let mut targets: Vec<Target> = model
         .config
@@ -1269,21 +1270,34 @@ fn remote_targets(model: &Model) -> Vec<Target> {
         .map(|(target, _)| target)
         .chain(model.muxes.iter().map(|mux| mux.target.clone()))
         .chain(model.hosts.iter().cloned())
-        .filter(|target| target.host.is_some() && target.socket.is_none())
+        .filter(|target| *target != Target::local(target.program))
         .collect();
-    targets.sort_by(|a, b| (a.program.name(), &a.host).cmp(&(b.program.name(), &b.host)));
+    targets.sort_by(|a, b| {
+        (a.program.name(), &a.host, &a.socket).cmp(&(b.program.name(), &b.host, &b.socket))
+    });
     targets.dedup();
     targets
 }
 
-/// A host's entry in its program's submenu: a new session there, and the sessions it last listed.
+/// A host's or server's entry in its program's submenu: a new session there,
+/// and the sessions it last listed.
 fn host_menu(model: &Model, target: &Target, menu: PopupMenu) -> PopupMenu {
-    let host = target.host.as_deref().expect("a remote target");
-    let id = |action: &str| format!("{}-{action}@{host}", target.program.name());
+    let place = target.place();
+    let id = |action: &str| {
+        let server = target
+            .socket
+            .as_ref()
+            .map_or(String::new(), |s| format!("/{s}"));
+        let host = target
+            .host
+            .as_ref()
+            .map_or(String::new(), |h| format!("@{h}"));
+        format!("{}-{action}{server}{host}", target.program.name())
+    };
     let sessions = match remote::listing(target) {
         remote::Listed::Missing => {
             let missing = PopupItem::new(id("missing"), "Not Installed").enabled(false);
-            return menu.submenu(host, PopupMenu::new().item(missing));
+            return menu.submenu(place, PopupMenu::new().item(missing));
         }
         remote::Listed::Asking => vec![PopupItem::new(id("asking"), "Listing…").enabled(false)],
         remote::Listed::Unreachable(said) => {
@@ -1296,7 +1310,7 @@ fn host_menu(model: &Model, target: &Target, menu: PopupMenu) -> PopupMenu {
             .collect(),
     };
     menu.submenu(
-        host,
+        place,
         PopupMenu::new()
             .item(PopupItem::new(id("new"), "New Session"))
             .item(PopupItem::new(id("named"), "New Named Session…"))
@@ -1373,28 +1387,37 @@ enum Action<'a> {
     Attach(&'a str),
 }
 
-/// `new`, `named`, `host`, or `attach:SESSION`; a remote one has `@HOST` after the verb.
-/// tmux turns a `:` in a session name into `_`, so the last one splits.
+/// `new`, `named`, `host`, or `attach:SESSION`. After the verb, `/SERVER` names a
+/// server other than the default and `@HOST` a host. tmux turns a `:` in a
+/// session name into `_`, so an attach's last `:` splits off its session; a host
+/// may have its own, as `::1` does. [`crate::settings::server_ok`] keeps `@` out of a server.
 fn parse_action(program: Program, action: &str) -> Option<(Target, Action<'_>)> {
-    let (verb, session) = match action.rsplit_once(':') {
-        Some((verb, session)) => (verb, Some(session)),
-        None => (action, None),
+    let (verb, rest) = action.split_at(action.find(['/', '@', ':']).unwrap_or(action.len()));
+    let (rest, session) = match verb {
+        "attach" => rest
+            .rsplit_once(':')
+            .map(|(rest, session)| (rest, Some(session)))?,
+        _ => (rest, None),
     };
-    let (verb, host) = match verb.split_once('@') {
-        Some((verb, host)) => (verb, Some(host.to_owned())),
-        None => (verb, None),
+    let (server, host) = match rest.split_once('@') {
+        Some((server, host)) => (server, Some(host.to_owned())),
+        None => (rest, None),
+    };
+    let socket = match server {
+        "" => None,
+        server => Some(server.strip_prefix('/')?.to_owned()),
     };
     let action = match (verb, session) {
         ("new", None) => Action::New,
         ("named", None) => Action::Named,
-        ("host", None) if host.is_none() => Action::Host,
+        ("host", None) if host.is_none() && socket.is_none() => Action::Host,
         ("attach", Some(session)) => Action::Attach(session),
         _ => return None,
     };
     let target = Target {
         program,
         host,
-        socket: None,
+        socket,
     };
     Some((target, action))
 }
@@ -1617,7 +1640,7 @@ mod tests {
     }
 
     fn session_takes_keys(program: Program) {
-        let Some((_server, mut model, group)) = attached_on(program, "keys") else {
+        let Some((server, mut model, group)) = attached_on(program, "keys") else {
             return;
         };
         assert!(
@@ -1632,7 +1655,7 @@ mod tests {
                 .find(|g| g.id == group)
                 .unwrap()
                 .label,
-            "keys"
+            server.0.label("keys")
         );
         let pane = crate::tabs::surface_of(&model.tabs[model.active]).unwrap();
         model
@@ -2059,21 +2082,16 @@ mod tests {
             .position(|tab| tab.group == Some(group))
             .unwrap();
         ask_profile_name(&mut model, index);
-        assert_eq!(model.name_prompt.as_ref().unwrap().edit.text, "saved");
+        let name = server.0.label("saved");
+        assert_eq!(model.name_prompt.as_ref().unwrap().edit.text, name);
         submit_name(&mut model);
         assert!(model.name_prompt.is_none(), "the name was taken");
-        let profile = model.config.profile("saved").expect("the profile");
+        let profile = model.config.profile(&name).expect("the profile");
         let (target, session) = profile_target(profile).expect("a session profile");
-        assert_eq!(
-            target,
-            Target {
-                socket: None,
-                ..server.0.clone()
-            }
-        );
+        assert_eq!(target, server.0);
         assert_eq!(session.as_deref(), Some("saved"));
         let on_disk = crate::settings::ConfigFile::open(&dir).unwrap();
-        assert_eq!(on_disk.profile("saved"), Some(profile));
+        assert_eq!(on_disk.profile(&name), Some(profile));
 
         ask_profile_name(&mut model, index);
         submit_name(&mut model);
@@ -2102,6 +2120,68 @@ mod tests {
         assert_eq!(target.program, Program::Rmux);
         assert_eq!(target.host.as_deref(), Some("box"));
         assert_eq!(session, None, "a blank session starts a new one each time");
+    }
+
+    #[test]
+    fn a_profile_server_lists_its_sessions_and_attaches_them_there() {
+        if sessions(&Target::local(Program::Tmux)).is_none() {
+            eprintln!("tmux is not installed: skipped");
+            return;
+        }
+        let name = format!("rune-term-{}-server", std::process::id());
+        let server = Server(Target {
+            socket: Some(name.clone()),
+            ..Target::local(Program::Tmux)
+        });
+        let started = server
+            .run(&[
+                "-f",
+                "/dev/null",
+                "new-session",
+                "-d",
+                "-s",
+                "kept",
+                "/bin/sh",
+            ])
+            .status();
+        assert!(started.is_ok_and(|status| status.success()));
+        let mut model = crate::model::init();
+        delegate::setup(&mut model, Arc::new(|| {}));
+        model.config.profiles.insert(
+            "other".to_owned(),
+            crate::settings::Profile {
+                backend: "tmux".to_owned(),
+                server: Some(name.clone()),
+                ..Default::default()
+            },
+        );
+        let id = format!("tmux-attach/{name}:kept");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while menu(&model, PopupMenu::new()).find(&id).is_none() {
+            assert!(Instant::now() < deadline, "no {id} in the menu");
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert!(menu_action(&mut model, &id));
+        let label = format!("kept ({name})");
+        assert!(until(&mut model, |model| model
+            .tab_groups
+            .iter()
+            .any(|g| g.label == label)));
+    }
+
+    #[test]
+    fn a_server_id_names_it_here_or_on_a_host() {
+        let (target, action) = parse_action(Program::Tmux, "attach/work@me@box:a").unwrap();
+        assert_eq!(target.host.as_deref(), Some("me@box"));
+        assert_eq!(target.socket.as_deref(), Some("work"));
+        assert!(matches!(action, Action::Attach("a")));
+        let (target, action) = parse_action(Program::Tmux, "new/work").unwrap();
+        assert_eq!(
+            (target.host, target.socket.as_deref()),
+            (None, Some("work"))
+        );
+        assert!(matches!(action, Action::New));
+        assert!(parse_action(Program::Tmux, "host/work").is_none());
     }
 
     #[test]

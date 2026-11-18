@@ -1,4 +1,4 @@
-//! The sessions on ssh hosts, for the menu. Asking a host takes a round trip
+//! The sessions on ssh hosts and other servers, for the menu. Asking a host takes a round trip
 //! the menu cannot wait for, so it shows what the host last said and asks again.
 
 use std::collections::HashMap;

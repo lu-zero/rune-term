@@ -28,6 +28,7 @@ pub struct ProfileDraft {
     pub backend: String,
     pub backend_open: bool,
     pub host: TextEdit,
+    pub server: TextEdit,
     pub session: TextEdit,
     pub on_close: Option<settings::OnClose>,
 }
@@ -75,6 +76,7 @@ impl ProfileDraft {
             backend: profile.backend.clone(),
             backend_open: false,
             host: TextEdit::new(profile.host.clone().unwrap_or_default()),
+            server: TextEdit::new(profile.server.clone().unwrap_or_default()),
             session: TextEdit::new(profile.session.clone().unwrap_or_default()),
             on_close: profile.on_close,
         }
@@ -124,6 +126,10 @@ impl ProfileDraft {
                     .map_err(|_| format!("'{text}' is not a font size"))?,
             )),
         };
+        let server = non_empty(&self.server.text);
+        if let Some(server) = server.as_deref().filter(|s| !settings::server_ok(s)) {
+            return Err(server_refused(server));
+        }
         let shell_program = non_empty(&self.shell_program.text);
         let shell_args: Vec<String> = self
             .shell_args
@@ -149,6 +155,7 @@ impl ProfileDraft {
                 cwd: non_empty(&self.cwd.text),
                 backend: self.backend.clone(),
                 host: non_empty(&self.host.text),
+                server,
                 session: non_empty(&self.session.text),
                 on_close: self.on_close,
             },
@@ -294,12 +301,22 @@ pub fn editor(
                     |m| &mut m.profile.host,
                     reflect_host,
                 )))
-                .child(half(
-                    Field::new()
-                        .label("On close")
-                        .control(on_close(kit, model.profile.on_close))
-                        .build(kit),
-                )),
+                .child(half(text_field(
+                    kit,
+                    "Server",
+                    &draft.server,
+                    "The default",
+                    |m| &mut m.profile.server,
+                    reflect_server,
+                ))),
+        )
+        .child(
+            row().w_full().gap(12.0).child(half(
+                Field::new()
+                    .label("On close")
+                    .control(on_close(kit, model.profile.on_close))
+                    .build(kit),
+            )),
         )
     } else {
         body.child(
@@ -644,6 +661,24 @@ fn reflect_host(model: &mut SettingsModel) {
         show(&mut draft.host, host.as_deref().unwrap_or(""));
         let changed = profile.host != host;
         profile.host = host;
+        Ok(changed)
+    });
+}
+
+fn server_refused(server: &str) -> String {
+    format!("'{server}' cannot name a server: letters, digits, '-', '_' and '.'")
+}
+
+/// The server's `-L` name, which the menu carries in its ids.
+fn reflect_server(model: &mut SettingsModel) {
+    reflect_field(model, |draft, profile| {
+        let server = non_empty(&draft.server.text);
+        if let Some(server) = server.as_deref().filter(|s| !settings::server_ok(s)) {
+            return Err(server_refused(server));
+        }
+        show(&mut draft.server, server.as_deref().unwrap_or(""));
+        let changed = profile.server != server;
+        profile.server = server;
         Ok(changed)
     });
 }
