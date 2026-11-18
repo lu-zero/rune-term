@@ -77,55 +77,9 @@ fn this_host(_host: &str) -> bool {
     false
 }
 
-#[cfg(not(feature = "pty"))]
-thread_local! {
-    static TEST_OPENER: std::cell::RefCell<Option<Vec<String>>> = const {
-        std::cell::RefCell::new(None)
-    };
-}
-
-#[cfg(not(feature = "pty"))]
-pub struct OpenCapture;
-
-#[cfg(not(feature = "pty"))]
-impl Drop for OpenCapture {
-    fn drop(&mut self) {
-        TEST_OPENER.with(|slot| *slot.borrow_mut() = None);
-    }
-}
-
-#[cfg(not(feature = "pty"))]
-pub fn capture_opens() -> (OpenCapture, std::rc::Rc<std::cell::RefCell<Vec<String>>>) {
-    let opened = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
-    let shared = opened.clone();
-    TEST_OPENER.with(|slot| {
-        *slot.borrow_mut() = Some(Vec::new());
-    });
-    (OpenCapture, shared)
-}
-
-#[cfg(not(feature = "pty"))]
-pub fn take_captured_opens() -> Vec<String> {
-    TEST_OPENER.with(|slot| slot.borrow_mut().take().unwrap_or_default())
-}
-
-/// Hands `uri` to the desktop. The caller has taken [`open_decision`] into account.
-pub fn open_uri(uri: &str) {
-    #[cfg(not(feature = "pty"))]
-    {
-        let captured = TEST_OPENER.with(|slot| {
-            let mut slot = slot.borrow_mut();
-            if let Some(uris) = slot.as_mut() {
-                uris.push(uri.to_owned());
-                true
-            } else {
-                false
-            }
-        });
-        if captured {
-            return;
-        }
-    }
+/// Hands a link the user confirmed to the desktop. `Tx::open_url` opens web and mail links
+/// and refuses every other scheme.
+pub fn open_confirmed(uri: &str) {
     let uri = uri.to_owned();
     std::thread::spawn(move || {
         let result = if cfg!(target_os = "macos") {

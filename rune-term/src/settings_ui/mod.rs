@@ -52,9 +52,9 @@ pub(crate) fn link(kit: &Kit, url: String) -> El {
         .hover(kit.c.hover)
         .child(text("↗").font(kit.ty.small).color(kit.c.text_muted));
     if !url.is_empty() {
-        button = button.on_press(move |_m: &mut SettingsModel| {
-            if crate::hyperlink::open_decision(&url) == crate::hyperlink::OpenDecision::Open {
-                crate::hyperlink::open_uri(&url);
+        button = button.on_press_tx(move |_m: &mut SettingsModel, tx| {
+            if let Err(err) = tx.open_url(&url) {
+                eprintln!("not opening {url}: {err}");
             }
         });
     }

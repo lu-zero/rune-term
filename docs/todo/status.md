@@ -120,8 +120,9 @@ The numbers are that plan's.
       selection or mouse reporting see the click.
       - [x] **Opening.** http, https and mailto open; another scheme asks
             first. A link with no scheme, or a `file://` naming another host,
-            is refused, as is a drive letter. `open`, `xdg-open`, or
-            `rundll32` on Windows.
+            is refused, as is a drive letter. Web and mail links open through
+            Rune's `Tx::open_url`; a confirmed one through `open`,
+            `xdg-open`, or `rundll32` on Windows.
       - [ ] **Wrapped links.** Only the hovered row is underlined. OSC 8 can
             walk the rows here; `url_at` clips to the row, so plain URLs need
             librio to return the whole span.

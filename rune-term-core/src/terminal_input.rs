@@ -11,7 +11,8 @@ use crate::surfaces::HostSurface;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LinkAction {
     None,
-    Opened,
+    /// A web or mail link, for `Tx::open_url`.
+    Open(String),
     Refused,
     Confirm(String),
 }
@@ -82,10 +83,7 @@ pub fn try_open_link_at(host: &mut HostSurface, x: f32, y: f32, scale: f32) -> L
     host.hover_link = None;
     host.hover_probe = None;
     match hyperlink::open_decision(&link.uri) {
-        OpenDecision::Open => {
-            hyperlink::open_uri(&link.uri);
-            LinkAction::Opened
-        }
+        OpenDecision::Open => LinkAction::Open(link.uri),
         OpenDecision::Confirm => LinkAction::Confirm(link.uri),
         OpenDecision::Refuse => {
             eprintln!("not opening link: {}", link.uri);
