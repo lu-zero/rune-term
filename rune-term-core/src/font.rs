@@ -15,6 +15,6 @@ pub fn cell_points() -> (f32, f32) {
     term_grid::face_cell()
 }
 
-pub fn cell_points_for(font_size: f32) -> (f32, f32) {
-    term_grid::face_cell_for(clamp_font_size(font_size))
+pub fn cell_points_for(face: &term_grid::Face, font_size: f32) -> (f32, f32) {
+    term_grid::face_cell_for(face, clamp_font_size(font_size))
 }

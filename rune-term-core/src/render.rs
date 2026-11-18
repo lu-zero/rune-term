@@ -4,7 +4,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use librio::SurfaceId;
-use term_grid::GridRenderer;
+use term_grid::{Face, GridRenderer};
 
 use crate::grid_source::SurfaceGrid;
 use crate::hyperlink::{self, HoverLink};
@@ -30,6 +30,7 @@ pub fn sync_active_host(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     palette: Arc<Palette>,
+    face: &Face,
     search_pattern: &str,
     hover: Option<&HoverLink>,
     preedit: Option<&Preedit>,
@@ -74,6 +75,7 @@ pub fn sync_active_host(
         device,
         queue,
         &mut source,
+        face,
         host.cell_px,
         resized || flagged || force_upload,
     );

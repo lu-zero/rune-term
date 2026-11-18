@@ -63,10 +63,7 @@ pub fn open_with_profile(model: &mut Model, profile: &str) -> bool {
 
 fn apply_profile_for_new_tab(model: &mut Model, profile: &str) {
     let resolved = model.config.resolve_profile(profile);
-    if (resolved.font_size - model.font_size).abs() > f32::EPSILON {
-        model.font_size = resolved.font_size;
-        model.cell_points = crate::metrics::cell_points_for(resolved.font_size);
-    }
+    crate::metrics::apply_font(model, &resolved);
     if resolved.theme != model.palette.name {
         model.palette = model.config.resolve_palette_for(profile);
         model.terminal.invalidate_theme();
@@ -306,10 +303,7 @@ pub(crate) fn apply_active_profile(model: &mut Model) {
         return;
     };
     let resolved = model.config.resolve_profile(&profile);
-    if (resolved.font_size - model.font_size).abs() > f32::EPSILON {
-        model.font_size = resolved.font_size;
-        model.cell_points = crate::metrics::cell_points_for(resolved.font_size);
-    }
+    crate::metrics::apply_font(model, &resolved);
     if resolved.theme != model.palette.name {
         model.palette = model.config.resolve_palette_for(&profile);
         model.terminal.invalidate_theme();

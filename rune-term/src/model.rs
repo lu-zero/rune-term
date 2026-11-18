@@ -21,6 +21,7 @@ pub struct Model {
     pub scale: f32,
     pub config: ConfigFile,
     pub font_size: f32,
+    pub face: term_grid::Face,
     pub palette: Arc<Palette>,
     pub search: SearchUi,
     pub pending_link_open: Option<String>,
@@ -56,6 +57,7 @@ pub fn init() -> Model {
     let config = ConfigFile::load();
     let resolved = config.resolve();
     let font_size = resolved.font_size;
+    let face = term_grid::Face::load(&resolved.font_family);
     let palette = config.resolve_palette();
     let profile = config.default_profile_name().to_owned();
     Model {
@@ -78,10 +80,11 @@ pub fn init() -> Model {
         tab_groups: Vec::new(),
         active: 0,
         terminal: rune_term_core::terminal::Terminal::new(palette.name.clone()),
-        cell_points: metrics::cell_points_for(font_size),
+        cell_points: metrics::cell_points_for(&face, font_size),
         scale: 1.0,
         config,
         font_size,
+        face,
         palette,
         search: SearchUi::default(),
         pending_link_open: None,

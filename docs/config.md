@@ -59,7 +59,7 @@ program = "/bin/zsh"
 args = ["-l"]
 ```
 
-- `font_family`: default `"Cascadia Code NF"`. Stored and selectable. The live atlas does not switch face yet; font size does apply.
+- `font_family`: default `"Cascadia Code NF"`, which is bundled. Another family draws in its regular face when it is installed, and in the bundled one when it is not. A symbol the face lacks comes from the system's fallback fonts.
 - `font_size` (optional): overrides `settings.font_size`.
 - `theme` (optional): a theme name. When it is omitted, the profile inherits. With both `adaptive_theme` names set, that is the desktop appearance, and the field reads `Inherit (Appearance)`. Otherwise it is `settings.theme`, and the field reads `Inherit` and that name. A named theme wins over both. The menu lists theme names. Inherit is the empty value.
 - `backend`: `"local"`, a shell here, or `"tmux"` or `"rmux"`, a session whose windows are a group of tabs. For a session:

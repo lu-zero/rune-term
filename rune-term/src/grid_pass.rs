@@ -24,6 +24,7 @@ pub fn sync(
         device,
         queue,
         palette,
+        &model.face,
         &shown,
         hover_active_mods,
     );

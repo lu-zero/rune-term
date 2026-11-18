@@ -3,6 +3,7 @@
 
 use crate::atlas::Atlas;
 use crate::cell::{CellBg, CellSample, CellText, CursorSample, GridSource, GridUniforms};
+use crate::face::Face;
 
 const SHADER: &str = include_str!("grid.wgsl");
 const FRAMES_IN_FLIGHT: usize = 2;
@@ -125,6 +126,7 @@ impl GridRenderer {
         device: &wgpu::Device,
         queue: &wgpu::Queue,
         source: &mut impl GridSource,
+        face: &Face,
         cell_px: (u16, u16),
         force: bool,
     ) {
@@ -146,16 +148,19 @@ impl GridRenderer {
             source.reset_dirty();
             return;
         };
-        let size_changed =
-            !self.ready || self.cols != cols || self.rows != rows || self.cell_px != cell_px;
+        let size_changed = !self.ready
+            || self.cols != cols
+            || self.rows != rows
+            || self.cell_px != cell_px
+            || self.atlas.face() != face;
         let dirty = (0..rows as usize).any(|line| source.row_dirty(line));
         if !force && !size_changed && !dirty {
             source.reset_dirty();
             return;
         }
         let cell = (u32::from(cell_px.0), u32::from(cell_px.1));
-        if self.atlas.cell() != cell {
-            self.atlas = Atlas::with_cell(cell.0, cell.1);
+        if self.atlas.cell() != cell || self.atlas.face() != face {
+            self.atlas = Atlas::with_face(face.clone(), cell.0, cell.1);
             upload_gray(queue, &self.gray, &self.atlas);
             clear_color(queue, &self.color);
         }
