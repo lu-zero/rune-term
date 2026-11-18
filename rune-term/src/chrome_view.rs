@@ -173,6 +173,7 @@ fn single(model: &Model, scale: f32) -> El {
             model.terminal.cursor_cell(),
             cell_px,
             scale,
+            ime::option_as_alt(model),
         ))
         .child(scrollback::column(scrollback::SHOWN_PANE).pin(
             None,
@@ -271,6 +272,7 @@ fn leaf_el(leaf: &Leaf, model: &Model, scale: f32, cell: (f32, f32)) -> El {
             cursor_cell,
             cell_px,
             scale,
+            ime::option_as_alt(model),
         ))
         .child(scrollback::column(mark).pin(None, Some(0.0), Some(0.0), Some(0.0)));
     row()

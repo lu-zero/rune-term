@@ -85,7 +85,9 @@ The numbers are that plan's.
       same: apply, save, revert, duplicate, delete and create, with the theme
       on screen the one the editor is showing. A General tab, with no list,
       holds what is the app's: asking before a close ends a program, and what
-      closing a session tab does. The editor shows Name, Author,
+      closing a session tab does. A profile picks which Option keys are Alt on
+      macOS (left, right or both), as iTerm2's do; one Option key is a Rune
+      change on `physical-key-text`. The editor shows Name, Author,
       and Source, then Basic beside UI, then ANSI, Cube, and Gray. Those rows
       stack as the window narrows, and the cube flows by group. ANSI is the
       normal row, then the bright row. The cube and the

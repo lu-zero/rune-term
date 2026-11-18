@@ -32,6 +32,7 @@ pub struct ProfileDraft {
     pub session: TextEdit,
     pub on_close: Option<settings::OnClose>,
     pub transport: settings::Transport,
+    pub option_as_alt: settings::OptionAsAlt,
 }
 
 impl ProfileDraft {
@@ -81,6 +82,7 @@ impl ProfileDraft {
             session: TextEdit::new(profile.session.clone().unwrap_or_default()),
             on_close: profile.on_close,
             transport: profile.transport,
+            option_as_alt: profile.option_as_alt,
         }
     }
 
@@ -161,6 +163,7 @@ impl ProfileDraft {
                 session: non_empty(&self.session.text),
                 on_close: self.on_close,
                 transport: self.transport,
+                option_as_alt: self.option_as_alt,
             },
         ))
     }
@@ -367,6 +370,15 @@ pub fn editor(
                 ))),
         )
     };
+    let body = match cfg!(target_os = "macos") {
+        true => body.child(
+            Field::new()
+                .label("Option as Alt")
+                .control(option_as_alt(kit, model.profile.option_as_alt))
+                .build(kit),
+        ),
+        false => body,
+    };
     super::with_actions(actions(kit, model), body)
 }
 
@@ -468,6 +480,30 @@ fn transport(kit: &Kit, current: settings::Transport) -> El {
             reflect_field(m, |draft, profile| {
                 let changed = profile.transport != draft.transport;
                 profile.transport = draft.transport;
+                Ok(changed)
+            });
+        })
+        .build(kit)
+}
+
+/// Which Option keys send Alt, as Meta. Off, Option types the layout's characters.
+fn option_as_alt(kit: &Kit, current: settings::OptionAsAlt) -> El {
+    use settings::OptionAsAlt;
+    const KEYS: [OptionAsAlt; 4] = [
+        OptionAsAlt::None,
+        OptionAsAlt::Left,
+        OptionAsAlt::Right,
+        OptionAsAlt::Both,
+    ];
+    let at = KEYS.iter().position(|keys| *keys == current);
+    SegmentedControl::new(&["Off", "Left", "Right", "Both"], at)
+        .label("Option as Alt")
+        .width(None)
+        .on_pick(|m: &mut SettingsModel, at, _tx| {
+            m.profile.option_as_alt = KEYS[at];
+            reflect_field(m, |draft, profile| {
+                let changed = profile.option_as_alt != draft.option_as_alt;
+                profile.option_as_alt = draft.option_as_alt;
                 Ok(changed)
             });
         })
