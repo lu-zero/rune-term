@@ -26,8 +26,8 @@ these pictures.
 `rune` and `librio` are the upstream git dependencies. `[patch]` replaces
 them with [lu-zero/rune](https://github.com/lu-zero/rune) branch
 `physical-key-text` and [lu-zero/rio](https://github.com/lu-zero/rio) branch
-`rune-term-on-main`. winit is the vendored copy in that rune
-checkout (`../rune/vendor/winit`). Cascadia Code NF is vendored in
+`rune-term-on-main`. winit is the copy vendored in that rune branch, so
+no sibling checkout is needed to build. Cascadia Code NF is vendored in
 `term-grid/`. wgpu is pinned at `=30.0.1`.
 
 ### System dependencies
