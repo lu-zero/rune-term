@@ -4,6 +4,8 @@ use std::collections::HashMap;
 
 use librio::SurfaceId;
 use rune::compose::DeviceKey;
+#[cfg(all(unix, feature = "pty"))]
+use rune::fast_exit;
 use rune::render::{Instance, KIND_EFFECT};
 use rune::{App, AppSpec, Compositor, Frame, Titlebar, Tx};
 use rune_term_core::terminal::PaneGrid;
@@ -38,6 +40,8 @@ fn with_settings_window(mut app: App<Model>) -> App<Model> {
     let (settings, _window) = app.window(crate::settings_ui::window(terminal));
     app.init(move || {
         let mut model = model::init();
+        #[cfg(all(unix, feature = "pty"))]
+        crate::handover::adopt(&mut model);
         model.settings = Some(settings.clone());
         model.terminal_handle = Some(menu.clone());
         crate::mux::prefetch(&model);
@@ -47,6 +51,8 @@ fn with_settings_window(mut app: App<Model>) -> App<Model> {
 }
 
 pub fn app() -> App<Model> {
+    #[cfg(all(unix, feature = "pty"))]
+    fast_exit(delegate::handover_all);
     App::new(spec())
         .compositor(GridCompositor::default())
         .on_ime(ime::on_ime)

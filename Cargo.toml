@@ -12,6 +12,7 @@ members = [
     "rune-term",
     "rune-term-ctl",
     "rune-term-agent",
+    "rune-term-keeper",
 ]
 
 [workspace.package]
@@ -26,6 +27,7 @@ color-picker = { path = "color-picker" }
 font-picker = { path = "font-picker" }
 rune-term = { path = "rune-term", default-features = false }
 rune-term-core = { path = "rune-term-core", default-features = false }
+rune-term-keeper = { path = "rune-term-keeper" }
 term-control = { path = "term-control" }
 term-grid = { path = "term-grid" }
 term-input = { path = "term-input" }

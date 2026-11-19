@@ -8,6 +8,8 @@ pub mod cli;
 mod closing;
 mod delegate;
 mod grid_pass;
+#[cfg(all(unix, feature = "pty"))]
+mod handover;
 #[cfg(feature = "pty")]
 mod link;
 mod menu;

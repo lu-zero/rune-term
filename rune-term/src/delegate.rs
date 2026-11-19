@@ -78,6 +78,8 @@ pub struct Shared {
     output_surface: Mutex<Option<SurfaceId>>,
     #[cfg(feature = "pty")]
     links: Mutex<HashMap<SurfaceId, crate::link::PtyLink>>,
+    #[cfg(feature = "pty")]
+    profiles: Mutex<HashMap<SurfaceId, String>>,
     mux_input: Mutex<HashMap<SurfaceId, MuxInput>>,
     control: Mutex<
         Vec<(
@@ -131,6 +133,8 @@ impl Shared {
             output_surface: Mutex::new(None),
             #[cfg(feature = "pty")]
             links: Mutex::new(HashMap::new()),
+            #[cfg(feature = "pty")]
+            profiles: Mutex::new(HashMap::new()),
             mux_input: Mutex::new(HashMap::new()),
             control: Mutex::new(Vec::new()),
             rearms: AtomicUsize::new(0),
@@ -174,6 +178,7 @@ impl Shared {
         self.mux_input.lock().expect("mux input").remove(&id);
         #[cfg(feature = "pty")]
         {
+            self.profiles.lock().expect("profiles").remove(&id);
             // Not dropped under the lock: the reader may be writing a reply.
             let link = self.links.lock().expect("links").remove(&id);
             drop(link);
@@ -181,8 +186,27 @@ impl Shared {
     }
 
     #[cfg(feature = "pty")]
-    fn insert_link(&self, id: SurfaceId, link: crate::link::PtyLink) {
+    pub(crate) fn insert_link(&self, id: SurfaceId, link: crate::link::PtyLink) {
         self.links.lock().expect("links").insert(id, link);
+    }
+
+    #[cfg(feature = "pty")]
+    fn note_profile(&self, id: SurfaceId, profile: String) {
+        self.profiles.lock().expect("profiles").insert(id, profile);
+    }
+
+    #[cfg(feature = "pty")]
+    fn profile_of(&self, id: SurfaceId) -> Option<String> {
+        self.profiles.lock().expect("profiles").get(&id).cloned()
+    }
+
+    #[cfg(all(unix, feature = "pty"))]
+    pub(crate) fn is_adopted(&self, id: SurfaceId) -> bool {
+        self.links
+            .lock()
+            .expect("links")
+            .get(&id)
+            .is_some_and(crate::link::PtyLink::is_adopted)
     }
 
     /// The winsize follows the grid: `cols * cell_px` by `rows * cell_px`.
@@ -362,6 +386,16 @@ pub fn setup(model: &mut Model, waker: Waker) {
         .get(model.active)
         .map(|t| t.profile.clone())
         .unwrap_or_else(|| model.config.default_profile_name().to_owned());
+    #[cfg(all(unix, feature = "pty"))]
+    if model
+        .terminal
+        .primary()
+        .is_some_and(|host| model.shared.is_adopted(host.surface.id()))
+    {
+        // The pane was adopted at startup: its shell is already there.
+        crate::mux::attach_queued(model);
+        return;
+    }
     let id = open_host(model, PANE_MARK, 0, 0, Some(&profile));
     crate::chrome_view::attach_initial(model, id);
     crate::mux::attach_queued(model);
@@ -414,8 +448,10 @@ pub(crate) fn open_host(
     rows: u16,
     profile: Option<&str>,
 ) -> SurfaceId {
-    let profile = profile.unwrap_or_else(|| model.config.default_profile_name());
-    let resolved = model.config.resolve_profile(profile);
+    let profile = profile
+        .map(str::to_owned)
+        .unwrap_or_else(|| model.config.default_profile_name().to_owned());
+    let resolved = model.config.resolve_profile(&profile);
     let desc = surface_desc_for(&resolved, cols, rows);
     let surface = open_bare(model, mark, cols, rows, &desc);
     let id = surface.id();
@@ -424,8 +460,61 @@ pub(crate) fn open_host(
         let link = crate::link::PtyLink::spawn(surface, &desc, Arc::clone(&model.shared))
             .expect("spawn shell");
         model.shared.insert_link(id, link);
+        model.shared.note_profile(id, profile);
     }
     id
+}
+
+/// One surface that belongs to a keeper-held shell: no spawn; the link takes
+/// the master over.
+#[cfg(all(unix, feature = "pty"))]
+pub(crate) fn open_adopted(
+    model: &mut Model,
+    mark: u32,
+    ad: crate::handover::Adopted,
+) -> SurfaceId {
+    let (cols, rows, ..) = ad.winsize;
+    let desc = SurfaceDesc {
+        cols,
+        rows,
+        ..SurfaceDesc::default()
+    };
+    let surface = open_bare(model, mark, cols, rows, &desc);
+    let id = surface.id();
+    let link = crate::link::PtyLink::adopted(
+        surface.clone(),
+        Arc::clone(&model.shared),
+        ad.fd,
+        ad.shell,
+        ad.winsize,
+    )
+    .expect("adopted link");
+    model.shared.insert_link(id, link);
+    if let Some(profile) = &ad.profile {
+        model.shared.note_profile(id, profile.clone());
+    }
+    surface.inject_output(&ad.blob);
+    id
+}
+
+/// Hand the local shells to their keepers: Rune ends without them, the
+/// keepers hold the masters, and the next instance adopts them.
+#[cfg(all(unix, feature = "pty"))]
+pub(crate) fn handover_all() {
+    let Some(shared) = PUBLISHED.lock().expect("harness").clone() else {
+        return;
+    };
+    let Some(dir) = crate::handover::keepers_dir() else {
+        return;
+    };
+    let links: Vec<(SurfaceId, crate::link::PtyLink)> =
+        shared.links.lock().expect("links").drain().collect();
+    for (id, mut link) in links {
+        let Some((master, shell)) = link.hand_over() else {
+            continue;
+        };
+        crate::handover::hand_over_fd(master, shell, shared.profile_of(id), &dir);
+    }
 }
 
 /// A surface with nothing on the far end yet. The caller connects it. A zero

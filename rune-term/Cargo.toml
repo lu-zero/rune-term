@@ -16,6 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 rune-term-core.workspace = true
+rune-term-keeper = { workspace = true, optional = true }
 term-control.workspace = true
 term-mux.workspace = true
 term-roam.workspace = true
@@ -37,7 +38,13 @@ okhsl.workspace = true
 
 [features]
 default = ["pty"]
-pty = ["dep:teletypewriter", "dep:libc", "librio/graphics", "rune-term-core/pty"]
+pty = [
+    "dep:teletypewriter",
+    "dep:libc",
+    "dep:rune-term-keeper",
+    "librio/graphics",
+    "rune-term-core/pty",
+]
 graphics = ["librio/graphics", "rune-term-core/graphics"]
 
 [dev-dependencies]

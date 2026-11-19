@@ -61,6 +61,41 @@ pub fn open_with_profile(model: &mut Model, profile: &str) -> bool {
     true
 }
 
+/// A tab whose pane is a shell a keeper holds: no shell is spawned.
+#[cfg(all(unix, feature = "pty"))]
+pub(crate) fn open_adopted(model: &mut Model, ad: crate::handover::Adopted) -> bool {
+    let profile = ad
+        .profile
+        .clone()
+        .unwrap_or_else(|| model.config.default_profile_name().to_string());
+    let (leaf_n, mark) = next_ids(model);
+    let id = LeafId(leaf_n);
+    let surface = delegate::open_adopted(model, mark, ad);
+    let (cols, rows) = model
+        .terminal
+        .get(surface)
+        .map(|host| (host.cols, host.rows))
+        .unwrap_or((80, 24));
+    model.tabs.push(Tab {
+        title: "rune-term".to_string(),
+        profile,
+        root: Node::Leaf(Leaf {
+            id,
+            surface,
+            mark,
+            cols,
+            rows,
+        }),
+        focused: id,
+        group: None,
+        window: None,
+        fit: None,
+    });
+    model.active = model.tabs.len() - 1;
+    model.terminal.show(surface);
+    true
+}
+
 fn apply_profile_for_new_tab(model: &mut Model, profile: &str) {
     let resolved = model.config.resolve_profile(profile);
     crate::metrics::apply_font(model, &resolved);
