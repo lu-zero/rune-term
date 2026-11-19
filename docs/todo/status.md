@@ -25,27 +25,27 @@ The numbers are that plan's.
 - [x] **6. Split model.** The tree is in cells. A divider costs one cell.
       `distribute` spends a resize left or top first and will not take a
       leaf's last cell. The view is still one pane.
-- [x] **10. Multiple panes.** A tab can hold more than one leaf. Each
-      leaf has a surface and an effect mark. A split sizes the leaves
-      from `distribute`, and the divider costs one cell. A click on a
-      leaf moves focus. Injecting into one leaf does not dirty the
-      other. The compositor keeps a grid per pane on screen and draws
-      each leaf's surface in its own rect. Search, hover, preedit, and
-      images stay on the focused pane. Dragging a divider moves it by
-      whole cells, and neither side gives up a leaf's last cell. A window
-      resize scales the tree from the layout the user left, so each split
-      keeps its proportion; a session's windows get the same through
-      `select-layout`. Cmd+D splits right and Shift+Cmd+D down, as the pane
-      menu's Split items do; the new pane takes focus. Cmd+W and Close
-      Pane close the focused pane, focus goes across its divider, and the
-      tab closes with its last pane. On a session tab they kill the pane in
-      tmux, and the window with its last pane, as iTerm2 and WezTerm do;
-      so does the tab's close button. A session profile set to detach on
-      close hides the window instead, still running, as does General's
-      default for a profile that does not choose. The group label's
-      menu detaches the session. A close that would end a program other than a shell
-      asks first: a local pane by its foreground process group, a session's
-      by `#{pane_current_command}`.
+- [x] **10. Multiple panes.** A tab can hold more than one leaf. Each leaf has
+      a surface and an effect mark. A split sizes the leaves from
+      `distribute`, and the divider costs one cell. A click on a leaf moves
+      focus. Injecting into one leaf does not dirty the other. The compositor
+      keeps a grid per pane on screen and draws each leaf's surface in its own
+      rect. Search, hover, preedit, and images stay on the focused pane.
+      Dragging a divider moves it by whole cells, and neither side gives up a
+      leaf's last cell. A window resize scales the tree from the layout the
+      user left, so each split keeps its proportion; a session's windows get
+      the same through `select-layout`. Cmd+D splits right and Shift+Cmd+D
+      down, as the pane menu's Split items do; the new pane takes focus. Cmd+W
+      and Close Pane close the focused pane, focus goes across its divider,
+      and the tab closes with its last pane. On a session tab they kill the
+      pane in tmux, and the window with its last pane, as iTerm2 and WezTerm
+      do; so does the tab's close button. A session profile set to detach on
+      close hides the window instead, still running, as does General's default
+      for a profile that does not choose. The group label's menu detaches the
+      session. A close that would end a program other than a shell asks first:
+      a local pane by its foreground process group, a session's by
+      `#{pane_current_command}`. Focus that Rune moves on its own is not seen,
+      as an element cannot observe it: `anomalyco/rune#106`.
 - [x] **11. Selection and clipboard.** A drag the program did not take
       selects cells. Two clicks select a word and three select a line.
       The copy chord copies that text, and paste calls `Surface::paste`.
@@ -78,29 +78,28 @@ The numbers are that plan's.
       file is not overwritten. `settings.adaptive_theme` names a dark scheme
       and a light scheme; a profile theme wins, and the desktop appearance is
       sampled when the pair is used. Defaults/profile font size and theme are
-      applied on init
-      and Cascadia Code NF metrics scale with font size. A settings window
-      (Cmd+,) opens on its own, built with rune-kit and drawn in the terminal's
-      own palette. It has a profiles list and a themes list that behave the
-      same: apply, save, revert, duplicate, delete and create, with the theme
-      on screen the one the editor is showing. The app menu's Settings… (⌘,)
-      opens it. A General tab, first and where the window opens, with no list,
-      holds what is the app's: asking before a close ends a program, what
-      closing a session tab does, and whether a right-click reaches a program
-      using the mouse; by default it opens the pane's menu, as in iTerm2. A profile picks which Option keys are Alt on
-      macOS (left, right or both), as iTerm2's do; one Option key is a Rune
-      change on `physical-key-text`. The editor shows Name, Author,
-      and Source, then Basic beside UI, then ANSI, Cube, and Gray. Those rows
-      stack as the window narrows, and the cube flows by group. ANSI is the
-      normal row, then the bright row. The cube and the
-      gray ramp are the xterm indexes 16–231 and 232–255; an edit stores that
-      index, and the xterm color removes it. UI is the window chrome. A swatch
-      names itself
-      in a tooltip, and clicking one on a custom theme opens the color editor.
-      The config is written back and the change is pushed into the running
-      terminal, where a font size or family change keeps the grid's cell count
-      and snaps the window. The grid draws the profile's family, the regular
-      face of an installed one, and the bundled Cascadia Code NF when it is not
+      applied on init and Cascadia Code NF metrics scale with font size. A
+      settings window (Cmd+,) opens on its own, built with rune-kit and drawn
+      in the terminal's own palette. It has a profiles list and a themes list
+      that behave the same: apply, save, revert, duplicate, delete and create,
+      with the theme on screen the one the editor is showing. The app menu's
+      Settings… (⌘,) opens it. A General tab, first and where the window
+      opens, with no list, holds what is the app's: asking before a close ends
+      a program, what closing a session tab does, and whether a right-click
+      reaches a program using the mouse; by default it opens the pane's menu,
+      as in iTerm2. A profile picks which Option keys are Alt on macOS (left,
+      right or both), as iTerm2's do; one Option key is a Rune change on
+      `physical-key-text`. The editor shows Name, Author, and Source, then
+      Basic beside UI, then ANSI, Cube, and Gray. Those rows stack as the
+      window narrows, and the cube flows by group. ANSI is the normal row,
+      then the bright row. The cube and the gray ramp are the xterm indexes
+      16–231 and 232–255; an edit stores that index, and the xterm color
+      removes it. UI is the window chrome. A swatch names itself in a tooltip,
+      and clicking one on a custom theme opens the color editor. The config is
+      written back and the change is pushed into the running terminal, where a
+      font size or family change keeps the grid's cell count and snaps the
+      window. The grid draws the profile's family, the regular face of an
+      installed one, and the bundled Cascadia Code NF when it is not
       installed. The editor picks it from the bundled family and the installed
       monospaced ones, searchable, with `font-picker` over rune-kit's
       `Combobox`. Pictures: [`docs/config.md`](../config.md). Design:
@@ -129,13 +128,12 @@ The numbers are that plan's.
             librio to return the whole span.
       - [ ] **Where a link goes.** Show the address while Cmd is held, and
             Open Link and Copy Link in the pane's menu.
-      - [ ] Stationary-pointer modifier hover tracks `anomalyco/rune#393`,
-            multi-pane focus sync `anomalyco/rune#106`.
+      - [x] **Holding Cmd still.** `App::on_modifiers` redraws the hovered
+            link when Cmd changes and the pointer has not moved.
 
-## Planned (design drafted)
+## Beyond the first plan
 
-These items extend the original plan; designs are drafted, implementation not
-started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
+These items extend [`rune-term.md`](./rune-term.md). Each links its design.
 
 - [x] **20. Profiles and creation.** Named/default profiles and “open with
       profile”, applied at session/tab/pane creation (settings, shell/cwd/env),
@@ -181,64 +179,74 @@ started. Order follows `profiles-ipc-cli.md` and `multiplexer-sessions.md`.
       backend abstraction (local `librio` vs multiplexer), covering create /
       attach / detach / resume, multi-client policy, and remoting/share
       capabilities. tmux first, then rmux; ssh and mosh are raw links. The
-      layers, the mapping (session → group, window → tab, pane → leaf) and
-      the P0–P4 order are decided. P0 is in: librio is built without its
-      `pty` feature, and rune-term spawns the shell on a teletypewriter PTY,
-      reads it into `inject_output` on a thread, and writes the delegate's
-      `output` back to it. The winsize follows the grid. P1 is in:
-      `term-mux` holds the layout in cells and the tmux control-mode parser
-      (replies, `%output`, window, layout, session and exit notifications,
-      and the layout string), tested on tmux 3.4's own output. P3 is
-      partial: `rune-term attach SESSION` runs `tmux -C new-session -A` on
-      pipes. The pane menu's tmux submenu starts a session, starts one under a name it
-      prompts for (attaching it when the name exists), or attaches one the
-      default server lists, other than those already attached here. The session is a tab group, each window a tab, each pane a
-      surface fed in tmux's order, with panes that predate the client
-      redrawn from `capture-pane`. Keys go back as `send-keys -H`. The
-      size goes as `refresh-client -C`, and focus as `select-window` and
-      `select-pane`. A new tab in the group is `new-window`, and the menu
-      splits. Closing a tab hides its window, and the menu shows it again
-      from a Hidden Windows submenu, by window index. A tab's own menu hides
-      the window, kills it with `kill-window`, or detaches the session.
-      tmux exiting closes the group, and a split window draws every
-      pane. Dragging a divider sends `resize-pane`, and the tree follows
-      the layout tmux reports. A pane takes tmux's size in stream order,
-      never from layout, and a resized pane is redrawn from
-      `capture-pane`, since this copy's reflow pulls back history tmux
-      does not. The pane answers queries tmux
-      already answered ([`rio/replies.md`](./rio/replies.md)). rmux speaks
-      the same control mode: `attach --rmux SESSION` and an rmux submenu, shown
-      when rmux is installed, attach it the same way. `attach --host HOST` runs
-      either on a host as `ssh -T -o BatchMode=yes HOST tmux -C …`, each
-      argument quoted for the far shell; the group is `session@host`.
-      The menu lists the sessions on each host a profile or an open group
-      names, from that host's last answer, asked in the background at start
-      and again each time the menu opens. The menu bar's Session menu starts a session, names one or connects to a host, and hides, closes, reconnects, detaches or saves the selected tab's; it cannot list sessions, as a menu bar item has no submenu in Rune. A host's submenu starts a session there, named or not, and Connect to Host… names a host no profile does, which the menu then lists for the rest of the run. A profile's Server, tmux's `-L` name, picks a server other than the default, here or on its host; the menu lists each such server as it does a host, and `attach --server NAME` takes one. `rune-term sessions [HOST]` prints them, and `rune-term profiles` the profiles `--profile` opens. A link that drops after reaching its session
-      greys its group; the tab menu's Reconnect attaches it again into the
-      same tabs, and tmux redraws every pane. Why a link failed, ssh's
-      last line when it was ssh, shows in a notice in the window. Design:
-      [`multiplexer-sessions.md`](./multiplexer-sessions.md).
+      layers, the mapping (session → group, window → tab, pane → leaf) and the
+      P0–P4 order are decided. P0 is in: librio is built without its `pty`
+      feature, and rune-term spawns the shell on a teletypewriter PTY, reads
+      it into `inject_output` on a thread, and writes the delegate's `output`
+      back to it. The winsize follows the grid. P1 is in: `term-mux` holds the
+      layout in cells and the tmux control-mode parser (replies, `%output`,
+      window, layout, session and exit notifications, and the layout string),
+      tested on tmux 3.4's own output. P3 is partial: `rune-term attach
+      SESSION` runs `tmux -C new-session -A` on pipes. The pane menu's tmux
+      submenu starts a session, starts one under a name it prompts for
+      (attaching it when the name exists), or attaches one the default server
+      lists, other than those already attached here. The session is a tab
+      group, each window a tab, each pane a surface fed in tmux's order, with
+      panes that predate the client redrawn from `capture-pane`. Keys go back
+      as `send-keys -H`. The size goes as `refresh-client -C`, and focus as
+      `select-window` and `select-pane`. A new tab in the group is
+      `new-window`, and the menu splits. Closing a tab hides its window, and
+      the menu shows it again from a Hidden Windows submenu, by window index.
+      A tab's own menu hides the window, kills it with `kill-window`, or
+      detaches the session. tmux exiting closes the group, and a split window
+      draws every pane. Dragging a divider sends `resize-pane`, and the tree
+      follows the layout tmux reports. A pane takes tmux's size in stream
+      order, never from layout, and a resized pane is redrawn from
+      `capture-pane`, since this copy's reflow pulls back history tmux does
+      not. The pane answers queries tmux already answered
+      ([`rio/replies.md`](./rio/replies.md)). rmux speaks the same control
+      mode: `attach --rmux SESSION` and an rmux submenu, shown when rmux is
+      installed, attach it the same way. `attach --host HOST` runs either on a
+      host as `ssh -T -o BatchMode=yes HOST tmux -C …`, each argument quoted
+      for the far shell; the group is `session@host`. The menu lists the
+      sessions on each host a profile or an open group names, from that host's
+      last answer, asked in the background at start and again each time the
+      menu opens. The menu bar's Session menu starts a session, names one or
+      connects to a host, and hides, closes, reconnects, detaches or saves the
+      selected tab's; it cannot list sessions, as a menu bar item has no
+      submenu in Rune. A host's submenu starts a session there, named or not,
+      and Connect to Host… names a host no profile does, which the menu then
+      lists for the rest of the run. A profile's Server, tmux's `-L` name,
+      picks a server other than the default, here or on its host; the menu
+      lists each such server as it does a host, and `attach --server NAME`
+      takes one. `rune-term sessions [HOST]` prints them, and `rune-term
+      profiles` the profiles `--profile` opens. A link that drops after
+      reaching its session greys its group; the tab menu's Reconnect attaches
+      it again into the same tabs, and tmux redraws every pane. Why a link
+      failed, ssh's last line when it was ssh, shows in a notice in the
+      window. Design: [`multiplexer-sessions.md`](./multiplexer-sessions.md).
 - [ ] **24. Backend adapters and composition.** Fat/lean packaging (features
       and/or `rune-term-*` helpers) with progressive adapters: local, rmux
       (local), ssh/tmux (wrapper or native), rmux (web-share client), osewa,
       and experimental rmux-roaming/predictive work. Design:
       [`multiplexer-sessions.md`](./multiplexer-sessions.md),
-      [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
-      Roaming, and shells that outlive the UI, are `rune-term-agent`: rmux
-      control mode over QUIC first, then recovery streams, then a local PTY
-      host. Phase 0, the rmux-sdk spike, passed: a keyframe rebuilds a librio
-      surface exactly, and a stalled reader gets one rebase, not a backlog.
-      Phase 1 is built: a profile's Transport, or `attach --roam`, starts
-      `rune-term-agent serve` over ssh and reaches control mode over QUIC
-      after. A link that drops retries on its own, waiting 1 s and doubling
-      to 32 s, and starts at most one new agent until one answers. Tried
-      against an aarch64 Linux host: ticket in 0.3 s, a command's round trip
-      4 ms. Deployment: [`../agent.md`](../agent.md), `just agent-install`. Design:
+      [`profiles-ipc-cli.md`](./profiles-ipc-cli.md). Roaming, and shells that
+      outlive the UI, are `rune-term-agent`: rmux control mode over QUIC
+      first, then recovery streams, then a local PTY host. Phase 0, the
+      rmux-sdk spike, passed: a keyframe rebuilds a librio surface exactly,
+      and a stalled reader gets one rebase, not a backlog. Phase 1 is built: a
+      profile's Transport, or `attach --roam`, starts `rune-term-agent serve`
+      over ssh and reaches control mode over QUIC after. A link that drops
+      retries on its own, waiting 1 s and doubling to 32 s, and starts at most
+      one new agent until one answers. Tried against an aarch64 Linux host:
+      ticket in 0.3 s, a command's round trip 4 ms. Deployment:
+      [`../agent.md`](../agent.md), `just agent-install`. Design:
       [`agent.md`](./agent.md).
 
 ## Outside this repository
 
 What Rio still needs, sent and drafted, is [`rio/`](./rio/README.md).
+What Rune still needs is [`rune/`](./rune/README.md).
 
 Until these land upstream, `[patch]` builds against forks: Rune and the crates
 it vendors (winit, parley_engine, the AccessKit adapters) from `lu-zero/rune`
@@ -257,10 +265,9 @@ pinned at `=30.0.1`; Rune itself takes any 30.x.
 - [x] **Wakeup order and focus reports.** Upstream: the host clears its
       flag before `RenderState::update` (#2053), and `Surface::set_focus`
       reports focus (#2051).
-- [~] **3. Reflow.** `lu-zero/rio` branch `rune-term-on-main`: Rio main
-      plus our prompt and resize commits. A multi-line bash prompt survives a width change only
-      with OSC 133 marks, from `rune-term shell-integration bash` or
-      `zsh`.
-      `preserve_scrollback` is still false on macOS in the plan.
+- [~] **3. Reflow.** `lu-zero/rio` branch `rune-term-on-main`: Rio main plus
+      our prompt and resize commits. A multi-line bash prompt survives a width
+      change only with OSC 133 marks, from `rune-term shell-integration bash`
+      or `zsh`. `preserve_scrollback` is still false on macOS in the plan.
 
 The design header still records an empty workspace. This page is the status.
