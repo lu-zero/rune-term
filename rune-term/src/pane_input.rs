@@ -144,11 +144,12 @@ pub fn on_secondary_mark(
     tx: &mut Tx,
 ) {
     crate::chrome_view::focus_mark(model, mark, tx);
+    let report = model.config.settings.report_right_click;
     let Some(host) = host_mut(model, mark) else {
         return;
     };
     let mods = core_input::modifiers(tx.mods());
-    if core_terminal::secondary_press(host, point.x, point.y, scale, mods) {
+    if core_terminal::secondary_press(host, point.x, point.y, scale, mods, report) {
         tx.live_only();
         return;
     }
@@ -1502,7 +1503,7 @@ mod tests {
     }
 
     #[test]
-    fn secondary_click_forwards_to_mouse_reporting_program() {
+    fn a_right_click_reaches_a_mouse_program_only_when_the_setting_says() {
         let mut model = host();
         sized(&mut model);
         model
@@ -1514,13 +1515,11 @@ mod tests {
         let mut point = PointerEvent::default();
         point.x = 1.0;
         point.y = 1.0;
-        on_secondary_mark(
-            &mut model,
-            crate::chrome::PANE_MARK,
-            point,
-            1.0,
-            &mut Tx::default(),
-        );
+        let mark = crate::chrome::PANE_MARK;
+        on_secondary_mark(&mut model, mark, point, 1.0, &mut Tx::default());
+        assert!(model.shared.take_output().is_empty(), "the menu takes it");
+        model.config.settings.report_right_click = true;
+        on_secondary_mark(&mut model, mark, point, 1.0, &mut Tx::default());
         let out = model.shared.take_output();
         assert!(
             out.windows(3).any(|w| w == b"\x1b[<"),

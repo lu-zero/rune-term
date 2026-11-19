@@ -231,9 +231,10 @@ pub fn secondary_press(
     y: f32,
     scale: f32,
     mods: Modifiers,
+    report: bool,
 ) -> bool {
     let mouse_reporting = host.surface.mode_bits() & 1 != 0;
-    if mouse_reporting && !mods.contains(Modifiers::SHIFT) {
+    if report && mouse_reporting && !mods.contains(Modifiers::SHIFT) {
         let Some((col, row)) = input::cell_under(host, x, y, scale) else {
             return true;
         };

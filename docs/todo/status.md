@@ -85,8 +85,9 @@ The numbers are that plan's.
       same: apply, save, revert, duplicate, delete and create, with the theme
       on screen the one the editor is showing. The app menu's Settings… (⌘,)
       opens it. A General tab, first and where the window opens, with no list,
-      holds what is the app's: asking before a close ends a program, and what
-      closing a session tab does. A profile picks which Option keys are Alt on
+      holds what is the app's: asking before a close ends a program, what
+      closing a session tab does, and whether a right-click reaches a program
+      using the mouse; by default it opens the pane's menu, as in iTerm2. A profile picks which Option keys are Alt on
       macOS (left, right or both), as iTerm2's do; one Option key is a Rune
       change on `physical-key-text`. The editor shows Name, Author,
       and Source, then Basic beside UI, then ANSI, Cube, and Gray. Those rows

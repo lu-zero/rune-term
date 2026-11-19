@@ -43,6 +43,7 @@ light = "Flexoki Light"
 - `theme`: theme used when a profile does not name one and the appearance pair is not in use.
 - `confirm_close`: default `true`. Closing a tab or the window asks first while a program runs in it; a shell at its prompt closes without asking.
 - `on_close`: `"kill"`, the default, or `"detach"`. Closing a session tab kills its tmux or rmux window, or detaches it, which hides the tab and leaves the window running. A session profile's `on_close` wins.
+- `report_right_click`: default `false`. A right-click opens the pane's menu, as in iTerm2, even while a program such as vim or opencode takes the mouse. With `true` that program gets the click, and Shift+right-click opens the menu.
 - `adaptive_theme`: two theme names. When both are non-empty and the profile has no theme, the desktop appearance picks `dark` or `light`. On macOS that is `AppleInterfaceStyle`. Elsewhere, and when the appearance cannot be read, `dark` is used. The pair is not watched while the app is running.
 
 `version` is required. Unknown keys are ignored.
@@ -118,7 +119,7 @@ A field stays in the draft while it is typed and is written when the field is fi
 
 ![General: what the app does, not a profile.](images/settings-general.png)
 
-The window opens here. The two settings are `confirm_close` and `on_close` from `config.toml`, saved as they change.
+The window opens here. The settings are `confirm_close`, `on_close` and `report_right_click` from `config.toml`, saved as they change.
 
 ### Profiles
 

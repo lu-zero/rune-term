@@ -33,6 +33,16 @@ pub fn editor(kit: &Kit, model: &SettingsModel) -> El {
             });
         })
         .build(kit);
+    let report = Switch::new(settings.report_right_click)
+        .label("Send right-clicks to a program using the mouse")
+        .hide_label()
+        .on_toggle(|m: &mut SettingsModel| {
+            change(m, |settings| {
+                settings.report_right_click = !settings.report_right_click
+            });
+        })
+        .build(kit)
+        .key("report-right-click");
     let body = col()
         .w_full()
         .grow(1.0)
@@ -60,6 +70,18 @@ pub fn editor(kit: &Kit, model: &SettingsModel) -> El {
                         .control(on_close)
                         .build(kit),
                 )),
+        )
+        .child(
+            row()
+                .w_full()
+                .gap(12.0)
+                .child(half(
+                    Field::new()
+                        .label("Send right-clicks to a program using the mouse")
+                        .control(row().h(28.0).center_y().child(report))
+                        .build(kit),
+                ))
+                .child(half(rune::el())),
         );
     super::with_actions(Vec::new(), body)
 }
