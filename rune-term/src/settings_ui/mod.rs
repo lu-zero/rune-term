@@ -1275,8 +1275,10 @@ mod tests {
         rt.frame(2.0);
         press(&mut rt, "confirm-close");
         press(&mut rt, "segment1");
+        press(&mut rt, "report-right-click");
         let written = ConfigFile::open(&rt.state.config.dir()).unwrap();
         assert!(!written.settings.confirm_close);
+        assert!(written.settings.report_right_click);
         assert_eq!(written.settings.on_close, OnClose::Detach);
         assert_eq!(
             written.on_close("Default"),

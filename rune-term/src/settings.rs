@@ -57,6 +57,8 @@ pub struct Settings {
     pub confirm_close: bool,
     /// What closing a session's tab or last pane does, unless its profile says.
     pub on_close: OnClose,
+    /// A right-click goes to a program that reports the mouse instead of opening the menu.
+    pub report_right_click: bool,
 }
 
 impl Default for Settings {
@@ -68,6 +70,7 @@ impl Default for Settings {
             adaptive_theme: None,
             confirm_close: true,
             on_close: OnClose::Kill,
+            report_right_click: false,
         }
     }
 }
