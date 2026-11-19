@@ -77,6 +77,9 @@ struct GlyphKey {
     cells: u8,
 }
 
+/// Past every char, so the underline's slot never collides with a glyph's.
+const UNDERLINE: u32 = u32::MAX;
+
 pub struct Atlas {
     pixels: Vec<u8>,
     ascii: [Option<GlyphRect>; 95],
@@ -99,6 +102,8 @@ pub struct Atlas {
     ascent: f32,
     body: f32,
     upem: f32,
+    /// The underline stroke's top, from the cell's top, and its thickness, in pixels.
+    underline: (f32, f32),
     has_font: bool,
     face: Face,
 }
@@ -150,6 +155,7 @@ impl Atlas {
         }
         let advance_px = advance_units * ppem / upem;
         let baseline = (cell_h as f32 - body) * 0.5 + scaled.ascent.abs();
+        let underline = (baseline - scaled.underline_offset, scaled.stroke_size);
         let pen_x = (cell_w as f32 - advance_px) * 0.5;
 
         let mut context = ScaleContext::new();
@@ -221,6 +227,7 @@ impl Atlas {
             ascent: scaled.ascent.abs(),
             body,
             upem,
+            underline,
             has_font: true,
             face,
         }
@@ -246,6 +253,7 @@ impl Atlas {
             ascent: 0.0,
             body: 0.0,
             upem: 1.0,
+            underline: (cell.1 as f32 - 2.0, 1.0),
             has_font: false,
             face: Face::bundled(),
         }
@@ -292,6 +300,28 @@ impl Atlas {
         if rect.is_some_and(|rect| rect.atlas == 0) {
             self.dirty = true;
         }
+        self.extra.insert(key, rect);
+        rect
+    }
+
+    /// A stroke `cells` wide (1 or 2) where the face puts its underline, drawn under a cell.
+    pub fn underline(&mut self, cells: u8) -> Option<GlyphRect> {
+        let cells = if cells >= 2 { 2 } else { 1 };
+        let key = GlyphKey {
+            code: UNDERLINE,
+            cells,
+        };
+        if let Some(hit) = self.extra.get(&key) {
+            return *hit;
+        }
+        let rect = self.alloc(cells).map(|at| {
+            let (w, h) = (self.cell.0 * u32::from(cells), self.cell.1);
+            let thick = (self.underline.1.round() as u32).clamp(1, h);
+            let top = (self.underline.0.round().max(0.0) as u32).min(h - thick);
+            let mut bitmap = vec![0u8; (w * h) as usize];
+            bitmap[(top * w) as usize..((top + thick) * w) as usize].fill(255);
+            self.insert(&bitmap, w, h, at)
+        });
         self.extra.insert(key, rect);
         rect
     }
@@ -888,6 +918,20 @@ mod tests {
             }
         }
         (top, bottom)
+    }
+
+    #[test]
+    fn the_underline_sits_under_the_baseline_within_the_cell() {
+        let mut atlas = Atlas::with_cell(9, 17);
+        let h = atlas.glyph('H').expect("H");
+        let line = atlas.underline(1).expect("underline");
+        let (_, h_bottom) = ink_span(&atlas, h);
+        let (top, bottom) = ink_span(&atlas, line);
+        assert!(
+            top > h_bottom && bottom < line.h,
+            "H ends {h_bottom}, line {top}..={bottom}"
+        );
+        assert_eq!(atlas.underline(2).expect("wide").w, 18);
     }
 
     #[test]

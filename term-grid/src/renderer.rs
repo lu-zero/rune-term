@@ -375,27 +375,27 @@ fn push_glyph(
     if sample.width == 0 {
         return;
     }
+    let (Ok(x), Ok(y)) = (u32::try_from(col), u32::try_from(line)) else {
+        return;
+    };
     // A wide glyph's bitmap already fills both cells. The spacer cell has width 0.
     let cells = if sample.width >= 2 { 2 } else { 1 };
-    let Some(rect) = atlas.ensure(sample.ch, cells) else {
-        return;
-    };
-    let Ok(x) = u32::try_from(col) else {
-        return;
-    };
-    let Ok(y) = u32::try_from(line) else {
-        return;
-    };
-    text.push(CellText {
-        glyph_pos: [rect.x, rect.y],
-        glyph_size: [rect.w, rect.h],
-        bearings: [0, 0],
-        grid_pos: [x, y],
-        color: sample.fg,
-        atlas: rect.atlas,
-        bools: 0,
-        page: 0,
-    });
+    let underline = sample.underline.then(|| atlas.underline(cells)).flatten();
+    for rect in [atlas.ensure(sample.ch, cells), underline]
+        .into_iter()
+        .flatten()
+    {
+        text.push(CellText {
+            glyph_pos: [rect.x, rect.y],
+            glyph_size: [rect.w, rect.h],
+            bearings: [0, 0],
+            grid_pos: [x, y],
+            color: sample.fg,
+            atlas: rect.atlas,
+            bools: 0,
+            page: 0,
+        });
+    }
 }
 
 fn orthographic(width: f32, height: f32) -> [f32; 16] {

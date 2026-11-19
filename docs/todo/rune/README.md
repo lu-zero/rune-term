@@ -15,8 +15,9 @@ linked. Nothing here is committed to Rune from this tree.
   and an action that knows which item fired, so the Session menu can list
   sessions.
 - [#393](https://github.com/anomalyco/rune/issues/393): modifier changes while
-  the pointer is still. `App::on_modifiers` (#240) answers it; the issue is
-  still open.
+  the pointer is still. `App::on_modifiers`
+  ([#240](https://github.com/anomalyco/rune/pull/240)), merged two days
+  before the issue was filed, is what it asks for; the issue is still open.
 
 ## Following
 

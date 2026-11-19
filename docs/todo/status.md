@@ -9,9 +9,11 @@ The numbers are that plan's.
 - [x] **1. Foundation.** One window, one surface, a tab strip, and the
       headless inject harness.
 - [x] **2. term-grid.** The cell pass, the gray atlas, and dirty-row upload.
-      The face is Cascadia Code NF at 14 points, the palette is Flexoki dark,
-      and a codepoint the face misses is drawn by the macOS cascade, color
-      emoji included. `sprite` still returns nothing.
+      The face is the profile's, Cascadia Code NF at 14 points by default, and
+      a codepoint the face misses is drawn by the macOS cascade, color emoji
+      included. An underlined cell, from SGR 4 or a hovered link, gets a
+      stroke where the face puts its underline, in the text's color. The
+      underline styles (double, curly, dotted, dashed) all draw single.
 - [x] **5. term-input.** `map_key` copies platform text and `consumed_mods`.
       App chords, scroll chords, and `cell_at` are here. There is no
       US-QWERTY table.

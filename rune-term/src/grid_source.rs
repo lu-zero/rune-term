@@ -118,7 +118,7 @@ fn codepoint(sq: Square, style: &Style, colors: &TermColors, palette: &Palette) 
         width,
         fg,
         bg,
-        underline: style.flags.contains(StyleFlags::UNDERLINE),
+        underline: style.flags.intersects(StyleFlags::ALL_UNDERLINES),
     }
 }
 
