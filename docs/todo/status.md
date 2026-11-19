@@ -128,7 +128,7 @@ The numbers are that plan's.
       - [ ] **Wrapped links.** Only the hovered row is underlined. OSC 8 can
             walk the rows here; `url_at` clips to the row, so plain URLs need
             librio to return the whole span.
-      - [ ] **Where a link goes.** Show the address while Cmd is held, and
+      - [x] **Where a link goes.** Show the address while Cmd is held, and
             Open Link and Copy Link in the pane's menu.
       - [x] **Holding Cmd still.** `App::on_modifiers` redraws the hovered
             link when Cmd changes and the pointer has not moved.

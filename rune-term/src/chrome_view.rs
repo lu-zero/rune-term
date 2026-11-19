@@ -4,6 +4,7 @@
 use std::mem;
 
 use rune::{col, effect, row, Cx, Drag, El, Phase, Tx};
+use rune_term_core::hyperlink::HoverLink;
 
 use crate::app;
 use crate::chrome::{self, Leaf, LeafId, Node, PANE_MARK};
@@ -15,6 +16,7 @@ use crate::resize::{self, GridMetrics, ResizeRequest};
 use crate::scrollback;
 use crate::search;
 use crate::split::Axis;
+use crate::theme::Palette;
 
 pub fn area(model: &Model, cx: &mut Cx<Model>) -> El {
     let scale = cx.env().scale;
@@ -143,6 +145,34 @@ fn leaf_mark(node: &Node, id: LeafId) -> Option<u32> {
 /// switch, and the old one would fade out over the new shell on the same slot.
 pub const SINGLE_PANE: &str = "pane";
 
+fn link_address(link: &HoverLink, cell_px: (u16, u16), scale: f32, p: &Palette) -> El {
+    let shown = if link.uri.len() > 80 {
+        format!("{}…", &link.uri[..link.uri.floor_char_boundary(79)])
+    } else {
+        link.uri.clone()
+    };
+    let rect = rune_term_core::ime::caret_rect(
+        (
+            u16::try_from(link.start).unwrap_or(0),
+            u16::try_from(link.line).unwrap_or(0),
+        ),
+        cell_px,
+        scale,
+        crate::resize::CONTENT_MARGIN_PT,
+    );
+    rune::el()
+        .key("link-address")
+        .absolute(rect.x, rect.y + rect.h)
+        .pl(6.0)
+        .pr(6.0)
+        .pt(2.0)
+        .pb(2.0)
+        .radius(4.0)
+        .fill(crate::theme::linear(p.tab_bg))
+        .border(1.0, crate::theme::linear(p.active_border))
+        .child(rune::text(shown).color(crate::chrome::text_color(p)))
+}
+
 fn single(model: &Model, scale: f32) -> El {
     let hover_active = model.terminal.primary().is_some_and(|host| {
         host.hover_link.is_some()
@@ -166,7 +196,15 @@ fn single(model: &Model, scale: f32) -> El {
         pane = pane.cursor(rune::Cursor::Pointer);
     }
     let cell_px = model.terminal.primary_cell_px();
-    col()
+    let address = if hover_active {
+        model
+            .terminal
+            .hover_for_render()
+            .map(|link| link_address(&link, cell_px, scale, &model.palette))
+    } else {
+        None
+    };
+    let mut area = col()
         .w_full()
         .grow(1.0)
         .min_h(0.0)
@@ -183,7 +221,11 @@ fn single(model: &Model, scale: f32) -> El {
             Some(0.0),
             Some(0.0),
             Some(0.0),
-        ))
+        ));
+    if let Some(address) = address {
+        area = area.child(address);
+    }
+    area
 }
 
 fn split_area(model: &Model, scale: f32) -> El {
@@ -268,7 +310,7 @@ fn leaf_el(leaf: &Leaf, model: &Model, scale: f32, cell: (f32, f32)) -> El {
         .get(surface)
         .map(|host| host.cell_px)
         .unwrap_or((0, 0));
-    let pane = col()
+    let mut pane = col()
         .w_full()
         .grow(1.0)
         .min_h(0.0)
@@ -281,6 +323,15 @@ fn leaf_el(leaf: &Leaf, model: &Model, scale: f32, cell: (f32, f32)) -> El {
             ime::option_as_alt(model),
         ))
         .child(scrollback::column(mark).pin(None, Some(0.0), Some(0.0), Some(0.0)));
+    if hover_active {
+        if let Some(link) = model
+            .terminal
+            .by_mark(mark)
+            .and_then(|host| host.hover_link.clone())
+        {
+            pane = pane.child(link_address(&link, cell_px, scale, &model.palette));
+        }
+    }
     row()
         .w(span(leaf.cols, cell.0, scale))
         .h(span(leaf.rows, cell.1, scale))

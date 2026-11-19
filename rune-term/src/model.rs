@@ -10,6 +10,7 @@ use crate::search::SearchUi;
 use crate::settings::ConfigFile;
 use crate::settings_ui::SettingsModel;
 use crate::theme::Palette;
+use rune_term_core::hyperlink::HoverLink;
 
 pub struct Model {
     pub engine: Engine,
@@ -25,6 +26,8 @@ pub struct Model {
     pub palette: Arc<Palette>,
     pub search: SearchUi,
     pub pending_link_open: Option<String>,
+    /// The link under the right-click the pane menu is answering.
+    pub(crate) menu_link: Option<HoverLink>,
     /// The name prompt for a new session or a saved one, while it is open.
     pub(crate) name_prompt: Option<crate::mux::NamePrompt>,
     /// What went wrong opening or keeping a session, until it is closed.
@@ -92,6 +95,7 @@ pub fn init() -> Model {
         palette,
         search: SearchUi::default(),
         pending_link_open: None,
+        menu_link: None,
         name_prompt: None,
         notice: None,
         closing: None,

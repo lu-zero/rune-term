@@ -14,6 +14,10 @@ this tree.
   which leaves the view and the selection alone.
 - [#2082](https://github.com/raphamorim/rio/pull/2082): an empty input stopped
   later ones. Closed: #2084's writer thread never writes zero bytes.
+- [#2105](https://github.com/raphamorim/rio/issues/2105): Ctrl+Enter encodes
+  to `\r` like plain Enter. In legacy mode it should use Ctrl+J's byte (`\n`)
+  so applications can bind the chord without kitty negotiation. PR:
+  [#2110](https://github.com/raphamorim/rio/pull/2110).
 
 ## Drafted, not sent
 

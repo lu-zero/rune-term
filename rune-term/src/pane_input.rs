@@ -5,6 +5,7 @@
 use std::time::Duration;
 
 use rune::{Drag, Key, KeyEvent, PhysicalInput, PointerEvent, Tx, WheelEvent};
+use rune_term_core::hyperlink::{self, OpenDecision};
 use rune_term_core::input as core_input;
 use rune_term_core::terminal_input as core_terminal;
 
@@ -93,6 +94,18 @@ pub fn on_drag_mark(model: &mut Model, mark: u32, drag: &mut Drag, scale: f32, t
         scale,
         true,
     );
+    apply_link_action(model, action, tx);
+}
+
+fn link_action(uri: &str) -> core_terminal::LinkAction {
+    match hyperlink::open_decision(uri) {
+        OpenDecision::Open => core_terminal::LinkAction::Open(uri.to_owned()),
+        OpenDecision::Confirm => core_terminal::LinkAction::Confirm(uri.to_owned()),
+        OpenDecision::Refuse => core_terminal::LinkAction::Refused,
+    }
+}
+
+fn apply_link_action(model: &mut Model, action: core_terminal::LinkAction, tx: &mut Tx) {
     match action {
         core_terminal::LinkAction::Open(uri) => {
             if let Err(err) = tx.open_url(&uri) {
@@ -154,8 +167,17 @@ pub fn on_secondary_mark(
         return;
     }
 
+    let link = core_input::cell_under(host, point.x, point.y, scale)
+        .and_then(|(col, row)| hyperlink::resolve(host, usize::from(row), usize::from(col)));
     let has_selection = host.surface.selection_text().is_some_and(|t| !t.is_empty());
+    model.menu_link = link;
     let mut menu = rune::PopupMenu::new();
+    if model.menu_link.is_some() {
+        menu = menu
+            .item(rune::PopupItem::new("open-link", "Open Link"))
+            .item(rune::PopupItem::new("copy-link", "Copy Link"))
+            .separator();
+    }
     if has_selection {
         menu = menu.item(rune::PopupItem::new("copy", "Copy"));
     }
@@ -210,6 +232,16 @@ fn shortcut(text: &str) -> rune::Shortcut {
 
 fn context_action(model: &mut Model, mark: u32, id: &str, tx: &mut Tx) {
     match id {
+        "copy-link" => {
+            if let Some(link) = model.menu_link.take() {
+                tx.copy(link.uri);
+            }
+        }
+        "open-link" => {
+            if let Some(link) = model.menu_link.take() {
+                apply_link_action(model, link_action(&link.uri), tx);
+            }
+        }
         "copy" => {
             let Some(text) = host_mut(model, mark)
                 .and_then(|host| host.surface.selection_text())
@@ -1264,6 +1296,120 @@ mod tests {
         assert_eq!(
             model.terminal.primary().and_then(|h| h.hover_probe.clone()),
             probe
+        );
+    }
+
+    fn with_link(model: &mut Model, uri: &str) {
+        let host = model.terminal.primary_mut().unwrap();
+        host.surface
+            .inject_output(format!("\x1b]8;;{uri}\x07link\x1b]8;;\x07").as_bytes());
+        host.render.update();
+    }
+
+    #[test]
+    fn a_right_click_on_a_link_stores_it_for_the_menu() {
+        let mut model = host();
+        sized(&mut model);
+        with_link(&mut model, "https://example.com");
+        let mut point = PointerEvent::default();
+        point.x = 1.0;
+        point.y = 1.0;
+        on_secondary_mark(
+            &mut model,
+            crate::chrome::PANE_MARK,
+            point,
+            1.0,
+            &mut Tx::default(),
+        );
+        assert_eq!(
+            model.menu_link.as_ref().map(|link| link.uri.as_str()),
+            Some("https://example.com")
+        );
+    }
+
+    #[test]
+    fn copy_link_from_the_menu_copies_the_uri() {
+        let board = rune::clipboard::memory();
+        let mut rt = Runtime::new(
+            host(),
+            crate::chrome::view,
+            (800.0, 500.0),
+            Env::new(true, 1.0),
+        );
+        rt.use_clipboard(&board);
+        rt.frame(0.0);
+        rt.update(|model, _tx| with_link(model, "https://example.com"));
+        rt.frame(0.0);
+        let pane = rt
+            .elements()
+            .into_iter()
+            .find(|el| el.key.as_deref() == Some("pane"))
+            .expect("pane");
+        rt.secondary_down(pane.rect[0] + 2.0, pane.rect[1] + 2.0);
+        rt.secondary_up(pane.rect[0] + 2.0, pane.rect[1] + 2.0);
+        rt.frame(0.0);
+        rt.resolve_popup(Some("copy-link")).expect("Copy Link item");
+        assert_eq!(
+            board.text().as_deref().map(|text| text.as_str()),
+            Some("https://example.com")
+        );
+    }
+
+    #[test]
+    fn open_link_from_the_menu_uses_the_same_scheme_policy() {
+        let mut model = host();
+        sized(&mut model);
+        with_link(&mut model, "file:///tmp/x");
+        let mut point = PointerEvent::default();
+        point.x = 1.0;
+        point.y = 1.0;
+        on_secondary_mark(
+            &mut model,
+            crate::chrome::PANE_MARK,
+            point,
+            1.0,
+            &mut Tx::default(),
+        );
+        context_action(
+            &mut model,
+            crate::chrome::PANE_MARK,
+            "open-link",
+            &mut Tx::default(),
+        );
+        assert_eq!(model.pending_link_open.as_deref(), Some("file:///tmp/x"));
+        assert!(model.menu_link.is_none());
+    }
+
+    #[test]
+    fn holding_the_open_modifier_shows_the_link_address() {
+        let mut rt = Runtime::new(
+            host(),
+            crate::chrome::view,
+            (800.0, 500.0),
+            Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        rt.update(|model, _tx| with_link(model, "https://example.com"));
+        rt.frame(0.0);
+        let pane = rt
+            .elements()
+            .into_iter()
+            .find(|el| el.key.as_deref() == Some("pane"))
+            .expect("pane");
+        rt.pointer_move(pane.rect[0] + 2.0, pane.rect[1] + 2.0);
+        rt.frame(0.0);
+        assert!(rt.find("link-address").is_none(), "no label without Cmd");
+        rt.update(|model, _tx| {
+            model.terminal.set_held_mods(rune::Mods {
+                logo: cfg!(target_os = "macos"),
+                ctrl: !cfg!(target_os = "macos"),
+                ..rune::Mods::default()
+            });
+        });
+        rt.frame(0.0);
+        assert!(
+            rt.find("link-address").is_some(),
+            "the address is shown while Cmd is held"
         );
     }
 
