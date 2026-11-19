@@ -450,11 +450,14 @@ fn tab_el(model: &Model, index: usize, tab_h: f32, p: &Palette) -> El {
     } else if let Some(hue) = hue {
         tab = tab.fill(wash(hue)).border(1.0, hue);
     }
-    let label = text(tab_caption(model, index))
+    let caption = tab_caption(model, index);
+    let label = text(caption.clone())
+        .key(format!("tab-label-{index}"))
         .grow(1.0)
         .min_w(0.0)
         .color(color)
-        .truncate();
+        .truncate()
+        .help_when_truncated(caption);
     let close = row()
         .key(format!("tab-close-{index}"))
         .w(tab_h - 8.0)
@@ -719,14 +722,47 @@ fn tab_caption(model: &Model, index: usize) -> String {
     let Some(tab) = model.tabs.get(index) else {
         return "rune-term".to_string();
     };
+    let title = if tab.title.trim().is_empty() {
+        fallback_caption(model, tab)
+    } else {
+        tab.title.clone()
+    };
     let bell = crate::tabs::surface_of(tab)
         .and_then(|id| model.terminal.get(id))
         .is_some_and(|host| host.bell);
     if bell {
-        format!("{} •", tab.title)
+        format!("{title} •")
     } else {
-        tab.title.clone()
+        title
     }
+}
+
+/// A name for a tab whose shell cleared its title, from what this window knows.
+fn fallback_caption(model: &Model, tab: &Tab) -> String {
+    if let Some(program) =
+        crate::tabs::surface_of(tab).and_then(|surface| model.shared.running(surface))
+    {
+        return program;
+    }
+    if let Some(group) = tab.group.and_then(|id| group_of(model, id)) {
+        return group.label.clone();
+    }
+    let profile = model.config.profile(&tab.profile);
+    if let Some(shell) = profile
+        .and_then(|profile| profile.shell.as_ref())
+        .and_then(|shell| shell.program.as_deref())
+        .filter(|program| !program.trim().is_empty())
+    {
+        return std::path::Path::new(shell).file_name().map_or_else(
+            || shell.to_owned(),
+            |name| name.to_string_lossy().into_owned(),
+        );
+    }
+    profile
+        .and_then(|profile| profile.cwd.as_deref())
+        .filter(|cwd| !cwd.trim().is_empty())
+        .unwrap_or("rune-term")
+        .to_owned()
 }
 
 #[cfg(all(test, not(feature = "pty")))]
@@ -792,6 +828,61 @@ mod tests {
                 tab[3]
             );
         }
+    }
+
+    #[test]
+    fn a_truncated_tab_title_offers_its_whole_text_as_a_tooltip() {
+        let title = "a-very-long-shell-title-that-would-otherwise-eat-the-strip";
+        let mut model = host();
+        model.tabs[0].title = title.into();
+        let mut rt = Runtime::new(model, view, (500.0, 500.0), Env::new(true, 1.0));
+        let help = |rt: &Runtime<Model>| {
+            rt.elements()
+                .into_iter()
+                .find(|el| el.key.as_deref() == Some("tab-label-0"))
+                .and_then(|el| el.help)
+        };
+        rt.frame(0.0);
+        assert_eq!(
+            help(&rt).as_deref(),
+            Some(title),
+            "the cut title is offered whole"
+        );
+        rt.update(|model, _| model.tabs[0].title = "zsh".into());
+        rt.frame(0.0);
+        assert_eq!(help(&rt), None, "a title that fits needs no tooltip");
+    }
+
+    #[test]
+    fn an_empty_title_falls_back_to_shell_host_or_path() {
+        use crate::settings::ShellSpec;
+
+        let mut model = host();
+        let profile = model.config.default_profile_name().to_owned();
+        model.config.profile_mut(&profile).unwrap().shell = Some(ShellSpec {
+            program: Some("/bin/zsh".into()),
+            args: Vec::new(),
+        });
+        model.tabs[0].title.clear();
+        assert_eq!(tab_caption(&model, 0), "zsh", "the configured shell");
+
+        let group = TabGroupId(7);
+        model.tab_groups.push(TabGroup {
+            id: group,
+            label: "dev@box".to_owned(),
+            collapsed: false,
+            lost: false,
+        });
+        model.tabs[0].group = Some(group);
+        assert_eq!(tab_caption(&model, 0), "dev@box", "a session's host");
+
+        model.tabs[0].group = None;
+        model.config.profile_mut(&profile).unwrap().shell = None;
+        model.config.profile_mut(&profile).unwrap().cwd = Some("/srv/app".into());
+        assert_eq!(tab_caption(&model, 0), "/srv/app", "the profile's path");
+
+        model.config.profile_mut(&profile).unwrap().cwd = None;
+        assert_eq!(tab_caption(&model, 0), "rune-term");
     }
 
     #[test]
