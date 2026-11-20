@@ -1328,6 +1328,28 @@ mod tests {
     }
 
     #[test]
+    fn the_general_tab_groups_its_settings_into_sections() {
+        let mut rt = runtime(model("general-sections"));
+        show_tab(&mut rt.state, Tab::General);
+        rt.frame(0.0);
+        assert!(rt.find("general-header").is_some());
+        assert!(rt.find("general-closing").is_some());
+        assert!(rt.find("general-mouse").is_some());
+        let group = rt
+            .elements()
+            .into_iter()
+            .find(|el| {
+                el.role == "radiogroup" && el.label.as_deref() == Some("Closing a session tab")
+            })
+            .expect("closing segment");
+        assert!(
+            (group.rect[2] - 204.0).abs() < 1.0,
+            "the segment keeps its fixed width, got {}",
+            group.rect[2]
+        );
+    }
+
+    #[test]
     fn the_general_tab_saves_what_the_app_does_and_a_profile_overrides_it() {
         use crate::settings::OnClose;
         let mut rt = runtime(model("general"));
