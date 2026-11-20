@@ -38,6 +38,9 @@ pub enum Request {
     Info,
     /// Subscribe to read-only events (IPC).
     Subscribe { events: Vec<EventKind> },
+    /// Ask the running instance to hand its local shells to keepers when it
+    /// exits; the flip is recorded for the next launch.
+    Handover { on: bool },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -62,6 +65,9 @@ pub enum Response {
     },
     Subscribed {
         events: Vec<EventKind>,
+    },
+    Handover {
+        on: bool,
     },
     Error {
         code: String,

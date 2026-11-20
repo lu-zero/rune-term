@@ -41,7 +41,9 @@ fn with_settings_window(mut app: App<Model>) -> App<Model> {
     app.init(move || {
         let mut model = model::init();
         #[cfg(all(unix, feature = "pty"))]
-        crate::handover::adopt(&mut model);
+        if crate::handover::requested() {
+            crate::handover::adopt(&mut model);
+        }
         model.settings = Some(settings.clone());
         model.terminal_handle = Some(menu.clone());
         crate::mux::prefetch(&model);

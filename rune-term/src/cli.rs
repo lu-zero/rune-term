@@ -25,6 +25,10 @@ struct Gui {
     #[arg(long = "profile", value_name = "NAME")]
     profile: Option<String>,
 
+    /// Hand local shells to a keeper at exit; the next rune-term adopts them.
+    #[arg(long = "handover")]
+    handover: bool,
+
     /// Arguments forwarded to Rune's tooling layer.
     ///
     /// Everything after this flag is passed through, including flags like
@@ -114,6 +118,10 @@ impl RuneTerm {
 
 impl Gui {
     fn run(self) {
+        #[cfg(all(unix, feature = "pty"))]
+        if self.handover {
+            crate::handover::set_requested(true);
+        }
         match &self.command {
             Some(Command::ShellIntegration(ShellIntegration { shell })) => {
                 print!(
@@ -183,6 +191,12 @@ mod tests {
             <RuneTerm as Args>::parse_from_argv(["rune-term"].iter().chain(args)).expect("parses");
         let Applet::Gui(gui) = cli.applet;
         gui
+    }
+
+    #[test]
+    fn the_handover_flag_opts_the_gui_in() {
+        assert!(parse(&["--handover"]).handover);
+        assert!(!parse(&[]).handover);
     }
 
     #[test]

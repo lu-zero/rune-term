@@ -28,6 +28,9 @@ enum Command {
     Profiles(ProfilesArgs),
     /// Inspect live tabs/panes (requires a running rune-term control endpoint).
     Tabs(TabsArgs),
+    /// Flip the running instance's handover on: its exit hands its shells
+    /// to keepers.
+    Handover,
 }
 
 #[derive(Args, Debug)]
@@ -86,6 +89,7 @@ fn run(cli: Cli) -> Result<(), String> {
         Command::Tabs(args) => match args.command {
             TabsCommand::List => cmd_tabs_list(cli.json, socket.as_deref()),
         },
+        Command::Handover => cmd_handover(socket.as_deref()),
     }
 }
 
@@ -281,6 +285,30 @@ fn cmd_tabs_list(json: bool, socket: Option<&std::path::Path>) -> Result<(), Str
                 return Err(msg);
             }
         }
+    }
+    Err("no control socket path available".to_owned())
+}
+
+fn cmd_handover(socket: Option<&std::path::Path>) -> Result<(), String> {
+    let socket = socket
+        .map(|p| p.to_path_buf())
+        .or_else(term_control::default_socket_path);
+    if let Some(path) = &socket {
+        return match term_control::transport::round_trip(
+            path,
+            &term_control::Request::Handover { on: true },
+        ) {
+            Ok(term_control::Response::Handover { on }) => {
+                println!("handover is {}", if on { "on" } else { "off" });
+                Ok(())
+            }
+            Ok(term_control::Response::Error { code, message }) => {
+                eprintln!("ipc error: {code}: {message}");
+                Err(message)
+            }
+            Ok(_) => Ok(()),
+            Err(err) => Err(format!("cannot connect to control socket: {err}")),
+        };
     }
     Err("no control socket path available".to_owned())
 }

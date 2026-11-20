@@ -11,6 +11,7 @@ use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use etcetera::BaseStrategy;
@@ -34,6 +35,50 @@ type Winsize = (u16, u16, u16, u16);
 
 /// How long an adoption waits for the keeper to answer.
 const ADOPT_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// The CLI asked for the handover (`--handover` or `rune-term-ctl handover`);
+/// default off.
+static REQUESTED: AtomicBool = AtomicBool::new(false);
+
+/// Marker the flip writes so the next launch adopts the keepers; a ctl flip
+/// sticks across instances.
+const HANDOVER_MARKER: &str = "handover.on";
+
+pub(crate) fn set_requested(on: bool) {
+    REQUESTED.store(on, Ordering::Relaxed);
+    if on {
+        if !keeper_found() {
+            eprintln!(
+                "rune-term: the shell keeper was not found; the handover will not happen at exit"
+            );
+        }
+        if let Some(dir) = keepers_dir() {
+            let _ = fs::create_dir_all(&dir);
+            let _ = File::create(dir.join(HANDOVER_MARKER));
+        }
+    }
+}
+
+/// Whether the keeper is findable now: a file next to the running tree, or
+/// the bare name on PATH.
+fn keeper_found() -> bool {
+    let exe = keeper_exe();
+    if exe.is_file() {
+        return true;
+    }
+    exe.to_str() == Some("rune-term-keeper") && path_has("rune-term-keeper")
+}
+
+fn path_has(name: &str) -> bool {
+    std::env::var_os("PATH").is_some_and(|paths| {
+        std::env::split_paths(paths.as_os_str()).any(|dir| dir.join(name).is_file())
+    })
+}
+
+pub(crate) fn requested() -> bool {
+    REQUESTED.load(Ordering::Relaxed)
+        || keepers_dir().is_some_and(|dir| dir.join(HANDOVER_MARKER).is_file())
+}
 
 /// The shells waiting for the next instance.
 pub(crate) fn adopt_all(dir: &Path) -> Vec<Adopted> {

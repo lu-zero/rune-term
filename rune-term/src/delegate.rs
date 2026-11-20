@@ -501,6 +501,9 @@ pub(crate) fn open_adopted(
 /// keepers hold the masters, and the next instance adopts them.
 #[cfg(all(unix, feature = "pty"))]
 pub(crate) fn handover_all() {
+    if !crate::handover::requested() {
+        return;
+    }
     let Some(shared) = PUBLISHED.lock().expect("harness").clone() else {
         return;
     };

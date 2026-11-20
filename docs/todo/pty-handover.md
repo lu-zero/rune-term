@@ -46,6 +46,11 @@ so closing the app ends every shell.
 A keeper process owns the shell's master while no rune-term runs; a new
 instance adopts it. iTerm2's daemon is the model, at one shell at a time.
 
+Opt-in: by default closing the app kills the shells, as before.
+`rune-term --handover` turns the whole thing on for a launch; while a
+running instance is up, `rune-term-ctl handover` flips its exit handover
+on — the next launch adopts the keepers (the flip writes the marker).
+
 ### The keeper: `rune-term-keeper` (new member, bin + lib)
 
 - `rune-term-keeper/src/lib.rs` — the wire protocol:

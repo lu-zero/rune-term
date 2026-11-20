@@ -195,6 +195,11 @@ fn handle_request(req: Request, socket_path: &Path, shared: &Arc<Shared>) -> Res
             Response::Profile { profile }
         }
         Request::ListTabs | Request::Subscribe { .. } => bridge_to_ui(req, shared),
+        Request::Handover { on } => {
+            #[cfg(all(unix, feature = "pty"))]
+            crate::handover::set_requested(on);
+            Response::Handover { on }
+        }
     }
 }
 
@@ -292,6 +297,11 @@ pub(crate) fn handle_control_request(model: &mut Model, req: Request) -> Respons
                 None
             };
             Response::Profile { profile }
+        }
+        Request::Handover { on } => {
+            #[cfg(all(unix, feature = "pty"))]
+            crate::handover::set_requested(on);
+            Response::Handover { on }
         }
     }
 }
