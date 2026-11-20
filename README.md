@@ -6,6 +6,11 @@ sessions are tab groups. The plan is in [`docs/todo/`](./docs/todo/).
 
 ![Tabs. The pane is a 24-bit hue plane from docs/shots/truecolor.py.](./docs/images/terminal-tabs.png)
 
+More headless captures: [split panes](./docs/images/terminal-split.png),
+[search](./docs/images/terminal-search.png), [selection](./docs/images/terminal-selection.png),
+[a link's address on hover](./docs/images/terminal-link.png), and
+[scrollback](./docs/images/terminal-scrollback.png).
+
 Configuration is a directory of TOML files that Cmd+, edits:
 [`docs/config.md`](./docs/config.md). `just shots` renders these pictures.
 

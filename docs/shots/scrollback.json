@@ -1,0 +1,4 @@
+[
+  {"t": 0.1, "type": "wheel", "key": "pane", "dy": 1200, "notch": true},
+  {"t": 0.8, "type": "mark", "name": "end"}
+]

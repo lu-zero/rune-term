@@ -1,0 +1,6 @@
+[
+  {"t": 0.1, "type": "click", "key": "pane"},
+  {"t": 0.3, "physical": "cmd+f"},
+  {"t": 0.5, "type": "type", "text": "hue"},
+  {"t": 1.2, "type": "mark", "name": "end"}
+]

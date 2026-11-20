@@ -1,0 +1,5 @@
+[
+  {"t": 0.1, "type": "move", "x": 25, "y": 80},
+  {"t": 0.3, "hold": "logo"},
+  {"t": 0.9, "type": "mark", "name": "end"}
+]

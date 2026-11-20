@@ -47,7 +47,7 @@ run-release:
     cargo build --release -p rune-term-keeper
     cargo run --release -p rune-term
 
-# Headless pictures. Settings follow the desktop appearance. The terminal picture is a 24-bit script.
+# Headless pictures of the settings and the terminal features. Settings follow the desktop appearance.
 shots:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -71,14 +71,27 @@ shots:
     settings settings-themes themes.json
     settings settings-color color.json
     # 960×560 at scale 2, Cascadia 14pt (9×17). The pane is 106×30 cells.
-    home="$(mktemp -d)"
-    cp -R "$root/docs/shots/term-config/rune-term" "$home/rune-term"
-    python3 "$root/docs/shots/truecolor.py" 106 30 > "$home/truecolor.bin"
-    XDG_CONFIG_HOME="$home" RUNE_TERM_INJECT="$home/truecolor.bin" "$bin" --rune-args \
-        --size 960x560 --scale 2 \
-        --script "$root/docs/shots/tabs.json" \
-        --snap "$root/docs/images/terminal-tabs.png"
-    rm -rf "$home"
+    term() {
+        local name="$1" source="$2" script="$3" home
+        home="$(mktemp -d)"
+        cp -R "$root/docs/shots/term-config/rune-term" "$home/rune-term"
+        if [ "$source" = truecolor ]; then
+            python3 "$root/docs/shots/truecolor.py" 106 30 > "$home/inject.bin"
+        else
+            python3 "$root/docs/shots/features.py" "$source" 30 > "$home/inject.bin"
+        fi
+        XDG_CONFIG_HOME="$home" RUNE_TERM_INJECT="$home/inject.bin" "$bin" --rune-args \
+            --size 960x560 --scale 2 \
+            --script "$root/docs/shots/$script" \
+            --snap "$root/docs/images/$name.png"
+        rm -rf "$home"
+    }
+    term terminal-tabs truecolor tabs.json
+    term terminal-split truecolor split.json
+    term terminal-search truecolor search.json
+    term terminal-selection text selection.json
+    term terminal-link link link.json
+    term terminal-scrollback scroll scrollback.json
 
 ci: check-all
 
