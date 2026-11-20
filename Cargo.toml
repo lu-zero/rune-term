@@ -66,8 +66,8 @@ rune = { git = "https://github.com/lu-zero/rune", branch = "physical-key-text" }
 rune-kit = { git = "https://github.com/lu-zero/rune", branch = "physical-key-text" }
 
 [patch."https://github.com/raphamorim/rio"]
-librio = { git = "https://github.com/lu-zero/rio", branch = "rune-term-on-main" }
-teletypewriter = { git = "https://github.com/lu-zero/rio", branch = "rune-term-on-main" }
+librio = { git = "https://github.com/lu-zero/rio", branch = "for-rune-term" }
+teletypewriter = { git = "https://github.com/lu-zero/rio", branch = "for-rune-term" }
 
 # The crates Rune vendors, which an app that builds Rune patches as Rune does. Its workspace
 # excludes them, but cargo finds every package in a git checkout.
