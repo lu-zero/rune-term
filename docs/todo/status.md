@@ -104,7 +104,14 @@ The numbers are that plan's.
       installed one, and the bundled Cascadia Code NF when it is not
       installed. The editor picks it from the bundled family and the installed
       monospaced ones, searchable, with `font-picker` over rune-kit's
-      `Combobox`. Pictures: [`docs/config.md`](../config.md). Design:
+      `Combobox`. A dark and a light theme with the same base name share one
+      list entry, with a pill naming Adaptive, Dark or Light; a paired
+      entry has an Adaptive/Dark/Light selector on the left of its action bar:
+      Adaptive follows the desktop, either named variant pins one theme. A
+      single theme offers Add Light/Dark counterpart, which copies it with the
+      other appearance and pairs the two; a custom theme's Appearance field
+      flips the metadata.
+      Pictures: [`docs/config.md`](../config.md). Design:
       [`settings-profiles.md`](./settings-profiles.md). Follow-on:
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
 - [x] **17. Box-drawing and braille sprites.** Box drawing, block elements

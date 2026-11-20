@@ -44,7 +44,7 @@ light = "Flexoki Light"
 - `confirm_close`: default `true`. Closing a tab or the window asks first while a program runs in it; a shell at its prompt closes without asking.
 - `on_close`: `"kill"`, the default, or `"detach"`. Closing a session tab kills its tmux or rmux window, or detaches it, which hides the tab and leaves the window running. A session profile's `on_close` wins.
 - `report_right_click`: default `false`. A right-click opens the pane's menu, as in iTerm2, even while a program such as vim or opencode takes the mouse. With `true` that program gets the click, and Shift+right-click opens the menu.
-- `adaptive_theme`: two theme names. When both are non-empty and the profile has no theme, the desktop appearance picks `dark` or `light`. On macOS that is `AppleInterfaceStyle`. Elsewhere, and when the appearance cannot be read, `dark` is used. The pair is not watched while the app is running.
+- `adaptive_theme`: two theme names. When both are non-empty and the profile has no theme, the desktop appearance picks `dark` or `light`. On macOS that is `AppleInterfaceStyle`. Elsewhere, and when the appearance cannot be read, `dark` is used. The pair is not watched while the app is running. Duplicating a theme clears the pair and pins the copy; so does choosing Dark or Light for a paired entry.
 
 `version` is required. Unknown keys are ignored.
 
@@ -105,9 +105,10 @@ background = "#1C1B1A"
 name = "Night"
 author = "Ada"
 origin_url = "https://example.com"
+appearance = "dark"
 ```
 
-Colors are `#RGB`, `#RRGGBB`, `#RRGGBBAA` (alpha ignored), or `rgb()` / `rgba()` including percentages. Unknown keys are ignored, so a pasted WezTerm scheme loads. The name is the file stem. `metadata.name` is written on save and is not read back.
+Colors are `#RGB`, `#RRGGBB`, `#RRGGBBAA` (alpha ignored), or `rgb()` / `rgba()` including percentages. Unknown keys are ignored, so a pasted WezTerm scheme loads. The name is the file stem. `metadata.name` is written on save and is not read back. `metadata.appearance` is `dark` or `light`; a file without it is classified by its background.
 
 Cursor and selection colors fall back to an inverted foreground and background. `split` and `scrollbar_thumb` fall back to bright black. `tab_bar.background` falls back to the background. `foreground_bright`, `muted`, and `accent` fall back to bright white, bright black, and blue; WezTerm ignores those three keys. Indexes 16–255 in `indexed` replace the xterm cube and gray ramp. A file whose stem is a built-in theme name replaces that built-in until the file is removed.
 
@@ -131,7 +132,7 @@ The window opens here. The settings are `confirm_close`, `on_close` and `report_
 
 ![The theme editor: Name, Author, and Source, then Basic beside UI, ANSI, the cube, and the gray ramp.](images/settings-themes.png)
 
-The editor lays a theme out as Name, Author, and Source, then Basic beside UI, then ANSI, Cube, and Gray. ANSI is two rows, the normal colors then the bright colors. The cube is indexes 16–231 and Gray is indexes 232–255, drawn in the xterm colors unless `indexed` replaces one. A narrower window stacks Name, Author, and Source, and stacks Basic and UI. The cube flows by group, six groups on a line where they fit. UI is muted, accent, the split border, the tab strip, and the scrollbar. Hover a swatch for its name. On a theme from `themes/`, click a swatch to edit it as `#RRGGBB` and RGB sliders. A built-in theme does not open the editor. Editing a cube or gray cell stores that index. Setting the cell back to its xterm color, or removing it, drops the override.
+The editor lays a theme out as Name, Author, and Source, then Basic beside UI, then ANSI, Cube, and Gray. ANSI is two rows, the normal colors then the bright colors. The cube is indexes 16–231 and Gray is indexes 232–255, drawn in the xterm colors unless `indexed` replaces one. A narrower window stacks Name, Author, and Source, and stacks Basic and UI. The cube flows by group, six groups on a line where they fit. UI is muted, accent, the split border, the tab strip, and the scrollbar. Hover a swatch for its name. On a theme from `themes/`, click a swatch to edit it as `#RRGGBB` and RGB sliders. A built-in theme does not open the editor. Editing a cube or gray cell stores that index. Setting the cell back to its xterm color, or removing it, drops the override. A dark and a light theme whose names share a base, or that the adaptive pair names, share one list entry with a pill reading Adaptive, Dark or Light. A paired entry has an Adaptive / Dark / Light selector on the left of the editor's action bar. Adaptive makes the window follow the desktop appearance; Dark or Light pins one variant. A single theme offers an Add counterpart action that copies it with the opposite appearance, names the copy `<name> Light` or `<name> Dark`, and sets the adaptive pair. A custom theme's Appearance field changes its metadata, including for a theme in a pair.
 
 ![Editing Background on the Night theme from the example above.](images/settings-color.png)
 

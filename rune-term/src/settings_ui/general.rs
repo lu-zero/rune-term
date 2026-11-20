@@ -83,7 +83,7 @@ pub fn editor(kit: &Kit, model: &SettingsModel) -> El {
                 ))
                 .child(half(rune::el())),
         );
-    super::with_actions(Vec::new(), body)
+    super::with_actions(None, Vec::new(), body)
 }
 
 fn change(model: &mut SettingsModel, edit: impl FnOnce(&mut Settings)) {

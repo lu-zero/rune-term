@@ -4,11 +4,13 @@
 
 use std::sync::Arc;
 
+use std::collections::BTreeMap;
+
 use rune::{col, el, row, text, El, ScrollSpec, TextEdit};
-use rune_kit::{Field, Kit, Popover, TextInput};
+use rune_kit::{Field, Kit, Popover, SegmentedControl, TextInput};
 
 use super::SettingsModel;
-use crate::scheme::{Scheme, Slot};
+use crate::scheme::{Appearance, Scheme, Slot};
 use crate::settings::ConfigFile;
 use crate::theme::{self, Palette};
 
@@ -62,8 +64,11 @@ pub struct ThemeDraft {
 impl ThemeDraft {
     /// The draft for the theme the list has selected.
     pub fn from_selected(model: &SettingsModel) -> Self {
-        let names = names(&model.config);
-        match names.get(model.selected) {
+        match entries(&model.config)
+            .get(model.selected)
+            .and_then(|entry| {
+                entry.name_for(model.theme_mode.appearance(crate::settings::system_dark()))
+            }) {
             Some(name) => Self::from_name(name, &model.config),
             None => Self::empty(),
         }
@@ -180,6 +185,122 @@ pub fn names(config: &ConfigFile) -> Vec<String> {
     names
 }
 
+/// Which of a paired theme's variants the editor applies.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum ThemeMode {
+    #[default]
+    Adaptive,
+    Dark,
+    Light,
+}
+
+impl ThemeMode {
+    /// The variant to edit and show while the desktop choice is `dark`.
+    pub fn appearance(self, system_dark: bool) -> Appearance {
+        match self {
+            Self::Light => Appearance::Light,
+            Self::Adaptive if !system_dark => Appearance::Light,
+            Self::Adaptive | Self::Dark => Appearance::Dark,
+        }
+    }
+}
+
+/// One row in the themes list. A dark and a light theme with the same base
+/// name share the row so both variants can be edited in one place.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ThemeEntry {
+    pub name: String,
+    pub dark: Option<String>,
+    pub light: Option<String>,
+}
+
+impl ThemeEntry {
+    pub fn name_for(&self, variant: Appearance) -> Option<&str> {
+        match variant {
+            Appearance::Dark => self.dark.as_deref().or(self.light.as_deref()),
+            Appearance::Light => self.light.as_deref().or(self.dark.as_deref()),
+        }
+    }
+
+    pub fn is_pair(&self) -> bool {
+        self.dark.is_some() && self.light.is_some()
+    }
+
+    pub fn label(&self) -> &'static str {
+        match (self.dark.is_some(), self.light.is_some()) {
+            (true, true) => "Adaptive",
+            (true, false) => "Dark",
+            (false, true) => "Light",
+            (false, false) => "Dark",
+        }
+    }
+}
+
+fn base_name(name: &str) -> String {
+    let lower = name.to_ascii_lowercase();
+    let suffix = if lower.ends_with(" dark") {
+        5
+    } else if lower.ends_with(" light") {
+        6
+    } else {
+        return name.to_owned();
+    };
+    name[..name.len() - suffix].trim_end().to_owned()
+}
+
+pub fn appearance(config: &ConfigFile, name: &str) -> Appearance {
+    match config.custom_themes.get(name) {
+        Some(scheme) => scheme.appearance,
+        None if name.to_ascii_lowercase().contains("light") => Appearance::Light,
+        None => Appearance::Dark,
+    }
+}
+
+/// The themes a built-in or custom name belongs to, grouped into list rows.
+/// A configured adaptive pair also groups two names that share no base.
+pub fn entries(config: &ConfigFile) -> Vec<ThemeEntry> {
+    let pair = config
+        .settings
+        .adaptive_theme
+        .as_ref()
+        .filter(|pair| pair.ready());
+    let mut groups: BTreeMap<String, ThemeEntry> = BTreeMap::new();
+    for name in names(config) {
+        let in_pair = pair.is_some_and(|pair| pair.dark == name || pair.light == name);
+        let (key, shown) = match pair.filter(|_| in_pair) {
+            Some(pair) => (
+                format!(
+                    "adaptive:{}|{}",
+                    pair.dark.to_lowercase(),
+                    pair.light.to_lowercase()
+                ),
+                base_name(&pair.dark),
+            ),
+            None => (base_name(&name).to_lowercase(), base_name(&name)),
+        };
+        let entry = groups.entry(key).or_insert_with(|| ThemeEntry {
+            name: shown,
+            dark: None,
+            light: None,
+        });
+        match appearance(config, &name) {
+            Appearance::Dark => entry.dark = Some(name),
+            Appearance::Light => entry.light = Some(name),
+        }
+    }
+    let mut entries: Vec<_> = groups.into_values().collect();
+    entries.sort_by_key(|entry| entry.name.to_lowercase());
+    entries
+}
+
+pub fn initial_mode(entry: &ThemeEntry) -> ThemeMode {
+    match (entry.dark.is_some(), entry.light.is_some()) {
+        (false, true) => ThemeMode::Light,
+        (true, true) => ThemeMode::Adaptive,
+        _ => ThemeMode::Dark,
+    }
+}
+
 /// The palette a theme name resolves to.
 pub fn palette(config: &ConfigFile, name: &str) -> Arc<Palette> {
     match config.custom_themes.get(name) {
@@ -195,7 +316,12 @@ pub fn is_custom(config: &ConfigFile, name: &str) -> bool {
 
 /// The row a theme has in the list.
 pub fn index_of(config: &ConfigFile, name: &str) -> usize {
-    names(config).iter().position(|n| n == name).unwrap_or(0)
+    entries(config)
+        .iter()
+        .position(|entry| {
+            entry.dark.as_deref() == Some(name) || entry.light.as_deref() == Some(name)
+        })
+        .unwrap_or(0)
 }
 
 /// Shows the theme the list has selected in the terminal and in this window.
@@ -224,7 +350,37 @@ pub fn editor(kit: &Kit, model: &SettingsModel, overlays: &mut Vec<El>) -> El {
                 .child(cube(kit, model, overlays))
                 .child(gray(kit, model, overlays)),
         );
-    super::with_actions(actions(kit, model), body)
+    super::with_actions(mode_selector(kit, model), actions(kit, model), body)
+}
+
+/// Adaptive or one of the two variants, on the left of the theme actions.
+fn mode_selector(kit: &Kit, model: &SettingsModel) -> Option<El> {
+    if !entries(&model.config).get(model.selected)?.is_pair() {
+        return None;
+    }
+    let at = match model.theme_mode {
+        ThemeMode::Adaptive => 0,
+        ThemeMode::Dark => 1,
+        ThemeMode::Light => 2,
+    };
+    Some(
+        SegmentedControl::new(&["Adaptive", "Dark", "Light"], Some(at))
+            .label("Theme mode")
+            .fit()
+            .on_pick(|m: &mut SettingsModel, at, _tx| {
+                let mode = [ThemeMode::Adaptive, ThemeMode::Dark, ThemeMode::Light][at];
+                if m.theme_mode == mode {
+                    return;
+                }
+                if commit(m) {
+                    super::write_config(m);
+                }
+                m.theme_mode = mode;
+                m.theme = ThemeDraft::from_selected(m);
+                preview_selected(m);
+            })
+            .build(kit),
+    )
 }
 
 /// A string that cannot become `#RRGGBB`. A short hex prefix is still being typed.
@@ -483,6 +639,39 @@ fn identity(kit: &Kit, model: &SettingsModel) -> El {
             source_readout(kit, draft.scheme.url.clone()),
         )
     };
+    let appearance = if model.theme.is_custom() {
+        let at = match model.theme.scheme.appearance {
+            Appearance::Dark => 0,
+            Appearance::Light => 1,
+        };
+        Field::new()
+            .label("Appearance")
+            .control(
+                SegmentedControl::new(&["Dark", "Light"], Some(at))
+                    .label("Theme appearance")
+                    .fit()
+                    .on_pick(|m: &mut SettingsModel, at, _tx| {
+                        reflect_appearance(
+                            m,
+                            if at == 0 {
+                                Appearance::Dark
+                            } else {
+                                Appearance::Light
+                            },
+                        );
+                    })
+                    .build(kit),
+            )
+            .build(kit)
+    } else {
+        readout(
+            kit,
+            "Appearance",
+            appearance(&model.config, &model.theme.original)
+                .label()
+                .to_owned(),
+        )
+    };
     row()
         .w_full()
         .gap(12.0)
@@ -491,6 +680,7 @@ fn identity(kit: &Kit, model: &SettingsModel) -> El {
         .child(share(name))
         .child(share(author))
         .child(share(source))
+        .child(share(appearance))
 }
 
 /// A row share that wraps onto its own line once `FIELD_MIN` no longer fits.
@@ -595,6 +785,20 @@ pub fn actions(kit: &Kit, model: &SettingsModel) -> Vec<El> {
         ),
         super::action(
             kit,
+            "theme-add-counterpart",
+            &super::ADD_THEME,
+            if model.theme.scheme.appearance == Appearance::Dark {
+                "Add Light counterpart"
+            } else {
+                "Add Dark counterpart"
+            },
+            !entries(&model.config)
+                .get(model.selected)
+                .is_some_and(ThemeEntry::is_pair),
+            add_counterpart,
+        ),
+        super::action(
+            kit,
             "theme-duplicate",
             kit.glyph.copy,
             "Duplicate",
@@ -610,6 +814,36 @@ pub fn actions(kit: &Kit, model: &SettingsModel) -> Vec<El> {
             delete_theme,
         ),
     ]
+}
+
+fn reflect_appearance(model: &mut SettingsModel, next: Appearance) {
+    if model.theme.scheme.appearance == next {
+        return;
+    }
+    model.theme.scheme.appearance = next;
+    if !commit(model) {
+        return;
+    }
+    let name = model.theme.original.clone();
+    if let Some(mut pair) = model.config.settings.adaptive_theme.clone() {
+        let other = if pair.dark == name {
+            Some(pair.light.clone())
+        } else if pair.light == name {
+            Some(pair.dark.clone())
+        } else {
+            None
+        };
+        if let Some(other) = other {
+            if appearance(&model.config, &other) == next {
+                std::mem::swap(&mut pair.dark, &mut pair.light);
+                model.config.settings.adaptive_theme = Some(pair);
+            }
+        }
+    }
+    if super::write_config(model) {
+        super::push(model);
+    }
+    preview_selected(model);
 }
 
 /// Puts the name into the list. The rest of the draft stays, so a field that
@@ -790,7 +1024,20 @@ pub fn apply_theme(model: &mut SettingsModel) {
     if name.is_empty() {
         return;
     }
-    model.config.set_theme(name);
+    let entry = entries(&model.config).get(model.selected).cloned();
+    if let (ThemeMode::Adaptive, Some((Some(dark), Some(light)))) = (
+        model.theme_mode,
+        entry.map(|entry| (entry.dark, entry.light)),
+    ) {
+        model.config.set_adaptive_theme(
+            dark,
+            light,
+            model.theme_mode.appearance(crate::settings::system_dark()),
+        );
+    } else {
+        model.config.set_theme(name);
+        model.config.settings.adaptive_theme = None;
+    }
     model.previewed = Some(model.theme.palette(&model.config));
     if super::write_config(model) {
         super::push(model);
@@ -816,6 +1063,21 @@ pub fn revert_theme(model: &mut SettingsModel) {
     super::restore(model);
 }
 
+/// Adds the other appearance and makes the two an adaptive pair.
+pub fn add_counterpart(model: &mut SettingsModel) {
+    let name = model.theme.original.clone();
+    if name.is_empty() || model.config.add_counterpart(&name).is_none() {
+        return;
+    }
+    select_by_name(model, &name);
+    model.theme_mode = ThemeMode::Adaptive;
+    model.theme = ThemeDraft::from_selected(model);
+    if super::write_config(model) {
+        super::push(model);
+    }
+    preview_selected(model);
+}
+
 /// Copies the theme into a custom one and selects it.
 pub fn duplicate_theme(model: &mut SettingsModel) {
     let name = model.theme.original.clone();
@@ -824,6 +1086,10 @@ pub fn duplicate_theme(model: &mut SettingsModel) {
     }
     let copy = model.config.copy_theme(&name);
     select_by_name(model, &copy);
+    model.theme_mode = entries(&model.config)
+        .get(model.selected)
+        .map_or(ThemeMode::Dark, initial_mode);
+    model.theme = ThemeDraft::from_selected(model);
     if super::write_config(model) {
         super::push(model);
     }
@@ -842,7 +1108,10 @@ pub fn delete_theme(model: &mut SettingsModel) {
     }
     model.selected = model
         .selected
-        .min(names(&model.config).len().saturating_sub(1));
+        .min(entries(&model.config).len().saturating_sub(1));
+    model.theme_mode = entries(&model.config)
+        .get(model.selected)
+        .map_or(ThemeMode::Dark, initial_mode);
     model.theme = ThemeDraft::from_selected(model);
     if super::write_config(model) {
         super::push(model);
@@ -857,6 +1126,10 @@ pub fn create_theme(model: &mut SettingsModel) {
     let theme = Scheme::from_palette(&palette);
     model.config.set_custom_theme(&name, theme);
     select_by_name(model, &name);
+    model.theme_mode = entries(&model.config)
+        .get(model.selected)
+        .map_or(ThemeMode::Dark, initial_mode);
+    model.theme = ThemeDraft::from_selected(model);
     if super::write_config(model) {
         super::push(model);
     }
@@ -865,7 +1138,9 @@ pub fn create_theme(model: &mut SettingsModel) {
 
 /// The list is sorted, so a name moves the row it sits on.
 fn select_by_name(model: &mut SettingsModel, name: &str) {
-    if let Some(index) = names(&model.config).iter().position(|key| key == name) {
+    if let Some(index) = entries(&model.config).iter().position(|entry| {
+        entry.dark.as_deref() == Some(name) || entry.light.as_deref() == Some(name)
+    }) {
         model.selected = index;
     }
     model.theme = ThemeDraft::from_selected(model);
@@ -885,5 +1160,36 @@ mod tests {
             .collect();
         assert_eq!(listed, vec!["Dracula".to_owned()]);
         assert!(is_custom(&config, "Dracula"));
+    }
+
+    #[test]
+    fn the_appearance_of_a_custom_theme_can_be_flipped() {
+        let dir = std::env::temp_dir().join("rune-term-appearance-test");
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut model = SettingsModel::with_config(ConfigFile::default().at_dir(dir), None);
+        let copy = model.config.copy_theme("Dracula");
+        select_by_name(&mut model, &copy);
+        reflect_appearance(&mut model, Appearance::Light);
+        assert_eq!(
+            model.config.custom_themes.get(&copy).map(|s| s.appearance),
+            Some(Appearance::Light)
+        );
+        assert_eq!(model.theme.scheme.appearance, Appearance::Light);
+    }
+
+    #[test]
+    fn dark_and_light_variants_share_one_entry() {
+        let rows = entries(&ConfigFile::default());
+        let flexoki = rows.iter().find(|row| row.name == "Flexoki").expect("pair");
+        assert_eq!(flexoki.dark.as_deref(), Some("Flexoki Dark"));
+        assert_eq!(flexoki.light.as_deref(), Some("Flexoki Light"));
+        assert!(flexoki.is_pair());
+        assert_eq!(flexoki.label(), "Adaptive");
+        assert!(rows.iter().all(|row| row.name != "Flexoki Light"));
+        let dracula = rows
+            .iter()
+            .find(|row| row.name == "Dracula")
+            .expect("Dracula");
+        assert_eq!(dracula.label(), "Dark");
     }
 }

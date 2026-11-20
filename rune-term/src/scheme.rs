@@ -17,6 +17,58 @@ use serde::Deserialize;
 
 use crate::theme::{self, Palette};
 
+/// Whether a scheme is drawn on a dark or a light background.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Appearance {
+    #[default]
+    Dark,
+    Light,
+}
+
+impl Appearance {
+    pub fn parse(text: &str) -> Option<Self> {
+        match text.trim().to_ascii_lowercase().as_str() {
+            "dark" => Some(Self::Dark),
+            "light" => Some(Self::Light),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Dark => "dark",
+            Self::Light => "light",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Dark => "Dark",
+            Self::Light => "Light",
+        }
+    }
+
+    pub fn flip(self) -> Self {
+        match self {
+            Self::Dark => Self::Light,
+            Self::Light => Self::Dark,
+        }
+    }
+
+    /// A theme file without metadata still gets an appearance from its background.
+    pub fn infer(background: u32) -> Self {
+        let red = ((background >> 16) & 0xff) as f32;
+        let green = ((background >> 8) & 0xff) as f32;
+        let blue = (background & 0xff) as f32;
+        let luma = (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255.0;
+        if luma > 0.5 {
+            Self::Light
+        } else {
+            Self::Dark
+        }
+    }
+}
+
 /// The colors a theme file edits. `foreground_bright`, `muted`, and `accent`
 /// are rune-term's; a WezTerm file that omits them is filled from the ANSI slots.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -37,6 +89,7 @@ pub struct Scheme {
     pub indexed: BTreeMap<u8, [u8; 3]>,
     pub author: String,
     pub url: String,
+    pub appearance: Appearance,
 }
 
 impl Default for Scheme {
@@ -64,6 +117,7 @@ impl Scheme {
             indexed: palette.indexed.clone(),
             author: palette.author.clone(),
             url: palette.url.clone(),
+            appearance: Appearance::infer(palette.bg),
         }
     }
 
@@ -187,6 +241,12 @@ impl Scheme {
             indexed,
             author: file.metadata.author.unwrap_or_default(),
             url: file.metadata.origin_url.unwrap_or_default(),
+            appearance: file
+                .metadata
+                .appearance
+                .as_deref()
+                .and_then(Appearance::parse)
+                .unwrap_or_else(|| Appearance::infer(background)),
         })
     }
 
@@ -223,6 +283,10 @@ impl Scheme {
         colors.insert("tab_bar".into(), toml::Value::Table(tab_bar));
         let mut metadata = toml::map::Map::new();
         metadata.insert("name".into(), toml::Value::String(name.to_owned()));
+        metadata.insert(
+            "appearance".into(),
+            toml::Value::String(self.appearance.as_str().to_owned()),
+        );
         if !self.author.is_empty() {
             metadata.insert("author".into(), toml::Value::String(self.author.clone()));
         }
@@ -448,6 +512,8 @@ struct MetaFile {
     author: Option<String>,
     #[serde(default)]
     origin_url: Option<String>,
+    #[serde(default)]
+    appearance: Option<String>,
 }
 
 #[cfg(test)]
@@ -524,5 +590,27 @@ brights = ["#111111", "#000000", "#000000", "#000000", "#000000", "#000000", "#0
         assert_eq!(again.muted, scheme.muted);
         assert_eq!(again.accent, scheme.accent);
         assert_eq!(again.fg_bright, scheme.fg_bright);
+    }
+
+    #[test]
+    fn appearance_is_written_and_inferred_for_older_files() {
+        let text = r##"
+[colors]
+background = "#F0F0F0"
+ansi = ["#010101", "#020202", "#030303", "#040404", "#050505", "#060606", "#070707", "#080808"]
+"##;
+        let scheme = Scheme::from_toml(text).expect("parse");
+        assert_eq!(scheme.appearance, Appearance::Light);
+        let written = scheme.to_toml("Paper").expect("write");
+        assert!(written.contains("appearance = \"light\""));
+        assert_eq!(
+            Scheme::from_toml(&written).expect("reread").appearance,
+            Appearance::Light
+        );
+        let dark = written.replace("appearance = \"light\"", "appearance = \"dark\"");
+        assert_eq!(
+            Scheme::from_toml(&dark).expect("dark").appearance,
+            Appearance::Dark
+        );
     }
 }

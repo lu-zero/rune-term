@@ -14,7 +14,7 @@ use rune::{
     col, el, icon, row, text, AppHandle, AppSpec, Color, Cx, El, Icon, Key, KeyEvent, ScrollSpec,
     Titlebar, Tx, WindowOptions, WindowSpec,
 };
-use rune_kit::{Kit, TextInput};
+use rune_kit::{Badge, BadgeVariant, Kit, TextInput};
 
 use crate::model::Model;
 use crate::settings::{self, ConfigFile};
@@ -39,6 +39,13 @@ pub(crate) static SAVE: Icon = Icon {
     name: "rune-term-save",
     view: 16.0,
     body: r#"<path d="M8 2.5V9M4.5 6L8 9.5L11.5 6M3 12.5H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
+/// The plus for adding a matching theme.
+pub(crate) static ADD_THEME: Icon = Icon {
+    name: "rune-term-add-theme",
+    view: 16.0,
+    body: r#"<path d="M8 3V13M3 8H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>"#,
 };
 
 /// The button that opens where a theme came from.
@@ -77,6 +84,8 @@ pub struct SettingsModel {
     pub selected: usize,
     pub profile: profiles::ProfileDraft,
     pub theme: themes::ThemeDraft,
+    /// Whether a paired theme follows the desktop or is pinned to one variant.
+    pub theme_mode: themes::ThemeMode,
     pub status: Option<String>,
     /// The palette the terminal and this window are showing, while the editor
     /// previews one that is not saved yet.
@@ -94,12 +103,24 @@ impl SettingsModel {
     /// A model over a config the caller holds. The terminal window is absent
     /// when there is none to talk to.
     pub fn with_config(config: ConfigFile, terminal: Option<AppHandle<Model>>) -> Self {
+        let entries = themes::entries(&config);
+        let selected = entries
+            .iter()
+            .position(|entry| {
+                entry.dark.as_deref() == Some(config.settings.theme.as_str())
+                    || entry.light.as_deref() == Some(config.settings.theme.as_str())
+            })
+            .unwrap_or(0);
+        let theme_mode = entries
+            .get(selected)
+            .map_or(themes::ThemeMode::Dark, themes::initial_mode);
         Self {
             profile: profile_draft(&config),
-            theme: theme_draft(&config),
+            theme: theme_draft(&config, selected, theme_mode),
+            theme_mode,
             config,
             tab: Tab::default(),
-            selected: 0,
+            selected,
             status: None,
             previewed: None,
             terminal,
@@ -167,15 +188,17 @@ fn profile_draft(config: &ConfigFile) -> profiles::ProfileDraft {
 }
 
 /// The draft for the theme in use, or the first one in the list.
-fn theme_draft(config: &ConfigFile) -> themes::ThemeDraft {
-    let names = themes::names(config);
-    let name = names
-        .iter()
-        .find(|name| *name == &config.settings.theme)
-        .or_else(|| names.first())
-        .cloned()
-        .unwrap_or_else(|| settings::DEFAULT_THEME.to_owned());
-    themes::ThemeDraft::from_name(&name, config)
+fn theme_draft(
+    config: &ConfigFile,
+    selected: usize,
+    mode: themes::ThemeMode,
+) -> themes::ThemeDraft {
+    let entries = themes::entries(config);
+    let name = entries
+        .get(selected)
+        .and_then(|entry| entry.name_for(mode.appearance(settings::system_dark())))
+        .unwrap_or(settings::DEFAULT_THEME);
+    themes::ThemeDraft::from_name(name, config)
 }
 
 /// The terminal's chord. Opens the settings window.
@@ -213,7 +236,7 @@ fn on_key(model: &mut SettingsModel, event: &KeyEvent, tx: &mut Tx) -> bool {
 fn list_len(model: &SettingsModel) -> usize {
     match model.tab {
         Tab::Profiles => model.config.profiles.len(),
-        Tab::Themes => themes::names(&model.config).len(),
+        Tab::Themes => themes::entries(&model.config).len(),
         Tab::General => 0,
     }
 }
@@ -239,6 +262,11 @@ fn select(model: &mut SettingsModel, index: usize, tx: &mut Tx) {
     }
     model.selected = index;
     model.status = None;
+    if model.tab == Tab::Themes {
+        model.theme_mode = themes::entries(&model.config)
+            .get(index)
+            .map_or(themes::ThemeMode::Dark, themes::initial_mode);
+    }
     reload_draft(model);
     tx.focus(row_key(model, index), false);
 }
@@ -271,6 +299,11 @@ pub fn show_tab(model: &mut SettingsModel, tab: Tab) {
         Tab::General => 0,
     };
     model.status = None;
+    if tab == Tab::Themes {
+        model.theme_mode = themes::entries(&model.config)
+            .get(model.selected)
+            .map_or(themes::ThemeMode::Dark, themes::initial_mode);
+    }
     reload_draft(model);
 }
 
@@ -392,8 +425,8 @@ fn list(kit: &Kit, model: &SettingsModel) -> El {
             }
         }
         Tab::Themes => {
-            for (index, name) in themes::names(&model.config).iter().enumerate() {
-                list = list.child(theme_row(kit, model, index, name));
+            for (index, entry) in themes::entries(&model.config).iter().enumerate() {
+                list = list.child(theme_row(kit, model, index, entry));
             }
         }
         Tab::General => {}
@@ -463,8 +496,9 @@ fn profile_row(kit: &Kit, model: &SettingsModel, index: usize, name: &str, defau
     row
 }
 
-fn theme_row(kit: &Kit, model: &SettingsModel, index: usize, name: &str) -> El {
+fn theme_row(kit: &Kit, model: &SettingsModel, index: usize, entry: &themes::ThemeEntry) -> El {
     let selected = model.selected == index;
+    let picked = entry.clone();
     let row = row()
         .key(format!("theme-{index}"))
         .role("option")
@@ -484,18 +518,24 @@ fn theme_row(kit: &Kit, model: &SettingsModel, index: usize, name: &str) -> El {
                 }
                 m.selected = index;
                 m.status = None;
+                m.theme_mode = themes::initial_mode(&picked);
                 m.theme = themes::ThemeDraft::from_selected(m);
                 themes::apply_theme(m);
             }
         })
         .child(marker(kit, selected))
         .child(
-            text(name.to_owned())
+            text(entry.name.clone())
                 .font(kit.ty.ui)
                 .color(kit.c.text_base)
                 .grow(1.0)
                 .min_w(0.0)
                 .truncate(),
+        )
+        .child(
+            Badge::new(entry.label())
+                .variant(BadgeVariant::Subtle)
+                .build(kit),
         );
     row
 }
@@ -558,15 +598,13 @@ pub(crate) fn action(
     button
 }
 
-/// The editor column, with its actions at the top right.
-pub(crate) fn with_actions(actions: Vec<El>, body: El) -> El {
-    let mut bar = row()
-        .w_full()
-        .px(16.0)
-        .pt(12.0)
-        .gap(4.0)
-        .center_y()
-        .child(el().grow(1.0));
+/// The editor column, with an optional selector at the top left and actions at the right.
+pub(crate) fn with_actions(leading: Option<El>, actions: Vec<El>, body: El) -> El {
+    let mut bar = row().w_full().px(16.0).pt(12.0).gap(4.0).center_y();
+    if let Some(leading) = leading {
+        bar = bar.child(leading);
+    }
+    bar = bar.child(el().grow(1.0));
     for action in actions {
         bar = bar.child(action);
     }
@@ -723,6 +761,7 @@ fn apply(model: &mut Model, config: &ConfigFile, tx: &mut Tx) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scheme::{Appearance, Scheme};
     use rune::{Env, Runtime};
 
     /// A model over a config of its own, so a test never writes the user's.
@@ -999,6 +1038,31 @@ mod tests {
         rt.pointer_down(x, y);
         rt.pointer_up(x, y);
         rt.frame(0.0);
+    }
+
+    fn press_mode(rt: &mut Runtime<SettingsModel>, at: usize) {
+        let mode = rt
+            .elements()
+            .into_iter()
+            .find(|el| el.role == "radiogroup" && el.label.as_deref() == Some("Theme mode"))
+            .expect("theme mode selector");
+        let key = format!("segment{at}");
+        let segment = rt
+            .elements()
+            .into_iter()
+            .find(|el| el.key.as_deref() == Some(&key) && el.path.starts_with(&mode.path))
+            .unwrap_or_else(|| panic!("no theme mode segment {at}"));
+        let x = segment.rect[0] + segment.rect[2] * 0.5;
+        let y = segment.rect[1] + segment.rect[3] * 0.5;
+        rt.pointer_down(x, y);
+        rt.pointer_up(x, y);
+        rt.frame(0.0);
+    }
+
+    fn has_mode_selector(rt: &Runtime<SettingsModel>) -> bool {
+        rt.elements()
+            .iter()
+            .any(|el| el.role == "radiogroup" && el.label.as_deref() == Some("Theme mode"))
     }
 
     #[test]
@@ -1366,6 +1430,146 @@ mod tests {
                 .map(|palette| palette.name.clone()),
             Some(rt.state.theme.original.clone())
         );
+    }
+
+    #[test]
+    fn a_paired_entry_offers_both_variants_for_editing() {
+        let mut rt = runtime(model("themes-pair"));
+        show_tab(&mut rt.state, Tab::Themes);
+        rt.frame(0.0);
+        let index = themes::entries(&rt.state.config)
+            .iter()
+            .position(|entry| entry.name == "Flexoki")
+            .expect("paired entry");
+        press(&mut rt, &format!("theme-{index}"));
+        assert!(
+            rt.elements()
+                .iter()
+                .any(|el| el.label.as_deref() == Some("Adaptive")),
+            "the pair gets a pill"
+        );
+        assert!(has_mode_selector(&rt));
+        assert_eq!(rt.state.theme_mode, themes::ThemeMode::Adaptive);
+        press_mode(&mut rt, 2);
+        assert_eq!(rt.state.theme.original, "Flexoki Light");
+        assert_eq!(rt.state.theme_mode, themes::ThemeMode::Light);
+        press_mode(&mut rt, 1);
+        assert_eq!(rt.state.theme.original, "Flexoki Dark");
+        assert_eq!(rt.state.theme_mode, themes::ThemeMode::Dark);
+    }
+
+    #[test]
+    fn pinning_a_variant_stops_following_the_desktop() {
+        let mut rt = runtime(model("themes-pinned"));
+        show_tab(&mut rt.state, Tab::Themes);
+        rt.frame(0.0);
+        let index = themes::entries(&rt.state.config)
+            .iter()
+            .position(|entry| entry.name == "Flexoki")
+            .expect("paired entry");
+        press(&mut rt, &format!("theme-{index}"));
+        press_mode(&mut rt, 2);
+        themes::apply_theme(&mut rt.state);
+        assert!(rt.state.config.settings.adaptive_theme.is_none());
+        assert_eq!(rt.state.config.settings.theme, "Flexoki Light");
+    }
+
+    #[test]
+    fn adding_a_counterpart_pairs_a_single_theme() {
+        let mut rt = runtime(model("themes-counterpart"));
+        show_tab(&mut rt.state, Tab::Themes);
+        rt.frame(0.0);
+        let index = themes::entries(&rt.state.config)
+            .iter()
+            .position(|entry| entry.name == "Dracula")
+            .expect("Dracula");
+        press(&mut rt, &format!("theme-{index}"));
+        press(&mut rt, "theme-add-counterpart");
+        let pair = rt
+            .state
+            .config
+            .settings
+            .adaptive_theme
+            .as_ref()
+            .expect("adaptive pair");
+        assert_eq!(pair.dark, "Dracula");
+        assert_eq!(pair.light, "Dracula Light");
+        assert_eq!(rt.state.theme_mode, themes::ThemeMode::Adaptive);
+        assert!(has_mode_selector(&rt));
+    }
+
+    #[test]
+    fn duplicating_a_paired_theme_gives_a_standalone_variant() {
+        let mut rt = runtime(model("themes-copy"));
+        show_tab(&mut rt.state, Tab::Themes);
+        rt.frame(0.0);
+        let index = themes::entries(&rt.state.config)
+            .iter()
+            .position(|entry| entry.name == "Flexoki")
+            .expect("paired entry");
+        press(&mut rt, &format!("theme-{index}"));
+        assert!(rt.state.config.settings.adaptive_theme.is_some());
+        press(&mut rt, "theme-duplicate");
+        assert!(rt.state.config.settings.adaptive_theme.is_none());
+        assert_ne!(rt.state.theme_mode, themes::ThemeMode::Adaptive);
+        assert!(!has_mode_selector(&rt), "the copy has no variant selector");
+    }
+
+    #[test]
+    fn applying_a_paired_entry_follows_the_desktop_appearance() {
+        let mut rt = runtime(model("themes-adaptive"));
+        show_tab(&mut rt.state, Tab::Themes);
+        rt.frame(0.0);
+        let index = themes::entries(&rt.state.config)
+            .iter()
+            .position(|entry| entry.name == "Flexoki")
+            .expect("paired entry");
+        press(&mut rt, &format!("theme-{index}"));
+        let pair = rt
+            .state
+            .config
+            .settings
+            .adaptive_theme
+            .as_ref()
+            .expect("adaptive pair");
+        assert_eq!(pair.dark, "Flexoki Dark");
+        assert_eq!(pair.light, "Flexoki Light");
+        let profile = rt.state.config.default_profile_name();
+        assert!(rt
+            .state
+            .config
+            .profile(profile)
+            .and_then(|p| p.theme.clone())
+            .is_none());
+    }
+
+    #[test]
+    fn a_light_only_theme_gets_its_own_pill() {
+        let mut state = model("themes-light");
+        let scheme = Scheme {
+            appearance: Appearance::Light,
+            ..Scheme::default()
+        };
+        state.config.set_custom_theme("Paper", scheme);
+        let mut rt = runtime(state);
+        show_tab(&mut rt.state, Tab::Themes);
+        rt.frame(0.0);
+        let index = themes::entries(&rt.state.config)
+            .iter()
+            .position(|entry| entry.name == "Paper")
+            .expect("light entry");
+        press(&mut rt, &format!("theme-{index}"));
+        assert!(
+            rt.elements()
+                .iter()
+                .any(|el| el.label.as_deref() == Some("Light")),
+            "the light-only entry gets a pill"
+        );
+        assert!(
+            !has_mode_selector(&rt),
+            "no variant selector without both variants"
+        );
+        assert_eq!(rt.state.theme.original, "Paper");
     }
 
     #[test]

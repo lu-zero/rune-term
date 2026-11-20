@@ -379,7 +379,7 @@ pub fn editor(
         ),
         false => body,
     };
-    super::with_actions(actions(kit, model), body)
+    super::with_actions(None, actions(kit, model), body)
 }
 
 fn text_field(

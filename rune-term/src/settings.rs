@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use crate::scheme::Scheme;
+use crate::scheme::{Appearance, Scheme};
 use crate::theme::{self, Palette};
 
 pub use rune_term_core::font::{clamp_font_size, DEFAULT_FONT_SIZE, MAX_FONT_SIZE, MIN_FONT_SIZE};
@@ -85,7 +85,7 @@ pub struct AdaptiveTheme {
 }
 
 impl AdaptiveTheme {
-    fn ready(&self) -> bool {
+    pub(crate) fn ready(&self) -> bool {
         !self.dark.trim().is_empty() && !self.light.trim().is_empty()
     }
 }
@@ -425,6 +425,18 @@ impl ConfigFile {
         self.profiles.entry(name).or_default().theme = Some(theme);
     }
 
+    /// Follow the desktop appearance between the two themes of a pair.
+    /// The profile's own theme has to go, or it would win over the pair.
+    pub fn set_adaptive_theme(&mut self, dark: String, light: String, variant: Appearance) {
+        self.settings.theme = match variant {
+            Appearance::Dark => dark.clone(),
+            Appearance::Light => light.clone(),
+        };
+        self.settings.adaptive_theme = Some(AdaptiveTheme { dark, light });
+        let name = self.default_profile_name().to_owned();
+        self.profiles.entry(name).or_default().theme = None;
+    }
+
     pub fn copy_theme(&mut self, source_name: &str) -> String {
         let source = if let Some(custom) = self.custom_themes.get(source_name) {
             custom.clone()
@@ -436,7 +448,26 @@ impl ConfigFile {
         let name = self.unique_theme_name(&format!("{source_name} Copy"));
         self.custom_themes.insert(name.clone(), source);
         self.set_theme(name.clone());
+        self.settings.adaptive_theme = None;
         name
+    }
+
+    /// Adds a counterpart of the other appearance and makes the two an adaptive pair.
+    pub fn add_counterpart(&mut self, source_name: &str) -> Option<String> {
+        let source = self.custom_themes.get(source_name).cloned().or_else(|| {
+            theme::resolve_builtin(source_name).map(|palette| Scheme::from_palette(&palette))
+        })?;
+        let other = source.appearance.flip();
+        let name = self.unique_theme_name(&format!("{} {}", source_name, other.label()));
+        let mut scheme = source;
+        scheme.appearance = other;
+        self.custom_themes.insert(name.clone(), scheme);
+        let (dark, light) = match other {
+            Appearance::Dark => (name.clone(), source_name.to_owned()),
+            Appearance::Light => (source_name.to_owned(), name.clone()),
+        };
+        self.set_adaptive_theme(dark, light, other);
+        Some(name)
     }
 
     /// A theme name no built-in or custom theme already holds.
@@ -754,7 +785,7 @@ fn write_atomic(path: &Path, text: &str) -> io::Result<()> {
 }
 
 /// `defaults` prints `Dark` and fails when the desktop is light. Unknown stays dark.
-fn system_dark() -> bool {
+pub(crate) fn system_dark() -> bool {
     if !cfg!(target_os = "macos") {
         return true;
     }
@@ -797,6 +828,39 @@ mod tests {
         assert_eq!(cfg.option_as_alt("Work"), OptionAsAlt::Both);
         assert!(cfg.remove_profile("Work"));
         assert_eq!(cfg.option_as_alt("Work"), OptionAsAlt::Left);
+    }
+
+    #[test]
+    fn adding_a_counterpart_makes_an_adaptive_pair() {
+        let mut cfg = ConfigFile::default();
+        let name = cfg.add_counterpart("Dracula").expect("counterpart");
+        assert_eq!(name, "Dracula Light");
+        assert_eq!(
+            cfg.custom_themes.get(&name).map(|scheme| scheme.appearance),
+            Some(Appearance::Light)
+        );
+        let pair = cfg.settings.adaptive_theme.as_ref().expect("pair");
+        assert_eq!(pair.dark, "Dracula");
+        assert_eq!(pair.light, name);
+        assert!(cfg
+            .profile(DEFAULT_PROFILE)
+            .and_then(|profile| profile.theme.clone())
+            .is_none());
+    }
+
+    #[test]
+    fn copying_a_theme_unbinds_the_adaptive_pair() {
+        let mut cfg = ConfigFile::default();
+        cfg.settings.adaptive_theme = Some(AdaptiveTheme {
+            dark: "Flexoki Dark".to_owned(),
+            light: "Flexoki Light".to_owned(),
+        });
+        let copy = cfg.copy_theme("Flexoki Dark");
+        assert!(cfg.settings.adaptive_theme.is_none());
+        assert_eq!(
+            cfg.profile(DEFAULT_PROFILE).and_then(|p| p.theme.clone()),
+            Some(copy)
+        );
     }
 
     #[test]
