@@ -39,7 +39,13 @@ test: test-lib
 check-all: fmt-check clippy test-lib
 
 run:
+    cargo build -p rune-term-keeper
     cargo run -p rune-term
+
+# Release build, keeper included: the app hands its local shells to the keeper at exit.
+run-release:
+    cargo build --release -p rune-term-keeper
+    cargo run --release -p rune-term
 
 # Headless pictures. Settings follow the desktop appearance. The terminal picture is a 24-bit script.
 shots:
