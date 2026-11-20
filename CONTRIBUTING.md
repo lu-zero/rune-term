@@ -1,0 +1,120 @@
+# Contributing to rune-term
+
+How to build and test, and how the PTY handover works. `AGENTS.md` keeps the
+rules for coding agents.
+
+## Building and testing
+
+- **macOS**, the platform this builds on: Rune draws with Metal, so the Xcode
+  command-line tools are all it needs.
+- **Linux**: the window needs `libxkbcommon`; linking fails without it.
+  Wayland or X11 client libraries, fontconfig and dbus may be needed as well,
+  depending on the session and the features built. Package names vary by
+  distribution.
+- **Headless GPU tests** (`grid_pipeline`, and `headless` without default
+  features) render through wgpu and need a graphics adapter: Vulkan or OpenGL
+  drivers, or a software one such as Mesa's lavapipe on a machine without a
+  GPU.
+- **wgpu stays pinned at `=30.0.1`. `Cargo.lock` is gitignored.**
+
+Sibling checkouts (`../rune`, `../rio`, `../wezterm`) are for reading. The
+workspace depends on upstream `rune` and `librio`. `[patch]` replaces those
+sources with branches `physical-key-text` and `rune-term-on-main`; a local
+checkout replaces the patch entry with a path. winit, parley_engine and the
+AccessKit adapters are rune's `vendor/` copies, from the same branch. Never
+copy WezTerm source in. Never link `sugarloaf`, `rio-window`, `rioterm`,
+`rio-backend`, or WezTerm's `window` or `mux`.
+
+The gate before a commit is `just check-all`: formatting, clippy with
+`-D warnings` on both feature sets, and the lib tests:
+
+```
+cargo test -p term-grid --lib
+cargo test -p term-input --lib
+cargo test -p rune-term --lib
+cargo test -p rune-term --no-default-features --lib
+cargo test -p rune-term --test grid_pipeline
+cargo test -p rune-term --no-default-features --test headless
+```
+
+## The PTY handover
+
+The handover lets local shells survive the app. Launching
+`rune-term --handover` opts in; while a running instance is up,
+`rune-term-ctl handover` flips its exit handover on — the marker it writes
+makes the next launch adopt the shells. Default: off, as before.
+
+### The keeper (`rune-term-keeper`)
+
+One per shell, spawned at exit. It receives the master fd over a socketpair
+via `SCM_RIGHTS`, so it holds the master open and the shell never sees a
+hangup; it reads the shell's output into an 8 KiB ring; and it binds
+`keepers/<shell-pid>.sock` in the keepers dir — etcetera's Xdg runtime dir,
+else its state dir, + `rune-term/keepers`. When serving the next instance it
+sends the fd, then the gap output as `u32 len + bytes`, then the line
+`shell=N\nprofile=P\n`, then waits for a 1-byte ack and exits (unlinking the
+socket).
+
+### Handover at exit
+
+`app::app()` registers `rune::fast_exit(delegate::handover_all)` — the app's
+final step before `_exit`. The hook gates on `handover::requested()`; when on,
+it drains `Shared.links` (local shells; mux panes aren't links) and for each
+`PtyLink::hand_over()` — dup the master, `mem::forget` the `Pty` (no hangup) —
+calls `handover::hand_over_fd`: socketpair, `send_fd` the master, spawn the
+keeper with `--socket --shell --profile`, master on stdin.
+
+### Adoption at startup
+
+`app.init` calls `handover::adopt` (gated on `requested()`):
+`adopt_all(keepers_dir)` connects to every `keepers/*.sock` — connect,
+`recv_master`, read the ring and the `shell=`/`profile=` lines, ack — into
+`Adopted { fd, shell, profile, winsize, blob }`. The first shell becomes the
+initial pane (`chrome_view::attach_initial`); the rest go through
+`tabs::open_adopted` (one tab each). `PtyLink::adopted` dups the fd into the
+reader/writer/size threads and `surface.inject_output(&blob)` replays the gap
+output, so the shell sees nothing of it. `delegate::setup` skips `open_host`
+for adopted panes.
+
+### The opt-in
+
+- `rune-term --handover` — `cli::Gui::run` → `handover::set_requested(true)`:
+  sets the `REQUESTED` atomic, writes the marker `keepers/handover.on` (so the
+  next launch adopts), and warns if the keeper isn't findable.
+- `rune-term-ctl handover` — the RPC `Request::Handover { on: true }` handled
+  in `ipc::handle_request` → `set_requested(true)`: the running instance
+  flips (atomic + marker); its exit hands the shells over.
+- Keeper lookup (`handover::keeper_exe()`): `CARGO_BIN_EXE_rune-term-keeper`
+  (tests), the sibling of the running `rune-term` exe, a walk up the
+  ancestors, then the bare name on PATH. If not findable at request time:
+  `rune-term: the shell keeper was not found; the handover will not happen at exit`.
+
+### `PtyLink`
+
+`Core::{Spawned(Option<Pty>), Adopted { fd: Option<File>, shell: u32 }}`.
+`running()` uses `tcgetpgrp` on the master for both cores. `Drop`: Spawned →
+the `Pty` drop hangs up and reaps; Adopted → closes the fd.
+
+### macOS quirks
+
+- `sendmsg` rejects `msg_controllen` beyond the message's own control data:
+  use `CMSG_SPACE(4)`.
+- `recvmsg` with a zero-length iov doesn't deliver the fd when it arrives
+  while blocked: the client sleeps 200 ms after `connect` so the keeper has
+  queued it.
+
+### Tests
+
+`cargo test -p rune-term --lib handover cli::tests`:
+
+- `handover::tests::the_keeper_hands_the_master_back_for_adoption` — a real
+  `/bin/sh` goes through a real keeper: spawn, `hand_over_fd`, `adopt_all`,
+  write `hi\r` through the adopted master, assert the shell answers `got:hi`.
+- `link::tests::an_adopted_link_answers_a_shell_line_through_the_adopted_master`.
+- `cli::tests::the_handover_flag_opts_the_gui_in`.
+- `rune-term-keeper`'s `tests::the_protocol_sends_and_receives_an_fd` — the
+  socketpair round trip.
+
+### Design doc
+
+`docs/todo/pty-handover.md` is the design.

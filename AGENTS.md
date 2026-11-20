@@ -16,28 +16,12 @@ comments, and docs: a pattern being there does not make it correct.
 
 ## Working here
 
-- Code must pass the usual checks before a commit: `just check-all` (runs
-  `cargo fmt --all -- --check`, clippy with `-D warnings`, and lib tests).
-  Do not commit code that is ill-formatted, has clippy lints, or has clippy
-  warnings. There is no git hook enforcing this.
-- Sibling checkouts (`../rune`, `../rio`, `../wezterm`) are for reading.
-  The workspace depends on upstream `rune` and `librio`. `[patch]` replaces
-  those sources with `https://github.com/lu-zero/rune` branch
-  `physical-key-text` and `https://github.com/lu-zero/rio` branch
-  `rune-term-on-main`. A local checkout replaces that patch entry
-  with a path. winit, parley_engine and the AccessKit adapters are
-  rune's `vendor/` copies, from the same branch: the rune workspace
-  excludes them, but cargo finds any package in a git checkout, so the
-  tree builds without `../rune`. Cascadia Code NF is
-  vendored at `term-grid/CascadiaCodeNF.ttf`.
-  Never copy WezTerm source in. Never link `sugarloaf`, `rio-window`,
-  `rioterm`, `rio-backend`, or WezTerm's `window` or `mux`.
+- Master stays linear: merge commits are forbidden, and `git merge` is
+  blocked by the `pre-merge-commit` hook; use rebase or cherry-pick.
 - A change that has to land in Rune or Rio is reported. Those trees are not
   committed from this repository.
 - `docs/todo/` is committed. It is the design, so nothing cites it as
   scratch and nothing gitignores it.
-- wgpu stays pinned at `=30.0.1`. `Cargo.lock` is gitignored.
-- macOS is the platform this builds on.
 - A commit you assisted carries `Assisted-by: AGENT:MODEL`
   (`Assisted-by: Grok:grok-4.7`). Never add `Co-Authored-By` or a
   `Signed-off-by`: the sign-off is the human's.
