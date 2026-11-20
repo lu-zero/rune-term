@@ -140,7 +140,7 @@ pub struct Pad {
     pub top: f32,
 }
 
-/// Copies `text` and `consumed_mods` onto a `KeyEvent`.
+/// Copies `text` and the modifiers a text key spent onto a `KeyEvent`.
 /// The function does not synthesize a US-QWERTY string.
 pub fn map_key(
     key: PhysicalKeyCode,
@@ -170,11 +170,18 @@ pub fn map_key(
             _ => None,
         }
     };
+    // Rune reports Shift as consumed for Enter: `key_without_modifiers` has
+    // no string for a named key, so no text was spent producing one.
+    let consumed_mods = if matches!(key, Some(Key::Char(_))) {
+        to_modifiers(consumed_mods)
+    } else {
+        Modifiers::empty()
+    };
     KeyEvent {
         action,
         key,
         mods: to_modifiers(mods),
-        consumed_mods: to_modifiers(consumed_mods),
+        consumed_mods,
         text,
         composing: false,
     }
@@ -447,6 +454,20 @@ mod tests {
         );
         assert_eq!(event.key, Some(Key::Char('a')));
         assert_eq!(encode(&event).as_deref(), Some(b"A".as_slice()));
+    }
+
+    #[test]
+    fn a_named_key_keeps_shift_that_was_not_spent_on_text() {
+        let event = map_key(
+            PhysicalKeyCode::Enter,
+            shift(),
+            true,
+            false,
+            Some("\r"),
+            shift(),
+        );
+        assert_eq!(event.mods, Modifiers::SHIFT);
+        assert!(event.consumed_mods.is_empty());
     }
 
     #[test]
