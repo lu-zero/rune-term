@@ -1,0 +1,10 @@
+[package]
+name = "term-cell-grid"
+version = "0.0.1"
+edition = "2021"
+license = "MIT"
+publish = true
+description = "Placeholder for term-grid (its crates.io name is taken). See https://github.com/lu-zero/rune-term"
+repository = "https://github.com/lu-zero/rune-term"
+
+[workspace]

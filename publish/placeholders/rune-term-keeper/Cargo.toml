@@ -1,0 +1,10 @@
+[package]
+name = "rune-term-keeper"
+version = "0.0.1"
+edition = "2021"
+license = "MIT"
+publish = true
+description = "Placeholder for rune-term-keeper (blocked on rune-term-core). See https://github.com/lu-zero/rune-term"
+repository = "https://github.com/lu-zero/rune-term"
+
+[workspace]
