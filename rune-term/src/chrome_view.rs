@@ -176,7 +176,7 @@ fn link_address(link: &HoverLink, cell_px: (u16, u16), scale: f32, p: &Palette) 
 fn single(model: &Model, scale: f32) -> El {
     let hover_active = model.terminal.primary().is_some_and(|host| {
         host.hover_link.is_some()
-            && crate::hyperlink::open_mods(rune_term_core::input::modifiers(
+            && crate::hyperlink::open_mods(rune_term_core::input::host_modifiers(
                 model.terminal.held_mods(),
             ))
     });
@@ -273,7 +273,7 @@ fn leaf_el(leaf: &Leaf, model: &Model, scale: f32, cell: (f32, f32)) -> El {
     let mark = leaf.mark;
     let hover_active = model.terminal.by_mark(mark).is_some_and(|host| {
         host.hover_link.is_some()
-            && crate::hyperlink::open_mods(rune_term_core::input::modifiers(
+            && crate::hyperlink::open_mods(rune_term_core::input::host_modifiers(
                 model.terminal.held_mods(),
             ))
     });

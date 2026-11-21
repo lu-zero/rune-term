@@ -14,6 +14,7 @@ path = "src/lib.rs"
 rune.workspace = true
 librio.workspace = true
 term-grid.workspace = true
+term-host.workspace = true
 term-input.workspace = true
 wgpu.workspace = true
 

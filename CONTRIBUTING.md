@@ -26,6 +26,9 @@ rules for coding agents.
   decoded once at runtime by pure-Rust `ruzstd`. `term-atlas/fallback-subset.py`
   regenerates them from the installed V8 NF CN/JP/KR faces (needs `fonttools`
   and the `zstd` CLI).
+- **Host**: `term-host` owns the generic terminal state (surfaces, grid sync,
+  scrollback, selection, search and input delivery). `rune-term-core` is the
+  Rune adapter: Rune-side key, pointer-phase and colour conversions live there.
 - **Keys**: `term-input` owns its key types and encoder; `rune-term-core`
   converts them to librio at the host boundary. It has no Rune or librio
   dependency and can be used by another frontend.

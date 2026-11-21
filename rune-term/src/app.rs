@@ -59,7 +59,11 @@ pub fn app() -> App<Model> {
         .compositor(GridCompositor::default())
         .on_ime(ime::on_ime)
         .on_modifiers(|model, mods, tx| {
-            if model.terminal.set_held_mods(mods) && model.terminal.any_hover_link() {
+            if model
+                .terminal
+                .set_held_mods(rune_term_core::input::mods_of(mods))
+                && model.terminal.any_hover_link()
+            {
                 tx.wake_after(std::time::Duration::ZERO);
             }
         })

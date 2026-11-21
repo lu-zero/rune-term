@@ -1,19 +1,7 @@
-//! Reusable terminal component for rune-term.
+//! Rune adapter over the generic terminal host: the app-facing event and
+//! colour types live here; the reusable terminal state lives in `term-host`.
 
-pub mod font;
-pub mod grid_source;
-pub mod hyperlink;
-pub mod images;
-pub mod ime;
 pub mod input;
-pub mod render;
-pub mod resize;
-pub mod scrollback;
-pub mod search;
-pub mod selection;
-pub mod surfaces;
-pub mod terminal;
-pub mod terminal_input;
 pub mod theme;
 
-pub use terminal::{State as TerminalState, Terminal};
+pub use term_host::*;

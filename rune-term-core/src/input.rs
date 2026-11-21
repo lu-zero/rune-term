@@ -1,63 +1,9 @@
-//! Terminal input mapping helpers.
+//! Rune-side event conversions over `term-host`.
+
+pub use term_host::input::*;
 
 use librio::Modifiers;
 use rune::{Key, Mods, PhysicalKeyCode, PointerButton};
-use term_input::Pad;
-
-use crate::surfaces::HostSurface;
-
-pub fn cell_under(host: &HostSurface, x: f32, y: f32, scale: f32) -> Option<(u16, u16)> {
-    term_input::cell_at(
-        x,
-        y,
-        drawn_pitch(host.cell_px.0, scale),
-        drawn_pitch(host.cell_px.1, scale),
-        host.cols,
-        host.rows,
-        Pad::default(),
-    )
-}
-
-/// A miss still scrolls. The cell is the last one on that side, or 0 when
-/// the grid has no cells.
-pub fn cell_for_wheel(host: &HostSurface, x: f32, y: f32, scale: f32) -> (u16, u16) {
-    if let Some(cell) = cell_under(host, x, y, scale) {
-        return cell;
-    }
-    (
-        edge_cell(x, drawn_pitch(host.cell_px.0, scale), host.cols),
-        edge_cell(y, drawn_pitch(host.cell_px.1, scale), host.rows),
-    )
-}
-
-pub fn edge_cell(local: f32, pitch: f32, count: u16) -> u16 {
-    if count == 0 || pitch.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) || local < 0.0 {
-        0
-    } else {
-        count - 1
-    }
-}
-
-/// The first half of the cell is [`librio::Side::Left`]. A backwards drag
-/// can include column 0 because the side follows the pointer.
-pub fn side_at(x: f32, col: u16, pitch: f32) -> librio::Side {
-    if pitch.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
-        return librio::Side::Left;
-    }
-    let into = x - f32::from(col) * pitch;
-    if into >= pitch * 0.5 {
-        librio::Side::Right
-    } else {
-        librio::Side::Left
-    }
-}
-
-pub fn drawn_pitch(cell_px: u16, scale: f32) -> f32 {
-    if !(scale.is_finite() && scale > 0.0) {
-        return 0.0;
-    }
-    f32::from(cell_px) / scale
-}
 
 pub fn button_code(button: PointerButton) -> Option<u8> {
     match button {
@@ -66,6 +12,24 @@ pub fn button_code(button: PointerButton) -> Option<u8> {
         PointerButton::Secondary => Some(2),
         _ => None,
     }
+}
+
+/// The host's generic modifier set as librio modifiers.
+pub fn host_modifiers(mods: term_input::Mods) -> Modifiers {
+    let mut out = Modifiers::empty();
+    if mods.shift {
+        out |= Modifiers::SHIFT;
+    }
+    if mods.ctrl {
+        out |= Modifiers::CTRL;
+    }
+    if mods.alt {
+        out |= Modifiers::ALT;
+    }
+    if mods.logo {
+        out |= Modifiers::SUPER;
+    }
+    out
 }
 
 pub fn modifiers(mods: Mods) -> Modifiers {
@@ -158,45 +122,6 @@ pub fn logical_code(key: &Key) -> term_input::PhysicalKeyCode {
 
 /// `Key::Command` is the logical form of a platform chord. The window also
 /// sets `Tx::physical_key`; this covers the path that only has the logical key.
-pub fn command_code(c: char) -> term_input::PhysicalKeyCode {
-    use term_input::PhysicalKeyCode as C;
-    match c.to_ascii_lowercase() {
-        'a' => C::KeyA,
-        'c' => C::KeyC,
-        'f' => C::KeyF,
-        'n' => C::KeyN,
-        't' => C::KeyT,
-        'v' => C::KeyV,
-        'w' => C::KeyW,
-        '1' => C::Digit1,
-        '2' => C::Digit2,
-        '3' => C::Digit3,
-        '4' => C::Digit4,
-        '5' => C::Digit5,
-        '6' => C::Digit6,
-        '7' => C::Digit7,
-        '8' => C::Digit8,
-        '9' => C::Digit9,
-        _ => C::Unknown,
-    }
-}
-
-pub fn tab_digit(code: term_input::PhysicalKeyCode) -> Option<u8> {
-    use term_input::PhysicalKeyCode::*;
-    Some(match code {
-        Digit1 => 1,
-        Digit2 => 2,
-        Digit3 => 3,
-        Digit4 => 4,
-        Digit5 => 5,
-        Digit6 => 6,
-        Digit7 => 7,
-        Digit8 => 8,
-        Digit9 => 9,
-        _ => return None,
-    })
-}
-
 pub fn mods_of(mods: Mods) -> term_input::Mods {
     term_input::Mods {
         shift: mods.shift,
@@ -323,5 +248,14 @@ pub fn code(key: PhysicalKeyCode) -> term_input::PhysicalKeyCode {
         W::NumpadDivide => C::NumpadDivide,
         W::NumpadEnter => C::NumpadEnter,
         _ => C::Unknown,
+    }
+}
+
+/// Convert a window pointer phase to the generic host phase.
+pub fn phase(phase: rune::Phase) -> term_host::input::Phase {
+    match phase {
+        rune::Phase::Down => term_host::input::Phase::Down,
+        rune::Phase::Move => term_host::input::Phase::Move,
+        rune::Phase::Up => term_host::input::Phase::Up,
     }
 }

@@ -1,12 +1,11 @@
 //! Terminal input delivery against a host surface.
 
-use librio::Modifiers;
-use rune::Phase;
-
 use crate::hyperlink::{self, HoverLink, OpenDecision};
 use crate::input;
+use crate::input::Phase;
 use crate::selection;
 use crate::surfaces::HostSurface;
+use librio::Modifiers;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LinkAction {

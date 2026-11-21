@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use librio::SurfaceId;
-use rune::Mods;
 use term_grid::GridRenderer;
+use term_input::Mods;
 
 use crate::hyperlink::HoverLink;
 use crate::images::Images;

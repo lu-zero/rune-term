@@ -16,8 +16,9 @@ pub fn sync(
     queue: &wgpu::Queue,
 ) {
     let shown = search::shown(model);
-    let hover_active_mods =
-        crate::hyperlink::open_mods(rune_term_core::input::modifiers(model.terminal.held_mods()));
+    let hover_active_mods = crate::hyperlink::open_mods(rune_term_core::input::host_modifiers(
+        model.terminal.held_mods(),
+    ));
     let palette = model.palette.clone();
     let report = model.terminal.sync_render(
         panes,

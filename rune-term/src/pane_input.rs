@@ -85,7 +85,7 @@ pub fn on_drag_mark(model: &mut Model, mark: u32, drag: &mut Drag, scale: f32, t
     };
     let action = core_terminal::gesture(
         host,
-        drag.phase,
+        core_input::phase(drag.phase),
         drag.x,
         drag.y,
         drag.clicks,
@@ -1020,7 +1020,17 @@ mod tests {
         let Some(host) = model.terminal.by_mark_mut(mark) else {
             return core_terminal::LinkAction::None;
         };
-        let action = core_terminal::gesture(host, phase, x, y, clicks, 0, mods, 1.0, true);
+        let action = core_terminal::gesture(
+            host,
+            core_input::phase(phase),
+            x,
+            y,
+            clicks,
+            0,
+            mods,
+            1.0,
+            true,
+        );
         if let core_terminal::LinkAction::Confirm(uri) = &action {
             model.pending_link_open = Some(uri.clone());
         }
@@ -1400,11 +1410,13 @@ mod tests {
         rt.frame(0.0);
         assert!(rt.find("link-address").is_none(), "no label without Cmd");
         rt.update(|model, _tx| {
-            model.terminal.set_held_mods(rune::Mods {
-                logo: cfg!(target_os = "macos"),
-                ctrl: !cfg!(target_os = "macos"),
-                ..rune::Mods::default()
-            });
+            model
+                .terminal
+                .set_held_mods(core_input::mods_of(rune::Mods {
+                    logo: cfg!(target_os = "macos"),
+                    ctrl: !cfg!(target_os = "macos"),
+                    ..rune::Mods::default()
+                }));
         });
         rt.frame(0.0);
         assert!(

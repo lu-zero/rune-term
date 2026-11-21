@@ -11,6 +11,7 @@ members = [
     "term-font-data-zh-full",
     "term-input",
     "term-control",
+    "term-host",
     "term-mux",
     "term-roam",
     "color-picker",
@@ -39,6 +40,7 @@ rune-term-keeper = { path = "rune-term-keeper" }
 term-atlas = { path = "term-atlas", version = "0.1.0", default-features = false }
 term-control = { path = "term-control" }
 term-font = { path = "term-font", version = "0.1.1" }
+term-host = { path = "term-host", default-features = false }
 term-font-data-maple = { path = "term-font-data-maple", version = "0.1.0" }
 term-font-data-cascadia = { path = "term-font-data-cascadia", version = "0.1.0" }
 term-font-data-common = { path = "term-font-data-common", version = "0.1.0" }
