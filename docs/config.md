@@ -62,7 +62,7 @@ program = "/bin/zsh"
 args = ["-l"]
 ```
 
-- `font_family`: default `"Cascadia Code NF"`, which is bundled. `"Maple Mono NF"` is bundled too: a Nerd Font with wider language coverage. The profile editor lists both and the installed monospaced families. An installed family draws in its regular face; an unknown one draws in the bundled default. A symbol the face lacks comes from the system's fallback fonts.
+- `font_family`: default `"Cascadia Code NF"`, which is bundled. `"Maple Mono NF"` and `"Maple Mono NF CN"` are bundled too: Nerd Fonts with wider language coverage, the CN variant adding Chinese and Japanese glyphs. The profile editor lists all three and the installed monospaced families. An installed family draws in its regular face; an unknown one draws in the bundled default. A symbol the face lacks comes from the system's fallback fonts.
 - `font_size` (optional): overrides `settings.font_size`.
 - `theme` (optional): a theme name. When it is omitted, the profile inherits. With both `adaptive_theme` names set, that is the desktop appearance, and the field reads `Inherit (Appearance)`. Otherwise it is `settings.theme`, and the field reads `Inherit` and that name. A named theme wins over both. The menu lists theme names. Inherit is the empty value.
 - `backend`: `"local"`, a shell here, or `"tmux"` or `"rmux"`, a session whose windows are a group of tabs. For a session:

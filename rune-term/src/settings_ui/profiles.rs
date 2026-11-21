@@ -671,6 +671,7 @@ fn font_picker(
     .current(&model.profile.font_family)
     .note(term_grid::BUNDLED_FAMILY, "Bundled")
     .note(term_grid::MAPLE_FAMILY, "Bundled")
+    .note(term_grid::MAPLE_CN_FAMILY, "Bundled")
     .on_choose(|m: &mut SettingsModel, family, _tx| choose_font_family(m, family));
     if let Some([width, _]) = cx.layout_size("profile-font-box") {
         picker = picker.width(width);

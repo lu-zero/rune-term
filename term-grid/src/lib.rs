@@ -14,6 +14,6 @@ mod sprite;
 
 pub use atlas::{face_cell, face_cell_for, Atlas, GlyphRect};
 pub use cell::{CellSample, CursorSample, GridSource};
-pub use face::{monospace_families, Face, BUNDLED_FAMILY, MAPLE_FAMILY};
+pub use face::{monospace_families, Face, BUNDLED_FAMILY, MAPLE_CN_FAMILY, MAPLE_FAMILY};
 pub use renderer::{DrawSlot, GridRenderer};
 pub use solid::SolidSlot;

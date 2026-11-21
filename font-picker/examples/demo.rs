@@ -20,6 +20,7 @@ fn view(s: &State, _cx: &mut Cx<State>) -> El {
     .current(&s.family)
     .note(term_grid::BUNDLED_FAMILY, "Bundled")
     .note(term_grid::MAPLE_FAMILY, "Bundled")
+    .note(term_grid::MAPLE_CN_FAMILY, "Bundled")
     .on_choose(|s: &mut State, family, _tx| s.family = family.to_owned())
     .build(&kit, &mut layer);
     let body = col()
