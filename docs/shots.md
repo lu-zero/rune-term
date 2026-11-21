@@ -26,6 +26,13 @@ in both appearances.
 
 ![A hyperlink with its full address shown on Command-hover](images/terminal-link.png)
 
+### Multilingual
+
+One bundled Maple Mono face plus the compact CN/KR fallback: Ukrainian,
+Simplified and Traditional Chinese, Japanese and Korean in one pane.
+
+![Ukrainian, Chinese, Japanese and Korean source in the terminal](images/terminal-multilingual.png)
+
 ### Scrollback
 
 ![A wheel scroll through colored history lines](images/terminal-scrollback.png)

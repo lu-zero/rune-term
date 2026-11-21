@@ -1,0 +1,22 @@
+// Ukrainian + CJK + Code test
+fn greet() {
+    println!("Привіт, світ!");        // Ukrainian: Hello, world!
+    println!("你好，世界！");         // Chinese: Hello, world!
+    println!("こんにちは世界");       // Japanese: Hello, world!
+    println!("안녕하세요 세계");      // Korean: Hello, world!
+}
+
+// Mixed comment
+let message = "Код працює з CJK: 中文 日本語 한국어";
+
+// Alignment check
+let table = "
+| Language   | Greeting      |
+|------------|---------------|
+| Українська | Привіт        |
+| 中文       | 你好          |
+| 日本語     | こんにちは    |
+| 한국어     | 안녕하세요    |
+";
+
+AudioVivid源码.7z

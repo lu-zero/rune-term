@@ -52,7 +52,7 @@ shots:
     #!/usr/bin/env bash
     set -euo pipefail
     root="$(pwd)"
-    cargo build -p rune-term --no-default-features --offline
+    cargo build -p rune-term --no-default-features --features font-bundled,font-fallback-common --offline
     mkdir -p "$root/docs/images"
     bin="$root/target/debug/rune-term"
     settings() {
@@ -82,11 +82,14 @@ shots:
         local name="$1" source="$2" script="$3" home
         home="$(mktemp -d)"
         cp -R "$root/docs/shots/term-config/rune-term" "$home/rune-term"
-        if [ "$source" = truecolor ]; then
-            python3 "$root/docs/shots/truecolor.py" 106 30 > "$home/inject.bin"
-        else
-            python3 "$root/docs/shots/features.py" "$source" 30 > "$home/inject.bin"
-        fi
+        case "$source" in
+            truecolor) python3 "$root/docs/shots/truecolor.py" 106 30 > "$home/inject.bin" ;;
+            *.txt)
+                python3 -c 'import sys; sys.stdout.buffer.write(open(sys.argv[1], "rb").read().replace(b"\n", b"\r\n"))' \
+                    "$root/docs/shots/$source" > "$home/inject.bin"
+                ;;
+            *) python3 "$root/docs/shots/features.py" "$source" 30 > "$home/inject.bin" ;;
+        esac
         XDG_CONFIG_HOME="$home" RUNE_TERM_INJECT="$home/inject.bin" "$bin" --rune-args \
             --size 960x560 --scale 2 \
             --script "$root/docs/shots/$script" \
@@ -99,6 +102,7 @@ shots:
     term terminal-selection text selection.json
     term terminal-link link link.json
     term terminal-scrollback scroll scrollback.json
+    term terminal-multilingual multilingual.txt settle.json
 
 # The mdBook site, from README.md and docs/ staged into target/site-src by site/stage.py.
 site:
