@@ -1,0 +1,13 @@
+[book]
+title = "rune-term"
+description = "A terminal emulator built on Rune and librio"
+language = "en"
+src = "../target/site-src"
+
+[build]
+build-dir = "../target/site"
+create-missing = false
+
+[output.html]
+site-url = "/"
+git-repository-url = "https://github.com/lu-zero/rune-term"

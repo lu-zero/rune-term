@@ -100,6 +100,16 @@ shots:
     term terminal-link link link.json
     term terminal-scrollback scroll scrollback.json
 
+# The mdBook site, from README.md and docs/ staged into target/site-src by site/stage.py.
+site:
+    python3 site/stage.py
+    mdbook build site
+
+# Preview the staged copy on port 3000; edits under docs/ need a re-run.
+site-serve host="localhost":
+    python3 site/stage.py
+    mdbook serve site --hostname {{host}}
+
 ci: check-all
 
 # The prompt marks as files to source, for every shell.

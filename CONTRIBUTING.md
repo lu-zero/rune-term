@@ -37,6 +37,14 @@ cargo test -p rune-term --test grid_pipeline
 cargo test -p rune-term --no-default-features --test headless
 ```
 
+## Site
+
+`just shots` regenerates the captures in `docs/images`. `just site` stages
+README.md, the docs pages and those images into `target/site-src`, then builds
+an mdBook into `target/site`; `just site-serve` previews it on port 3000. mdBook
+is needed (`cargo install mdbook`), and edits under `docs/` need a re-run of
+either site recipe.
+
 ## The PTY handover
 
 The handover lets local shells survive the app. Launching

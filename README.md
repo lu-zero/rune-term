@@ -21,6 +21,7 @@ The settings also have dark captures: [General](./docs/images/settings-general-d
 [theme menu](./docs/images/settings-theme-menu-dark.png),
 [theme editor](./docs/images/settings-themes-dark.png) and
 [color editing](./docs/images/settings-color-dark.png). The terminal shots above are dark already.
+The [site gallery](./docs/shots.md) shows both appearances inline.
 
 ## Building
 
