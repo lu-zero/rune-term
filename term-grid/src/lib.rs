@@ -4,7 +4,7 @@
 mod atlas;
 mod cell;
 mod face;
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", feature = "bundled-font"))]
 mod fallback;
 pub mod images;
 mod renderer;
@@ -14,6 +14,8 @@ mod sprite;
 
 pub use atlas::{face_cell, face_cell_for, Atlas, GlyphRect};
 pub use cell::{CellSample, CursorSample, GridSource};
-pub use face::{monospace_families, Face, BUNDLED_FAMILY, CASCADIA_FAMILY, MAPLE_FAMILY};
+#[cfg(feature = "cascadia")]
+pub use face::CASCADIA_FAMILY;
+pub use face::{fallback_bytes, monospace_families, Face, BUNDLED_FAMILY, MAPLE_FAMILY};
 pub use renderer::{DrawSlot, GridRenderer};
 pub use solid::SolidSlot;

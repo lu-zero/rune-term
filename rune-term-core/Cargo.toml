@@ -22,5 +22,10 @@ libc.workspace = true
 
 [features]
 default = []
+font-bundled = ["term-grid/bundled-font"]
+font-fallback-common = ["term-grid/fallback-common"]
+font-fallback-ja = ["term-grid/fallback-ja"]
+font-fallback-zh-full = ["term-grid/fallback-zh-full"]
+font-cascadia = ["term-grid/cascadia"]
 pty = ["librio/graphics"]
 graphics = ["librio/graphics"]

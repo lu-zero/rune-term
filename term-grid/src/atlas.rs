@@ -438,10 +438,14 @@ impl Atlas {
     /// A codepoint the face lacks: try the compact bundled subset, then a
     /// system font found by `term-font`. On macOS CoreText is the last resort.
     fn place_fallback(&mut self, ch: char, cells: u8) -> Option<GlyphRect> {
-        let face = Face::failover();
-        let font = face.font()?;
-        let gid = font.charmap().map(ch);
-        if gid != 0 {
+        for bytes in crate::fallback_bytes() {
+            let Some(font) = swash::FontRef::from_index(bytes, 0) else {
+                continue;
+            };
+            let gid = font.charmap().map(ch);
+            if gid == 0 {
+                continue;
+            }
             let coords = regular_coords(&font);
             let upem = f32::from(font.metrics(&coords).units_per_em.max(1));
             // ppem is pixels per em at the chosen size; upem only converts
@@ -463,11 +467,11 @@ impl Atlas {
         if let Some(rect) = self.place_system_font(ch, cells) {
             return Some(rect);
         }
-        #[cfg(target_os = "macos")]
+        #[cfg(all(target_os = "macos", feature = "bundled-font"))]
         {
             self.place_system(ch, cells)
         }
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(not(all(target_os = "macos", feature = "bundled-font")))]
         {
             None
         }
@@ -599,7 +603,7 @@ impl Atlas {
         })
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "bundled-font"))]
     fn place_system(&mut self, ch: char, cells: u8) -> Option<GlyphRect> {
         let drawn =
             crate::fallback::draw(crate::face::BUNDLED, ch, self.ppem.max(self.cell.1 as f32))?;
@@ -627,7 +631,7 @@ impl Atlas {
         })
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "bundled-font"))]
     fn paint_fallback_gray(
         &mut self,
         origin: (u32, u32),
@@ -667,7 +671,7 @@ impl Atlas {
         }
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "bundled-font"))]
     fn paint_color(
         &mut self,
         origin: (u32, u32),
@@ -1129,6 +1133,7 @@ mod tests {
         (top, bottom)
     }
 
+    #[cfg(feature = "bundled-font")]
     #[test]
     fn the_underline_sits_under_the_baseline_within_the_cell() {
         let mut atlas = Atlas::with_cell(9, 17);
@@ -1143,6 +1148,7 @@ mod tests {
         assert_eq!(atlas.underline(2).expect("wide").w, 18);
     }
 
+    #[cfg(feature = "bundled-font")]
     #[test]
     fn letters_have_ink() {
         let atlas = Atlas::new();
@@ -1168,6 +1174,11 @@ mod tests {
         assert!(w >= 8.0 && h >= 16.0, "bundled cell {w}x{h}");
     }
 
+    #[cfg(any(
+        feature = "fallback-common",
+        feature = "fallback-ja",
+        feature = "fallback-zh-full"
+    ))]
     #[test]
     fn a_codepoint_the_face_lacks_comes_from_the_compact_fallback() {
         let mut atlas = Atlas::with_cell(10, 20);
@@ -1177,6 +1188,7 @@ mod tests {
         assert!(ink_count(&atlas, rect) > 20, "fallback has ink");
     }
 
+    #[cfg(all(feature = "cascadia", feature = "fallback-common"))]
     #[test]
     fn fallback_glyph_scales_to_a_face_with_another_upem() {
         let mut atlas = Atlas::with_face(Face::bundled_cascadia(), 8, 16);
@@ -1215,6 +1227,7 @@ mod tests {
         assert!(!atlas.take_dirty());
     }
 
+    #[cfg(feature = "bundled-font")]
     #[test]
     fn block_rules_and_icons_cover_the_cell() {
         let mut atlas = Atlas::with_cell(9, 17);
@@ -1279,6 +1292,7 @@ mod tests {
         assert!(atlas.ensure('\u{0378}', 1).is_none());
     }
 
+    #[cfg(feature = "bundled-font")]
     #[test]
     fn the_prompt_mark_sits_in_the_cell() {
         let mut atlas = Atlas::with_cell(18, 34);
@@ -1290,7 +1304,7 @@ mod tests {
         assert!(!atlas.take_dirty());
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "bundled-font"))]
     #[test]
     fn emoji_comes_from_the_system_cascade() {
         let mut atlas = Atlas::with_cell(18, 34);
@@ -1312,6 +1326,7 @@ mod tests {
         assert!(!atlas.take_color_dirty());
     }
 
+    #[cfg(feature = "bundled-font")]
     #[test]
     fn latin_beyond_ascii_stays_on_the_baseline() {
         let mut atlas = Atlas::new();

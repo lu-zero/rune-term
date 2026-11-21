@@ -30,6 +30,22 @@ cargo run -p rune-term
 just check-all
 ```
 
+One embedded face (Maple Mono NF) and the common CJK fallback are on by
+default. Fallback tiers can be added, or removed entirely for a build that
+uses only installed fonts:
+
+| Cargo features | Extra fonts | Release size |
+| --- | --- | --- |
+| default (`font-bundled`, `font-fallback-common`) | common Han, kana, full Hangul | 48.4 MiB |
+| `--no-default-features --features font-bundled` | none | 39.9 MiB |
+| `+ font-fallback-ja` | JIS X 0208 kanji | ~52 MiB |
+| `+ font-fallback-zh-full` | GBK Hanzi | ~61 MiB |
+| `+ font-cascadia` | a second selectable face | +2.4 MiB |
+| all tiers together | everything above | 65.3 MiB |
+
+With no bundled or installed font, rune-term exits with a link to download
+Maple Mono NF instead of drawing an empty window.
+
 Dependencies, features and the crates: [`docs/building.md`](./docs/building.md).
 The patched Rune and Rio branches it builds against are in
 [`docs/todo/status.md`](./docs/todo/status.md).

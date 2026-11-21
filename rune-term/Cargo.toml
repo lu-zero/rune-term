@@ -37,7 +37,13 @@ winnow-args.workspace = true
 okhsl.workspace = true
 
 [features]
-default = ["pty"]
+default = ["pty", "font-bundled", "font-fallback-common"]
+# One embedded face is the base; optional tiers add coverage and binary weight.
+font-bundled = ["term-grid/bundled-font", "rune-term-core/font-bundled"]
+font-fallback-common = ["term-grid/fallback-common", "rune-term-core/font-fallback-common"]
+font-fallback-ja = ["term-grid/fallback-ja", "rune-term-core/font-fallback-ja"]
+font-fallback-zh-full = ["term-grid/fallback-zh-full", "rune-term-core/font-fallback-zh-full"]
+font-cascadia = ["term-grid/cascadia", "rune-term-core/font-cascadia"]
 pty = [
     "dep:teletypewriter",
     "dep:libc",

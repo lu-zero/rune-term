@@ -31,7 +31,7 @@ test-grid:
     cargo test -p rune-term --test grid_pipeline
 
 test-headless:
-    cargo test -p rune-term --no-default-features --test headless
+    cargo test -p rune-term --no-default-features --features font-bundled --test headless
 
 test: test-lib
 

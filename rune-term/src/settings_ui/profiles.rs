@@ -662,7 +662,7 @@ fn font_picker(
     overlays: &mut Vec<El>,
     cx: &Cx<SettingsModel>,
 ) -> El {
-    let mut picker = FontPicker::new(
+    let picker = FontPicker::new(
         "profile-font",
         &model.profile.font_picker,
         term_grid::monospace_families(),
@@ -670,8 +670,10 @@ fn font_picker(
     )
     .current(&model.profile.font_family)
     .note(term_grid::BUNDLED_FAMILY, "Bundled")
-    .note(term_grid::CASCADIA_FAMILY, "Bundled")
     .on_choose(|m: &mut SettingsModel, family, _tx| choose_font_family(m, family));
+    #[cfg(feature = "font-cascadia")]
+    let picker = picker.note(term_grid::CASCADIA_FAMILY, "Bundled");
+    let mut picker = picker;
     if let Some([width, _]) = cx.layout_size("profile-font-box") {
         picker = picker.width(width);
     }

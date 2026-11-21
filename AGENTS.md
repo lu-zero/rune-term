@@ -85,7 +85,8 @@ comments, and docs: a pattern being there does not make it correct.
 - `map_key` copies platform `text` and `consumed_mods`. It does not
   synthesize a US-QWERTY string. `logo` maps to super. Command chords stay
   with the window.
-- The cell is `face_cell()` of Maple Mono NF at 14 points. A cmap miss
-  uses the compact bundled CJK fallback, then a system font `term-font` finds,
-  including its color glyphs; CoreText is the last resort on macOS. No color
+- The cell is `face_cell()` of Maple Mono NF at 14 points. A cmap miss uses
+  the bundled fallback tiers, then a system font `term-font` finds; CoreText
+  is the last resort on macOS. Faces are Cargo features; a build with none
+  checks for an installed family and reports where to download one. No color
   emoji file is embedded.

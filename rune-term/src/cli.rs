@@ -178,8 +178,22 @@ impl Gui {
             (_, Some(name)) => crate::mux::queue_profile(name),
             (_, None) => {}
         }
+        if let Err(message) = check_font() {
+            eprintln!("rune-term: {message}");
+            std::process::exit(1);
+        }
         crate::app::run_with_rune_args(self.rune_args);
     }
+}
+
+/// A build with no bundled fonts must still say what to install instead of
+/// drawing an empty grid or crashing on a missing face.
+fn check_font() -> Result<(), &'static str> {
+    let resolved = crate::settings::ConfigFile::load().resolve();
+    if term_grid::Face::load(&resolved.font_family).valid() {
+        return Ok(());
+    }
+    Err("no font available: install Maple Mono NF from https://font.subf.dev/ or rebuild with default features")
 }
 
 #[cfg(test)]

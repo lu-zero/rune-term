@@ -31,7 +31,7 @@ rune-term-core = { path = "rune-term-core", default-features = false }
 rune-term-keeper = { path = "rune-term-keeper" }
 term-control = { path = "term-control" }
 term-font = { path = "term-font" }
-term-grid = { path = "term-grid" }
+term-grid = { path = "term-grid", default-features = false }
 term-input = { path = "term-input" }
 term-mux = { path = "term-mux" }
 term-roam = { path = "term-roam" }

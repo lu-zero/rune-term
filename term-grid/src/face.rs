@@ -14,18 +14,42 @@ pub const BUNDLED_FAMILY: &str = "Maple Mono NF";
 /// The bundled face's family, kept as a name for callers that ask for Maple.
 pub const MAPLE_FAMILY: &str = BUNDLED_FAMILY;
 
-/// The other bundled face, kept so the two designs can be compared.
+/// The other selectable face, when the `cascadia` feature is on.
+#[cfg(feature = "cascadia")]
 pub const CASCADIA_FAMILY: &str = "Cascadia Code NF";
 
 /// The static regular face from the v8.0-beta.3 Nerd Font release of the
 /// variable branch. The grid draws one instance, so a variable file would
 /// only add bytes for axes it never sets.
+#[cfg(feature = "bundled-font")]
 pub(crate) const BUNDLED: &[u8] = include_bytes!("../MapleMonoNF.ttf");
+#[cfg(feature = "cascadia")]
 pub(crate) const CASCADIA: &[u8] = include_bytes!("../CascadiaCodeNF.ttf");
 
-/// A compact subset of Maple Mono NF CN for codepoints the profile's face misses.
+/// Compact fallback faces for codepoints the profile's face misses.
+#[cfg(feature = "fallback-common")]
 pub(crate) const FAILOVER: &[u8] = include_bytes!("../CjkFallback.ttf");
-pub(crate) const FAILOVER_FAMILY: &str = "rune-term CJK Fallback";
+#[cfg(feature = "fallback-ja")]
+pub(crate) const FAILOVER_JA: &[u8] = include_bytes!("../JaFallback.ttf");
+#[cfg(feature = "fallback-zh-full")]
+pub(crate) const FAILOVER_ZH_FULL: &[u8] = include_bytes!("../ZhFullFallback.ttf");
+
+/// The embedded fallback faces, smallest tier first. Empty in a build with
+/// no fallback features: callers then rely on system fonts alone.
+pub fn fallback_bytes() -> &'static [&'static [u8]] {
+    static FACES: OnceLock<Vec<&'static [u8]>> = OnceLock::new();
+    FACES.get_or_init(|| {
+        [
+            #[cfg(feature = "fallback-common")]
+            FAILOVER,
+            #[cfg(feature = "fallback-ja")]
+            FAILOVER_JA,
+            #[cfg(feature = "fallback-zh-full")]
+            FAILOVER_ZH_FULL,
+        ]
+        .to_vec()
+    })
+}
 
 #[derive(Clone, Debug)]
 pub struct Face {
@@ -41,9 +65,22 @@ impl PartialEq for Face {
 }
 
 impl Face {
+    /// The one embedded face. In a build without `bundled-font` there is none;
+    /// callers must check [`Self::valid`] and report the missing font.
     pub fn bundled() -> Self {
-        static DATA: OnceLock<Blob<u8>> = OnceLock::new();
-        Self::bundled_named(BUNDLED_FAMILY, BUNDLED, &DATA)
+        #[cfg(feature = "bundled-font")]
+        {
+            static DATA: OnceLock<Blob<u8>> = OnceLock::new();
+            Self::bundled_named(BUNDLED_FAMILY, BUNDLED, &DATA)
+        }
+        #[cfg(not(feature = "bundled-font"))]
+        {
+            Self {
+                family: "no bundled font".into(),
+                data: Blob::new(Arc::new(&[][..])),
+                index: 0,
+            }
+        }
     }
 
     /// The bundled Maple Mono NF face, with the same Nerd Font glyphs and wider language coverage.
@@ -52,17 +89,13 @@ impl Face {
     }
 
     /// The bundled Cascadia Code NF face, selectable instead of the default.
+    #[cfg(feature = "cascadia")]
     pub fn bundled_cascadia() -> Self {
         static DATA: OnceLock<Blob<u8>> = OnceLock::new();
         Self::bundled_named(CASCADIA_FAMILY, CASCADIA, &DATA)
     }
 
-    /// The compact face used for glyphs the profile's face does not cover.
-    pub(crate) fn failover() -> Self {
-        static DATA: OnceLock<Blob<u8>> = OnceLock::new();
-        Self::bundled_named(FAILOVER_FAMILY, FAILOVER, &DATA)
-    }
-
+    #[cfg(any(feature = "bundled-font", feature = "cascadia"))]
     fn bundled_named(
         family: &'static str,
         bytes: &'static [u8],
@@ -85,6 +118,7 @@ impl Face {
         if family == MAPLE_FAMILY {
             return Self::bundled_maple();
         }
+        #[cfg(feature = "cascadia")]
         if family == CASCADIA_FAMILY {
             return Self::bundled_cascadia();
         }
@@ -106,6 +140,11 @@ impl Face {
 
     pub(crate) fn font(&self) -> Option<FontRef<'_>> {
         FontRef::from_index(self.data.data(), self.index as usize)
+    }
+
+    /// Whether this face has font data that can be drawn.
+    pub fn valid(&self) -> bool {
+        self.font().is_some()
     }
 
     /// Whether `i`, `M` and `0` advance alike. The `post` table's fixed-pitch flag is not
@@ -145,12 +184,23 @@ fn scan() -> Vec<String> {
         .into_iter()
         // A dot names a face the system keeps for itself.
         .filter(|name| {
-            !name.starts_with('.') && *name != BUNDLED_FAMILY && *name != CASCADIA_FAMILY
+            !name.starts_with('.') && *name != BUNDLED_FAMILY && {
+                #[cfg(feature = "cascadia")]
+                {
+                    *name != CASCADIA_FAMILY
+                }
+                #[cfg(not(feature = "cascadia"))]
+                {
+                    true
+                }
+            }
         })
         .filter(|name| installed_in(&mut collection, name).is_some_and(|face| face.monospaced()))
         .collect();
     families.sort_by_key(|name| name.to_lowercase());
+    #[cfg(feature = "cascadia")]
     families.insert(0, CASCADIA_FAMILY.to_owned());
+    #[cfg(feature = "bundled-font")]
     families.insert(0, BUNDLED_FAMILY.to_owned());
     families
 }
@@ -185,6 +235,7 @@ fn installed_in(collection: &mut Collection, family: &str) -> Option<Face> {
 mod tests {
     use super::*;
 
+    #[cfg(feature = "bundled-font")]
     #[test]
     fn a_family_that_is_not_installed_draws_with_the_bundled_face() {
         let face = Face::load("rune-term no such family");
@@ -192,6 +243,7 @@ mod tests {
         assert_eq!(face.family(), BUNDLED_FAMILY);
     }
 
+    #[cfg(all(feature = "bundled-font", feature = "cascadia"))]
     #[test]
     fn bundled_families_load_their_own_bytes() {
         assert_eq!(Face::load(MAPLE_FAMILY), Face::bundled());
@@ -202,7 +254,7 @@ mod tests {
         assert!(cascadia.monospaced());
     }
 
-    #[cfg(target_os = "macos")]
+    #[cfg(all(target_os = "macos", feature = "bundled-font", feature = "cascadia"))]
     #[test]
     fn the_list_is_the_bundled_families_then_the_monospaced_ones() {
         let families = scan();

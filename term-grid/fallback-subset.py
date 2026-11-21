@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Regenerate CjkFallback.ttf from installed Maple Mono V8 faces (needs fonttools).
+"""Regenerate the tiered fallback TTFs from installed Maple Mono V8 faces.
 
-Usage: python fallback-subset.py [CN.ttf] [KR.ttf]
-Defaults are the installed NF-CN and NF-KR regulars, or vendored fonts.
-The subset is the common Han set (GB2312 level 1 + Big5 common), the full
-modern Hangul syllable block, Jamo, kana and punctuation, plus the small
-scripts a Latin-only face is likely to miss. Han and Hangul come from
-different faces and are merged, so the fallback needs no separate Korean font.
+Usage: python fallback-subset.py [CN.ttf] [JP.ttf] [KR.ttf]
+Defaults are the installed NF-CN, NF-JP and NF-KR regulars.
+
+CjkFallback.ttf  — common Han (GB2312 L1 + Big5 common), kana, full Hangul,
+                   Greek/Cyrillic/Latin-ext: the default out-of-box tier.
+JaFallback.ttf   — JIS X 0208 kanji, for the cjk-ja feature.
+ZhFullFallback.ttf — GBK Hanzi, for the cjk-zh-full feature.
 """
 
 import pathlib
@@ -21,7 +22,11 @@ ROOT = pathlib.Path(__file__).resolve().parent
 OUTPUT = ROOT / "CjkFallback.ttf"
 FONTS_DIR = pathlib.Path.home() / "Library/Fonts"
 CN = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else FONTS_DIR / "MapleMono-NF-CN-Regular.ttf"
-KR = pathlib.Path(sys.argv[2]) if len(sys.argv) > 2 else FONTS_DIR / "MapleMono-NF-KR-Regular.ttf"
+JP = pathlib.Path(sys.argv[2]) if len(sys.argv) > 2 else FONTS_DIR / "MapleMono-NF-JP-Regular.ttf"
+KR = pathlib.Path(sys.argv[3]) if len(sys.argv) > 3 else FONTS_DIR / "MapleMono-NF-KR-Regular.ttf"
+COMMON = ROOT / "CjkFallback.ttf"
+JAPANESE = ROOT / "JaFallback.ttf"
+CHINESE_FULL = ROOT / "ZhFullFallback.ttf"
 FAMILY = "rune-term CJK Fallback"
 
 
@@ -51,6 +56,24 @@ def han_points():
 def hangul_points():
     # All modern precomposed syllables, Jamo and compatibility Jamo.
     return [*range(0xAC00, 0xD7A4), *range(0x1100, 0x1200), *range(0x3130, 0x3190)]
+
+
+def japanese_points():
+    return sorted(
+        cp
+        for cp in decoded(
+            [*range(0x81, 0xA0), *range(0xE0, 0xFC)], range(0x40, 0xFE), "shift_jis"
+        )
+        if 0x4E00 <= cp <= 0x9FFF
+    )
+
+
+def chinese_full_points():
+    return sorted(
+        cp
+        for cp in decoded(range(0x81, 0xFE), range(0x40, 0xFE), "gbk")
+        if 0x4E00 <= cp <= 0x9FFF
+    )
 
 
 def reduced(source, points, dest):
@@ -86,8 +109,20 @@ def main() -> None:
         reduced(KR, hangul_points(), hangul)
         merged = Merger().merge([han, hangul])
         rename(merged)
-        merged.save(OUTPUT)
-    print(f"{OUTPUT}: {OUTPUT.stat().st_size} bytes from {CN.name} + {KR.name}")
+        merged.save(COMMON)
+
+        reduced(JP, japanese_points(), pathlib.Path(tmp) / "ja.ttf")
+        japanese = TTFont(pathlib.Path(tmp) / "ja.ttf")
+        rename(japanese)
+        japanese.save(JAPANESE)
+
+        reduced(CN, chinese_full_points(), pathlib.Path(tmp) / "zh.ttf")
+        chinese = TTFont(pathlib.Path(tmp) / "zh.ttf")
+        rename(chinese)
+        chinese.save(CHINESE_FULL)
+
+    for path in (COMMON, JAPANESE, CHINESE_FULL):
+        print(f"{path.name}: {path.stat().st_size} bytes")
 
 
 if __name__ == "__main__":
