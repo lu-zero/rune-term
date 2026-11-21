@@ -47,7 +47,7 @@ run-release:
     cargo build --release -p rune-term-keeper
     cargo run --release -p rune-term
 
-# Headless pictures of the settings and the terminal features. Settings follow the desktop appearance.
+# Headless pictures of the settings and the terminal features. Settings have light and dark captures; the terminal shots use the dark theme from term-config.
 shots:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -56,20 +56,27 @@ shots:
     mkdir -p "$root/docs/images"
     bin="$root/target/debug/rune-term"
     settings() {
-        local home
+        local name="$1" script="$2" mode="$3" home config=config
+        if [ "$mode" = dark ]; then config=config-dark; fi
         home="$(mktemp -d)"
-        cp -R "$root/docs/shots/config/rune-term" "$home/rune-term"
+        cp -R "$root/docs/shots/$config/rune-term" "$home/rune-term"
         XDG_CONFIG_HOME="$home" "$bin" --rune-args \
+            --theme "$mode" \
             --window settings --size 880x560 --scale 2 \
-            --script "$root/docs/shots/$2" \
-            --snap "$root/docs/images/$1.png"
+            --script "$root/docs/shots/$script" \
+            --snap "$root/docs/images/$name.png"
         rm -rf "$home"
     }
-    settings settings-general settle.json
-    settings settings-profiles profiles.json
-    settings settings-theme-menu theme-menu.json
-    settings settings-themes themes.json
-    settings settings-color color.json
+    settings settings-general settle.json light
+    settings settings-profiles profiles.json light
+    settings settings-theme-menu theme-menu.json light
+    settings settings-themes themes.json light
+    settings settings-color color.json light
+    settings settings-general-dark settle.json dark
+    settings settings-profiles-dark profiles.json dark
+    settings settings-theme-menu-dark theme-menu.json dark
+    settings settings-themes-dark themes.json dark
+    settings settings-color-dark color.json dark
     # 960×560 at scale 2, Cascadia 14pt (9×17). The pane is 106×30 cells.
     term() {
         local name="$1" source="$2" script="$3" home

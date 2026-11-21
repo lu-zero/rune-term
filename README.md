@@ -16,6 +16,12 @@ Configuration is a directory of TOML files that Cmd+, edits:
 
 ![The theme editor](./docs/images/settings-themes.png)
 
+The settings also have dark captures: [General](./docs/images/settings-general-dark.png),
+[Profiles](./docs/images/settings-profiles-dark.png),
+[theme menu](./docs/images/settings-theme-menu-dark.png),
+[theme editor](./docs/images/settings-themes-dark.png) and
+[color editing](./docs/images/settings-color-dark.png). The terminal shots above are dark already.
+
 ## Building
 
 ```
