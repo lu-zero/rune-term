@@ -1,8 +1,9 @@
 //! One 2048² gray atlas, plus a color atlas for system emoji.
 //! The face is the profile's family, Cascadia Code NF by default. ASCII is rasterized up
 //! front. Every other covered codepoint is rasterized on demand into the
-//! same cell. A codepoint the face does not cover is drawn by the macOS
-//! cascade. The face is OFL; see `CascadiaCode-LICENSE.txt`.
+//! same cell. A codepoint the face does not cover is drawn from the compact
+//! bundled fallback, then by the macOS cascade. The faces are OFL; see the
+//! `*-LICENSE.txt` files beside the TTFs.
 
 use std::collections::HashMap;
 
@@ -357,7 +358,7 @@ impl Atlas {
         let font = face.font()?;
         let gid = font.charmap().map(ch);
         if gid == 0 {
-            return self.place_system(ch, cells);
+            return self.place_fallback(ch, cells);
         }
         let adv_units = font.glyph_metrics(&self.coords).advance_width(gid);
         let glyph_advance = adv_units * self.ppem / self.upem;
@@ -396,6 +397,99 @@ impl Atlas {
             Fit::Baseline => {
                 let left = pen_x + image.placement.left as f32;
                 let top = baseline - image.placement.top as f32;
+                let right = left + gw as f32;
+                let bottom = top + gh as f32;
+                let overflow_x = (-left).max(0.0) + (right - slot_w as f32).max(0.0);
+                let overflow_y = (-top).max(0.0) + (bottom - slot_h as f32).max(0.0);
+                if overflow_x > 1.0 || overflow_y > 1.0 {
+                    paint_uniform(pixels, origin, slot_w, slot_h, &image.data, gw, gh);
+                } else {
+                    blit(
+                        pixels,
+                        origin.0,
+                        origin.1,
+                        slot_w,
+                        slot_h,
+                        &image.data,
+                        gw,
+                        gh,
+                        left,
+                        top,
+                    );
+                }
+            }
+        }
+        Some(GlyphRect {
+            x: origin.0,
+            y: origin.1,
+            w: slot_w,
+            h: slot_h,
+            atlas: 0,
+        })
+    }
+
+    /// A codepoint the face lacks: try the compact bundled subset on every
+    /// platform. What it misses still goes through the macOS cascade.
+    fn place_fallback(&mut self, ch: char, cells: u8) -> Option<GlyphRect> {
+        let face = Face::failover();
+        let font = face.font()?;
+        let gid = font.charmap().map(ch);
+        if gid == 0 {
+            return self.place_system(ch, cells);
+        }
+        if !self.has_font || self.ppem <= 0.0 {
+            return None;
+        }
+        let coords = regular_coords(&font);
+        let upem = f32::from(font.metrics(&coords).units_per_em.max(1));
+        let ppem = self.ppem * upem / self.upem;
+        let glyph_advance = font.glyph_metrics(&coords).advance_width(gid) * ppem / upem;
+        let mut scaler = self
+            .context
+            .builder(font)
+            .size(ppem)
+            .hint(true)
+            .normalized_coords(coords.iter().copied())
+            .build();
+        let image = Render::new(&[Source::Outline]).render(&mut scaler, gid);
+        let _ = scaler;
+        let image = image?;
+        let (gw, gh) = (image.placement.width, image.placement.height);
+        if gw == 0 || gh == 0 || image.data.len() < (gw * gh) as usize {
+            return None;
+        }
+        if image.data.iter().take((gw * gh) as usize).all(|p| *p == 0) {
+            return None;
+        }
+        let origin = self.alloc(cells)?;
+        let slot_w = u32::from(cells) * self.cell.0;
+        let slot_h = self.cell.1;
+        let em_w = self.advance_px * f32::from(cells);
+        let mode = fit_mode(
+            ch,
+            glyph_advance,
+            slot_w as f32,
+            &image,
+            em_w,
+            self.ascent,
+            self.body,
+        );
+        let pixels = &mut self.pixels;
+        match mode {
+            Fit::Em => paint_em(
+                pixels,
+                origin,
+                slot_w,
+                slot_h,
+                &image,
+                em_w,
+                self.body,
+                self.ascent,
+            ),
+            Fit::Uniform => paint_uniform(pixels, origin, slot_w, slot_h, &image.data, gw, gh),
+            Fit::Baseline => {
+                let left = self.pen_x + image.placement.left as f32;
+                let top = self.baseline - image.placement.top as f32;
                 let right = left + gw as f32;
                 let bottom = top + gh as f32;
                 let overflow_x = (-left).max(0.0) + (right - slot_w as f32).max(0.0);
@@ -957,6 +1051,15 @@ mod tests {
         assert!(g_bot + 1 < g.h, "g clipped at {g_bot} of {}", g.h);
         let (w, h) = face_cell();
         assert!(w >= 8.0 && h >= 16.0, "cascadia cell {w}x{h}");
+    }
+
+    #[test]
+    fn a_codepoint_the_face_lacks_comes_from_the_compact_fallback() {
+        let mut atlas = Atlas::with_cell(10, 20);
+        assert_eq!(atlas.face().font().unwrap().charmap().map('中'), 0);
+        let rect = atlas.ensure('中', 2).expect("CJK glyph");
+        assert_eq!(rect.w, 20);
+        assert!(ink_count(&atlas, rect) > 20, "fallback has ink");
     }
 
     fn px(atlas: &Atlas, rect: GlyphRect, x: u32, y: u32) -> u8 {

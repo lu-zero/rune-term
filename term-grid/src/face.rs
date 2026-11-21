@@ -25,6 +25,10 @@ pub(crate) const BUNDLED: &[u8] = include_bytes!("../CascadiaCodeNF.ttf");
 pub(crate) const MAPLE: &[u8] = include_bytes!("../MapleMonoNF.ttf");
 pub(crate) const MAPLE_CN: &[u8] = include_bytes!("../MapleMonoNF-CN.ttf");
 
+/// A compact subset of Maple Mono NF CN for codepoints the profile's face misses.
+pub(crate) const FAILOVER: &[u8] = include_bytes!("../CjkFallback.ttf");
+pub(crate) const FAILOVER_FAMILY: &str = "rune-term CJK Fallback";
+
 #[derive(Clone, Debug)]
 pub struct Face {
     family: Arc<str>,
@@ -54,6 +58,12 @@ impl Face {
     pub fn bundled_maple_cn() -> Self {
         static DATA: OnceLock<Blob<u8>> = OnceLock::new();
         Self::bundled_named(MAPLE_CN_FAMILY, MAPLE_CN, &DATA)
+    }
+
+    /// The compact face used for glyphs the profile's face does not cover.
+    pub(crate) fn failover() -> Self {
+        static DATA: OnceLock<Blob<u8>> = OnceLock::new();
+        Self::bundled_named(FAILOVER_FAMILY, FAILOVER, &DATA)
     }
 
     fn bundled_named(
