@@ -23,6 +23,8 @@ use skrifa::metrics::BoundingBox;
 use skrifa::outline::{DrawSettings, OutlinePen};
 use skrifa::raw::TableProvider;
 use skrifa::{GlyphId, MetadataProvider};
+use swash::scale::image::Content;
+use swash::scale::{ScaleContext, StrikeWith};
 use swash::zeno::{Command, Mask, Scratch, Vector};
 
 /// Glyph `glyph` of the font as a COLR v1 image at `size` px, with its placement (left, top
@@ -541,6 +543,61 @@ fn extend_t(extend: Extend, t: f32) -> f32 {
 
 fn premul(c: [f32; 4]) -> [f32; 4] {
     [c[0] * c[3], c[1] * c[3], c[2] * c[3], c[3]]
+}
+
+/// Rasterize an embedded colour bitmap strike — Apple Color Emoji's `sbix`,
+/// or `CBDT`/`CBLC` — at `size` px, in the premultiplied RGBA the grid's color
+/// atlas expects. `glyph` is the charmap id in this face.
+pub fn rasterize_bitmap(
+    data: &[u8],
+    index: u32,
+    glyph: u16,
+    size: f32,
+) -> Option<(RgbaImage, swash::zeno::Placement)> {
+    let font = swash::FontRef::from_index(data, index as usize)?;
+    let mut context = ScaleContext::new();
+    let mut scaler = context.builder(font).size(size).build();
+    let image = scaler.scale_color_bitmap(glyph, StrikeWith::BestFit)?;
+    if !matches!(image.content, Content::Color) {
+        return None;
+    }
+    let width = image.placement.width;
+    let height = image.placement.height;
+    if width == 0 || height == 0 || image.data.len() < (width * height * 4) as usize {
+        return None;
+    }
+    let mut rgba = image.data;
+    for px in rgba.as_chunks_mut::<4>().0 {
+        let alpha = u16::from(px[3]);
+        px[0] = ((u16::from(px[0]) * alpha) / 255) as u8;
+        px[1] = ((u16::from(px[1]) * alpha) / 255) as u8;
+        px[2] = ((u16::from(px[2]) * alpha) / 255) as u8;
+    }
+    rgba.truncate((width * height * 4) as usize);
+    Some((
+        RgbaImage {
+            width,
+            height,
+            rgba,
+        },
+        image.placement,
+    ))
+}
+
+#[cfg(all(test, target_vendor = "apple"))]
+mod tests {
+    use super::rasterize_bitmap;
+
+    #[test]
+    fn apple_color_emoji_comes_from_sbix_strikes() {
+        let data = std::fs::read("/System/Library/Fonts/Apple Color Emoji.ttc").unwrap();
+        let font = swash::FontRef::from_index(&data, 0).unwrap();
+        let gid = font.charmap().map('😀');
+        assert_ne!(gid, 0);
+        let (image, _) = rasterize_bitmap(&data, 0, gid, 32.0).expect("sbix strike");
+        assert!(image.width > 0 && image.height > 0);
+        assert_eq!(image.rgba.len(), (image.width * image.height * 4) as usize);
+    }
 }
 
 fn composite(mode: CompositeMode, src: [f32; 4], dst: [f32; 4]) -> [f32; 4] {
