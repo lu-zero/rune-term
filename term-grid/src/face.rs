@@ -1,4 +1,4 @@
-//! The font file the grid draws with: the bundled Cascadia Code NF, or an installed family.
+//! The font files the grid draws with: bundled Cascadia Code NF or Maple Mono NF, or an installed family.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -11,8 +11,14 @@ use swash::FontRef;
 /// The family the grid draws with when a profile names none, or one that is not installed.
 pub const BUNDLED_FAMILY: &str = "Cascadia Code NF";
 
+/// The other bundled family, a Nerd Font with wider language coverage.
+pub const MAPLE_FAMILY: &str = "Maple Mono NF";
+
 /// Same bytes Sugarloaf embeds. Vendored so a clone builds without the Rio tree.
 pub(crate) const BUNDLED: &[u8] = include_bytes!("../CascadiaCodeNF.ttf");
+
+/// The regular Maple Mono NF face, from the font's v7.9 Nerd Font release.
+pub(crate) const MAPLE: &[u8] = include_bytes!("../MapleMonoNF.ttf");
 
 #[derive(Clone, Debug)]
 pub struct Face {
@@ -37,12 +43,25 @@ impl Face {
         }
     }
 
-    /// The regular face of `family`, or the bundled one when it is not installed. The bundled
-    /// family stays bundled even when installed, so the default draws the same everywhere.
+    /// The bundled Maple Mono NF face, with the same Nerd Font glyphs and wider language coverage.
+    pub fn bundled_maple() -> Self {
+        static DATA: OnceLock<Blob<u8>> = OnceLock::new();
+        Self {
+            family: MAPLE_FAMILY.into(),
+            data: DATA.get_or_init(|| Blob::new(Arc::new(MAPLE))).clone(),
+            index: 0,
+        }
+    }
+
+    /// The regular face of `family`, or the bundled one when it is not installed. Bundled
+    /// families stay bundled even when installed, so those profiles draw the same everywhere.
     pub fn load(family: &str) -> Self {
         let family = family.trim();
         if family.is_empty() || family == BUNDLED_FAMILY {
             return Self::bundled();
+        }
+        if family == MAPLE_FAMILY {
+            return Self::bundled_maple();
         }
         static LOADED: Mutex<Option<HashMap<String, Face>>> = Mutex::new(None);
         let mut loaded = LOADED.lock().expect("faces");
@@ -80,7 +99,7 @@ impl Face {
     }
 }
 
-/// The bundled family, then the installed families whose regular face is monospaced, sorted.
+/// The bundled families, then the installed families whose regular face is monospaced, sorted.
 /// None until the scan the first call starts in the background has finished.
 pub fn monospace_families() -> Option<&'static [String]> {
     static FAMILIES: OnceLock<Vec<String>> = OnceLock::new();
@@ -100,10 +119,11 @@ fn scan() -> Vec<String> {
     let mut families: Vec<String> = names
         .into_iter()
         // A dot names a face the system keeps for itself.
-        .filter(|name| !name.starts_with('.') && name != BUNDLED_FAMILY)
+        .filter(|name| !name.starts_with('.') && *name != BUNDLED_FAMILY && *name != MAPLE_FAMILY)
         .filter(|name| installed_in(&mut collection, name).is_some_and(|face| face.monospaced()))
         .collect();
     families.sort_by_key(|name| name.to_lowercase());
+    families.insert(0, MAPLE_FAMILY.to_owned());
     families.insert(0, BUNDLED_FAMILY.to_owned());
     families
 }
@@ -145,11 +165,20 @@ mod tests {
         assert_eq!(face.family(), BUNDLED_FAMILY);
     }
 
+    #[test]
+    fn maple_loads_its_own_bundled_face() {
+        let face = Face::load(MAPLE_FAMILY);
+        assert_eq!(face, Face::bundled_maple());
+        assert_ne!(face, Face::bundled());
+        assert_eq!(face.family(), MAPLE_FAMILY);
+        assert!(face.monospaced());
+    }
+
     #[cfg(target_os = "macos")]
     #[test]
-    fn the_list_is_the_bundled_family_then_the_monospaced_ones() {
+    fn the_list_is_the_bundled_families_then_the_monospaced_ones() {
         let families = scan();
-        assert_eq!(families[0], BUNDLED_FAMILY);
+        assert_eq!(&families[..2], [BUNDLED_FAMILY, MAPLE_FAMILY]);
         assert!(families.iter().any(|f| f == "Menlo"), "{families:?}");
         assert!(!families.iter().any(|f| f == "Helvetica"), "{families:?}");
     }

@@ -53,4 +53,4 @@ network, as mosh does: [`docs/agent.md`](./docs/agent.md).
 
 ## License
 
-MIT. Cascadia Code NF, vendored in `term-grid/`, is SIL OFL 1.1.
+MIT. Cascadia Code NF and Maple Mono NF, vendored in `term-grid/`, are SIL OFL 1.1.
