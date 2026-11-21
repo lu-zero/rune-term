@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "term-grid",
+    "term-font",
     "term-input",
     "term-control",
     "term-mux",
@@ -29,6 +30,7 @@ rune-term = { path = "rune-term", default-features = false }
 rune-term-core = { path = "rune-term-core", default-features = false }
 rune-term-keeper = { path = "rune-term-keeper" }
 term-control = { path = "term-control" }
+term-font = { path = "term-font" }
 term-grid = { path = "term-grid" }
 term-input = { path = "term-input" }
 term-mux = { path = "term-mux" }
@@ -54,6 +56,7 @@ ring = "0.17"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+skrifa = "0.44"
 swash = "0.2.10"
 tiny-skia = "0.12"
 tokio = { version = "1", features = ["io-util", "macros", "net", "process", "rt", "sync", "time"] }

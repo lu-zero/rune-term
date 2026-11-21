@@ -1,0 +1,12 @@
+[package]
+name = "term-font"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "System font discovery and colour glyph rasterization for rune-term's grid. No Rune and no librio."
+
+[dependencies]
+fontique.workspace = true
+skrifa.workspace = true
+swash.workspace = true

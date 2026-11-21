@@ -13,6 +13,9 @@ swash.workspace = true
 tiny-skia.workspace = true
 wgpu.workspace = true
 
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+term-font.workspace = true
+
 [target.'cfg(target_os = "macos")'.dependencies]
 core-foundation.workspace = true
 core-graphics.workspace = true

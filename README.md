@@ -55,3 +55,4 @@ network, as mosh does: [`docs/agent.md`](./docs/agent.md).
 
 MIT. Cascadia Code NF and Maple Mono NF, vendored in `term-grid/`, are SIL OFL 1.1.
 `CjkFallback.ttf` is a renamed, compact subset of Maple Mono NF CN under the same license.
+`term-font`'s COLR parser is adapted from Rune (MIT, Copyright 2026 Anomaly).

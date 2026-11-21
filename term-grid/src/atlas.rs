@@ -78,6 +78,13 @@ struct GlyphKey {
     cells: u8,
 }
 
+/// Metrics a fallback face is rasterized with, relative to the active cell.
+struct FallbackScale {
+    ppem: f32,
+    glyph_advance: f32,
+    coords: Vec<NormalizedCoord>,
+}
+
 /// Past every char, so the underline's slot never collides with a glyph's.
 const UNDERLINE: u32 = u32::MAX;
 
@@ -429,27 +436,101 @@ impl Atlas {
     }
 
     /// A codepoint the face lacks: try the compact bundled subset on every
-    /// platform. What it misses still goes through the macOS cascade.
+    /// platform. On macOS what it misses goes through CoreText; elsewhere a
+    /// system font found by `term-font` is drawn with swash or its COLR image.
     fn place_fallback(&mut self, ch: char, cells: u8) -> Option<GlyphRect> {
         let face = Face::failover();
         let font = face.font()?;
         let gid = font.charmap().map(ch);
-        if gid == 0 {
-            return self.place_system(ch, cells);
+        if gid != 0 {
+            let coords = regular_coords(&font);
+            let upem = f32::from(font.metrics(&coords).units_per_em.max(1));
+            let ppem = self.ppem * upem / self.upem;
+            let advance = font.glyph_metrics(&coords).advance_width(gid) * ppem / upem;
+            return self.place_face_glyph(
+                font,
+                gid,
+                ch,
+                cells,
+                FallbackScale {
+                    ppem,
+                    glyph_advance: advance,
+                    coords,
+                },
+            );
         }
+        #[cfg(target_os = "macos")]
+        {
+            self.place_system(ch, cells)
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let found = term_font::discover(self.face.family(), ch)?;
+            let bytes: &[u8] = found.data.as_ref();
+            let font = swash::FontRef::from_index(bytes, found.index as usize)?;
+            let gid = font.charmap().map(ch);
+            if gid == 0 {
+                return None;
+            }
+            let coords = regular_coords(&font);
+            let upem = f32::from(font.metrics(&coords).units_per_em.max(1));
+            let ppem = self.ppem * upem / self.upem;
+            let advance = font.glyph_metrics(&coords).advance_width(gid) * ppem / upem;
+            if let Some((image, _)) =
+                term_font::color::rasterize(bytes, found.index, u32::from(gid), ppem, &[])
+            {
+                let origin = self.alloc(cells)?;
+                let slot_w = u32::from(cells) * self.cell.0;
+                let slot_h = self.cell.1;
+                self.paint_color_image(
+                    origin,
+                    slot_w,
+                    slot_h,
+                    image.width,
+                    image.height,
+                    &image.rgba,
+                );
+                self.color_dirty = true;
+                return Some(GlyphRect {
+                    x: origin.0,
+                    y: origin.1,
+                    w: slot_w,
+                    h: slot_h,
+                    atlas: 1,
+                });
+            }
+            self.place_face_glyph(
+                font,
+                gid,
+                ch,
+                cells,
+                FallbackScale {
+                    ppem,
+                    glyph_advance: advance,
+                    coords,
+                },
+            )
+        }
+    }
+
+    /// Rasterize `gid` from a fallback face into a cell.
+    fn place_face_glyph(
+        &mut self,
+        font: FontRef<'_>,
+        gid: u16,
+        ch: char,
+        cells: u8,
+        scale: FallbackScale,
+    ) -> Option<GlyphRect> {
         if !self.has_font || self.ppem <= 0.0 {
             return None;
         }
-        let coords = regular_coords(&font);
-        let upem = f32::from(font.metrics(&coords).units_per_em.max(1));
-        let ppem = self.ppem * upem / self.upem;
-        let glyph_advance = font.glyph_metrics(&coords).advance_width(gid) * ppem / upem;
         let mut scaler = self
             .context
             .builder(font)
-            .size(ppem)
+            .size(scale.ppem)
             .hint(true)
-            .normalized_coords(coords.iter().copied())
+            .normalized_coords(scale.coords.iter().copied())
             .build();
         let image = Render::new(&[Source::Outline]).render(&mut scaler, gid);
         let _ = scaler;
@@ -467,7 +548,7 @@ impl Atlas {
         let em_w = self.advance_px * f32::from(cells);
         let mode = fit_mode(
             ch,
-            glyph_advance,
+            scale.glyph_advance,
             slot_w as f32,
             &image,
             em_w,
@@ -521,39 +602,32 @@ impl Atlas {
         })
     }
 
+    #[cfg(target_os = "macos")]
     fn place_system(&mut self, ch: char, cells: u8) -> Option<GlyphRect> {
-        #[cfg(target_os = "macos")]
-        {
-            let drawn =
-                crate::fallback::draw(crate::face::BUNDLED, ch, self.ppem.max(self.cell.1 as f32))?;
-            let origin = self.alloc(cells)?;
-            let slot_w = u32::from(cells) * self.cell.0;
-            let slot_h = self.cell.1;
-            if drawn.color {
-                self.paint_color(origin, slot_w, slot_h, &drawn);
-                self.color_dirty = true;
-                return Some(GlyphRect {
-                    x: origin.0,
-                    y: origin.1,
-                    w: slot_w,
-                    h: slot_h,
-                    atlas: 1,
-                });
-            }
-            self.paint_fallback_gray(origin, slot_w, slot_h, &drawn);
-            Some(GlyphRect {
+        let drawn =
+            crate::fallback::draw(crate::face::BUNDLED, ch, self.ppem.max(self.cell.1 as f32))?;
+        let origin = self.alloc(cells)?;
+        let slot_w = u32::from(cells) * self.cell.0;
+        let slot_h = self.cell.1;
+        if drawn.color {
+            self.paint_color(origin, slot_w, slot_h, &drawn);
+            self.color_dirty = true;
+            return Some(GlyphRect {
                 x: origin.0,
                 y: origin.1,
                 w: slot_w,
                 h: slot_h,
-                atlas: 0,
-            })
+                atlas: 1,
+            });
         }
-        #[cfg(not(target_os = "macos"))]
-        {
-            let _ = (ch, cells);
-            None
-        }
+        self.paint_fallback_gray(origin, slot_w, slot_h, &drawn);
+        Some(GlyphRect {
+            x: origin.0,
+            y: origin.1,
+            w: slot_w,
+            h: slot_h,
+            atlas: 0,
+        })
     }
 
     #[cfg(target_os = "macos")]
@@ -604,25 +678,45 @@ impl Atlas {
         slot_h: u32,
         drawn: &crate::fallback::Drawn,
     ) {
+        self.paint_color_image(
+            origin,
+            slot_w,
+            slot_h,
+            drawn.width,
+            drawn.height,
+            &drawn.bytes,
+        );
+    }
+
+    /// Scale premultiplied RGBA into a slot in the color atlas.
+    fn paint_color_image(
+        &mut self,
+        origin: (u32, u32),
+        slot_w: u32,
+        slot_h: u32,
+        width: u32,
+        height: u32,
+        rgba: &[u8],
+    ) {
         if self.color.is_empty() {
             self.color = vec![0u8; (ATLAS_SIZE * ATLAS_SIZE * 4) as usize];
         }
-        if drawn.width == 0 || drawn.height == 0 || slot_w == 0 || slot_h == 0 {
+        if width == 0 || height == 0 || slot_w == 0 || slot_h == 0 {
             return;
         }
-        let scale = (slot_w as f32 / drawn.width as f32).min(slot_h as f32 / drawn.height as f32);
+        let scale = (slot_w as f32 / width as f32).min(slot_h as f32 / height as f32);
         if scale <= 0.0 {
             return;
         }
-        let dw = drawn.width as f32 * scale;
-        let dh = drawn.height as f32 * scale;
+        let dw = width as f32 * scale;
+        let dh = height as f32 * scale;
         let ox = (slot_w as f32 - dw) * 0.5;
         let oy = (slot_h as f32 - dh) * 0.5;
         for y in 0..slot_h {
             for x in 0..slot_w {
                 let sx = (x as f32 + 0.5 - ox) / scale - 0.5;
                 let sy = (y as f32 + 0.5 - oy) / scale - 0.5;
-                let sample = bilinear_rgba(&drawn.bytes, drawn.width, drawn.height, sx, sy);
+                let sample = bilinear_rgba(rgba, width, height, sx, sy);
                 stamp_color(&mut self.color, origin, x, y, sample);
             }
         }
@@ -934,7 +1028,6 @@ fn bilinear(src: &[u8], w: u32, h: u32, x: f32, y: f32) -> u8 {
     v.round().clamp(0.0, 255.0) as u8
 }
 
-#[cfg(target_os = "macos")]
 fn bilinear_rgba(src: &[u8], w: u32, h: u32, x: f32, y: f32) -> [u8; 4] {
     if w == 0 || h == 0 || x < -1.0 || y < -1.0 || x > w as f32 || y > h as f32 {
         return [0, 0, 0, 0];
@@ -973,7 +1066,6 @@ fn bilinear_rgba(src: &[u8], w: u32, h: u32, x: f32, y: f32) -> [u8; 4] {
     out
 }
 
-#[cfg(target_os = "macos")]
 fn stamp_color(pixels: &mut [u8], origin: (u32, u32), x: u32, y: u32, sample: [u8; 4]) {
     if sample[3] == 0 {
         return;
