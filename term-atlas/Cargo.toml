@@ -3,7 +3,8 @@ name = "term-atlas"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-publish.workspace = true
+publish = true
+repository.workspace = true
 description = "CPU glyph atlas with font fallback and cell sprites. No rendering backend, no Rune and no librio."
 
 [features]

@@ -3,7 +3,7 @@ name = "term-font-data-maple"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-publish.workspace = true
+publish = true
 description = "zstd-compressed font bytes for rune-term: Default bundled Maple Mono NF face."
 repository.workspace = true
 

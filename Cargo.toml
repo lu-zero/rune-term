@@ -36,14 +36,14 @@ font-picker = { path = "font-picker" }
 rune-term = { path = "rune-term", default-features = false }
 rune-term-core = { path = "rune-term-core", default-features = false }
 rune-term-keeper = { path = "rune-term-keeper" }
-term-atlas = { path = "term-atlas", default-features = false }
+term-atlas = { path = "term-atlas", version = "0.1.0", default-features = false }
 term-control = { path = "term-control" }
-term-font = { path = "term-font" }
-term-font-data-maple = { path = "term-font-data-maple" }
-term-font-data-cascadia = { path = "term-font-data-cascadia" }
-term-font-data-common = { path = "term-font-data-common" }
-term-font-data-ja = { path = "term-font-data-ja" }
-term-font-data-zh-full = { path = "term-font-data-zh-full" }
+term-font = { path = "term-font", version = "0.1.1" }
+term-font-data-maple = { path = "term-font-data-maple", version = "0.1.0" }
+term-font-data-cascadia = { path = "term-font-data-cascadia", version = "0.1.0" }
+term-font-data-common = { path = "term-font-data-common", version = "0.1.0" }
+term-font-data-ja = { path = "term-font-data-ja", version = "0.1.0" }
+term-font-data-zh-full = { path = "term-font-data-zh-full", version = "0.1.0" }
 term-grid = { path = "term-grid", default-features = false }
 term-input = { path = "term-input" }
 term-mux = { path = "term-mux" }

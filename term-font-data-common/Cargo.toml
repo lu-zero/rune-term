@@ -3,7 +3,7 @@ name = "term-font-data-common"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-publish.workspace = true
+publish = true
 description = "zstd-compressed font bytes for rune-term: Common Han/kana/Hangul fallback subset."
 repository.workspace = true
 
