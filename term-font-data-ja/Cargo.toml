@@ -1,0 +1,10 @@
+[package]
+name = "term-font-data-ja"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "zstd-compressed font bytes for rune-term: JIS X 0208 Japanese fallback subset."
+repository.workspace = true
+
+[dependencies]

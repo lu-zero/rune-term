@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Regenerate the tiered fallback TTFs from installed Maple Mono V8 faces.
+"""Regenerate the compressed fallback fonts from installed Maple Mono V8 faces.
 
 Usage: python fallback-subset.py [CN.ttf] [JP.ttf] [KR.ttf]
 Defaults are the installed NF-CN, NF-JP and NF-KR regulars.
 
-CjkFallback.ttf  — common Han (GB2312 L1 + Big5 common), kana, full Hangul,
-                   Greek/Cyrillic/Latin-ext: the default out-of-box tier.
-JaFallback.ttf   — JIS X 0208 kanji, for the cjk-ja feature.
-ZhFullFallback.ttf — GBK Hanzi, for the cjk-zh-full feature.
+Needs fonttools and the zstd CLI. Outputs go to the term-font-data-* crates:
+
+term-font-data-common    — common Han, kana, full Hangul, Greek/Cyrillic.
+term-font-data-ja        — JIS X 0208 kanji.
+term-font-data-zh-full   — GBK Hanzi.
 """
 
 import pathlib
+import subprocess
 import sys
 import tempfile
 
@@ -19,14 +21,14 @@ from fontTools.merge import Merger
 from fontTools.ttLib import TTFont
 
 ROOT = pathlib.Path(__file__).resolve().parent
-ASSETS = ROOT / "assets"
+DATA = ROOT.parent
 FONTS_DIR = pathlib.Path.home() / "Library/Fonts"
 CN = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else FONTS_DIR / "MapleMono-NF-CN-Regular.ttf"
 JP = pathlib.Path(sys.argv[2]) if len(sys.argv) > 2 else FONTS_DIR / "MapleMono-NF-JP-Regular.ttf"
 KR = pathlib.Path(sys.argv[3]) if len(sys.argv) > 3 else FONTS_DIR / "MapleMono-NF-KR-Regular.ttf"
-COMMON = ASSETS / "CjkFallback.ttf"
-JAPANESE = ASSETS / "JaFallback.ttf"
-CHINESE_FULL = ASSETS / "ZhFullFallback.ttf"
+COMMON = DATA / "term-font-data-common/data/CjkFallback.ttf.zst"
+JAPANESE = DATA / "term-font-data-ja/data/JaFallback.ttf.zst"
+CHINESE_FULL = DATA / "term-font-data-zh-full/data/ZhFullFallback.ttf.zst"
 FAMILY = "rune-term CJK Fallback"
 
 
@@ -109,17 +111,27 @@ def main() -> None:
         reduced(KR, hangul_points(), hangul)
         merged = Merger().merge([han, hangul])
         rename(merged)
-        merged.save(COMMON)
+        merged.save(pathlib.Path(tmp) / "common.ttf")
 
         reduced(JP, japanese_points(), pathlib.Path(tmp) / "ja.ttf")
         japanese = TTFont(pathlib.Path(tmp) / "ja.ttf")
         rename(japanese)
-        japanese.save(JAPANESE)
+        japanese.save(pathlib.Path(tmp) / "ja-final.ttf")
 
         reduced(CN, chinese_full_points(), pathlib.Path(tmp) / "zh.ttf")
         chinese = TTFont(pathlib.Path(tmp) / "zh.ttf")
         rename(chinese)
-        chinese.save(CHINESE_FULL)
+        chinese.save(pathlib.Path(tmp) / "zh-final.ttf")
+
+        for source, dest in [
+            ("common.ttf", COMMON),
+            ("ja-final.ttf", JAPANESE),
+            ("zh-final.ttf", CHINESE_FULL),
+        ]:
+            subprocess.run(
+                ["zstd", "-q", "-19", "-f", str(pathlib.Path(tmp) / source), "-o", str(dest)],
+                check=True,
+            )
 
     for path in (COMMON, JAPANESE, CHINESE_FULL):
         print(f"{path.name}: {path.stat().st_size} bytes")

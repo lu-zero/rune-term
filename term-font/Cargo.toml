@@ -11,3 +11,4 @@ description = "System font discovery and colour glyph rasterization for rune-ter
 fontique.workspace = true
 skrifa.workspace = true
 swash.workspace = true
+ruzstd.workspace = true

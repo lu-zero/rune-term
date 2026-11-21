@@ -1,0 +1,10 @@
+[package]
+name = "term-font-data-cascadia"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "zstd-compressed font bytes for rune-term: Optional Cascadia Code NF face."
+repository.workspace = true
+
+[dependencies]

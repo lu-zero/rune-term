@@ -9,18 +9,25 @@ description = "CPU glyph atlas with font fallback and cell sprites. No rendering
 [features]
 default = ["bundled-font", "fallback-common"]
 # The one face every normal build embeds, so text always has a font.
-bundled-font = ["dep:core-foundation", "dep:core-graphics", "dep:core-text"]
+bundled-font = [
+    "dep:core-foundation", "dep:core-graphics", "dep:core-text", "dep:term-font-data-maple",
+]
 # CJK failover tiers, from smallest to largest.
-fallback-common = []
-fallback-ja = []
-fallback-zh-full = []
+fallback-common = ["dep:term-font-data-common"]
+fallback-ja = ["dep:term-font-data-ja"]
+fallback-zh-full = ["dep:term-font-data-zh-full"]
 # A second selectable face, off by default.
-cascadia = []
+cascadia = ["dep:term-font-data-cascadia"]
 
 [dependencies]
 fontique.workspace = true
 swash.workspace = true
 term-font.workspace = true
+term-font-data-maple = { workspace = true, optional = true }
+term-font-data-cascadia = { workspace = true, optional = true }
+term-font-data-common = { workspace = true, optional = true }
+term-font-data-ja = { workspace = true, optional = true }
+term-font-data-zh-full = { workspace = true, optional = true }
 tiny-skia.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]

@@ -4,6 +4,11 @@ members = [
     "term-grid",
     "term-atlas",
     "term-font",
+    "term-font-data-maple",
+    "term-font-data-cascadia",
+    "term-font-data-common",
+    "term-font-data-ja",
+    "term-font-data-zh-full",
     "term-input",
     "term-control",
     "term-mux",
@@ -34,6 +39,11 @@ rune-term-keeper = { path = "rune-term-keeper" }
 term-atlas = { path = "term-atlas", default-features = false }
 term-control = { path = "term-control" }
 term-font = { path = "term-font" }
+term-font-data-maple = { path = "term-font-data-maple" }
+term-font-data-cascadia = { path = "term-font-data-cascadia" }
+term-font-data-common = { path = "term-font-data-common" }
+term-font-data-ja = { path = "term-font-data-ja" }
+term-font-data-zh-full = { path = "term-font-data-zh-full" }
 term-grid = { path = "term-grid", default-features = false }
 term-input = { path = "term-input" }
 term-mux = { path = "term-mux" }
@@ -64,6 +74,7 @@ swash = "0.2.10"
 tiny-skia = "0.12"
 tokio = { version = "1", features = ["io-util", "macros", "net", "process", "rt", "sync", "time"] }
 toml = "0.8"
+ruzstd = "0.9"
 wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }
 winnow-args = { version = "0.6", default-features = false, features = ["derive", "help-text"] }
 

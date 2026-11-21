@@ -1,0 +1,10 @@
+[package]
+name = "term-font-data-zh-full"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "zstd-compressed font bytes for rune-term: Full GBK Chinese fallback subset."
+repository.workspace = true
+
+[dependencies]

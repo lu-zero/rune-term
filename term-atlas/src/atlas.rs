@@ -463,8 +463,8 @@ impl Atlas {
     /// A codepoint the face lacks: try the compact bundled subset, then a
     /// system font found by `term-font`. On macOS CoreText is the last resort.
     fn place_fallback(&mut self, ch: char, cells: u8) -> Option<GlyphRect> {
-        for bytes in crate::fallback_bytes() {
-            let Some(font) = swash::FontRef::from_index(bytes, 0) else {
+        for blob in crate::fallback_bytes() {
+            let Some(font) = swash::FontRef::from_index(blob.data(), 0) else {
                 continue;
             };
             let gid = font.charmap().map(ch);
@@ -630,8 +630,11 @@ impl Atlas {
 
     #[cfg(all(target_os = "macos", feature = "bundled-font"))]
     fn place_system(&mut self, ch: char, cells: u8) -> Option<GlyphRect> {
-        let drawn =
-            crate::fallback::draw(crate::face::BUNDLED, ch, self.ppem.max(self.cell.1 as f32))?;
+        let drawn = crate::fallback::draw(
+            crate::face::bundled_data(),
+            ch,
+            self.ppem.max(self.cell.1 as f32),
+        )?;
         let origin = self.alloc(cells)?;
         let slot_w = u32::from(cells) * self.cell.0;
         let slot_h = self.cell.1;

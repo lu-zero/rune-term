@@ -73,5 +73,6 @@ network, as mosh does: [`docs/agent.md`](./docs/agent.md).
 
 MIT. Maple Mono NF, vendored in `term-grid/` as the default face, is SIL OFL 1.1.
 Cascadia Code NF is bundled as a second selectable face.
-`CjkFallback.ttf` is a renamed, compact merge of Maple Mono NF CN and NF KR subsets under the same license.
+The fallback subset is a renamed merge of Maple Mono NF CN and NF KR under the same
+license, shipped zstd-compressed in the `term-font-data-*` crates.
 `term-font`'s COLR parser is adapted from Rune (MIT, Copyright 2026 Anomaly).

@@ -8,6 +8,7 @@ use fontique::{
 };
 
 pub mod color;
+pub mod data;
 
 /// A system font that covers a codepoint, with the face index inside its file.
 pub struct FallbackFont {

@@ -18,36 +18,43 @@ pub const MAPLE_FAMILY: &str = BUNDLED_FAMILY;
 #[cfg(feature = "cascadia")]
 pub const CASCADIA_FAMILY: &str = "Cascadia Code NF";
 
-/// The static regular face from the v8.0-beta.3 Nerd Font release of the
-/// variable branch. The grid draws one instance, so a variable file would
-/// only add bytes for axes it never sets.
+/// The v8.0-beta.3 Nerd Font regulars, zstd-compressed in the data crates.
 #[cfg(feature = "bundled-font")]
-pub(crate) const BUNDLED: &[u8] = include_bytes!("../assets/MapleMonoNF.ttf");
+pub(crate) const BUNDLED_ZSTD: &[u8] = term_font_data_maple::ZSTD;
 #[cfg(feature = "cascadia")]
-pub(crate) const CASCADIA: &[u8] = include_bytes!("../assets/CascadiaCodeNF.ttf");
+pub(crate) const CASCADIA_ZSTD: &[u8] = term_font_data_cascadia::ZSTD;
 
 /// Compact fallback faces for codepoints the profile's face misses.
 #[cfg(feature = "fallback-common")]
-pub(crate) const FAILOVER: &[u8] = include_bytes!("../assets/CjkFallback.ttf");
+pub(crate) const FAILOVER_ZSTD: &[u8] = term_font_data_common::ZSTD;
 #[cfg(feature = "fallback-ja")]
-pub(crate) const FAILOVER_JA: &[u8] = include_bytes!("../assets/JaFallback.ttf");
+pub(crate) const FAILOVER_JA_ZSTD: &[u8] = term_font_data_ja::ZSTD;
 #[cfg(feature = "fallback-zh-full")]
-pub(crate) const FAILOVER_ZH_FULL: &[u8] = include_bytes!("../assets/ZhFullFallback.ttf");
+pub(crate) const FAILOVER_ZH_FULL_ZSTD: &[u8] = term_font_data_zh_full::ZSTD;
 
-/// The embedded fallback faces, smallest tier first. Empty in a build with
-/// no fallback features: callers then rely on system fonts alone.
-pub fn fallback_bytes() -> &'static [&'static [u8]] {
-    static FACES: OnceLock<Vec<&'static [u8]>> = OnceLock::new();
+/// The default face's bytes, decoded once for CoreText's descriptor.
+#[cfg(all(feature = "bundled-font", target_os = "macos"))]
+pub(crate) fn bundled_data() -> &'static [u8] {
+    static DATA: OnceLock<Vec<u8>> = OnceLock::new();
+    DATA.get_or_init(|| term_font::data::decompress(BUNDLED_ZSTD))
+}
+
+/// The embedded fallback faces, smallest tier first, decoded once. Empty in
+/// a build with no fallback features: callers then rely on system fonts alone.
+pub fn fallback_bytes() -> &'static [Blob<u8>] {
+    static FACES: OnceLock<Vec<Blob<u8>>> = OnceLock::new();
     FACES.get_or_init(|| {
         [
             #[cfg(feature = "fallback-common")]
-            FAILOVER,
+            FAILOVER_ZSTD,
             #[cfg(feature = "fallback-ja")]
-            FAILOVER_JA,
+            FAILOVER_JA_ZSTD,
             #[cfg(feature = "fallback-zh-full")]
-            FAILOVER_ZH_FULL,
+            FAILOVER_ZH_FULL_ZSTD,
         ]
-        .to_vec()
+        .into_iter()
+        .map(|zstd| Blob::new(Arc::new(term_font::data::decompress(zstd))))
+        .collect()
     })
 }
 
@@ -71,7 +78,7 @@ impl Face {
         #[cfg(feature = "bundled-font")]
         {
             static DATA: OnceLock<Blob<u8>> = OnceLock::new();
-            Self::bundled_named(BUNDLED_FAMILY, BUNDLED, &DATA)
+            Self::bundled_named(BUNDLED_FAMILY, BUNDLED_ZSTD, &DATA)
         }
         #[cfg(not(feature = "bundled-font"))]
         {
@@ -92,18 +99,20 @@ impl Face {
     #[cfg(feature = "cascadia")]
     pub fn bundled_cascadia() -> Self {
         static DATA: OnceLock<Blob<u8>> = OnceLock::new();
-        Self::bundled_named(CASCADIA_FAMILY, CASCADIA, &DATA)
+        Self::bundled_named(CASCADIA_FAMILY, CASCADIA_ZSTD, &DATA)
     }
 
     #[cfg(any(feature = "bundled-font", feature = "cascadia"))]
     fn bundled_named(
         family: &'static str,
-        bytes: &'static [u8],
+        zstd: &'static [u8],
         cache: &'static OnceLock<Blob<u8>>,
     ) -> Self {
         Self {
             family: family.into(),
-            data: cache.get_or_init(|| Blob::new(Arc::new(bytes))).clone(),
+            data: cache
+                .get_or_init(|| Blob::new(Arc::new(term_font::data::decompress(zstd))))
+                .clone(),
             index: 0,
         }
     }
