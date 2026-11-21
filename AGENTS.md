@@ -86,5 +86,6 @@ comments, and docs: a pattern being there does not make it correct.
   synthesize a US-QWERTY string. `logo` maps to super. Command chords stay
   with the window.
 - The cell is `face_cell()` of Maple Mono NF at 14 points. A cmap miss
-  uses the compact bundled CJK fallback, then a system font `term-font` finds;
-  macOS draws color emoji through CoreText. No color emoji file is embedded.
+  uses the compact bundled CJK fallback, then a system font `term-font` finds,
+  including its color glyphs; CoreText is the last resort on macOS. No color
+  emoji file is embedded.

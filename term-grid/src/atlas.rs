@@ -435,9 +435,8 @@ impl Atlas {
         })
     }
 
-    /// A codepoint the face lacks: try the compact bundled subset on every
-    /// platform. On macOS what it misses goes through CoreText; elsewhere a
-    /// system font found by `term-font` is drawn with swash or its COLR image.
+    /// A codepoint the face lacks: try the compact bundled subset, then a
+    /// system font found by `term-font`. On macOS CoreText is the last resort.
     fn place_fallback(&mut self, ch: char, cells: u8) -> Option<GlyphRect> {
         let face = Face::failover();
         let font = face.font()?;
@@ -461,47 +460,54 @@ impl Atlas {
                 },
             );
         }
+        if let Some(rect) = self.place_system_font(ch, cells) {
+            return Some(rect);
+        }
         #[cfg(target_os = "macos")]
         {
             self.place_system(ch, cells)
         }
         #[cfg(not(target_os = "macos"))]
         {
-            let found = term_font::discover(self.face.family(), ch)?;
-            let bytes: &[u8] = found.data.as_ref();
-            let font = swash::FontRef::from_index(bytes, found.index as usize)?;
-            let gid = font.charmap().map(ch);
-            if gid == 0 {
-                return None;
-            }
-            let coords = regular_coords(&font);
-            let upem = f32::from(font.metrics(&coords).units_per_em.max(1));
-            // ppem is pixels per em at the chosen size; upem only converts
-            // the fallback face's advance units into pixels.
-            let ppem = self.ppem;
-            let advance = font.glyph_metrics(&coords).advance_width(gid) * ppem / upem;
-            if let Some((image, _)) =
-                term_font::color::rasterize(bytes, found.index, u32::from(gid), ppem, &[])
-            {
-                return self.place_color_image(cells, image);
-            }
-            if let Some((image, _)) =
-                term_font::color::rasterize_bitmap(bytes, found.index, gid, ppem)
-            {
-                return self.place_color_image(cells, image);
-            }
-            self.place_face_glyph(
-                font,
-                gid,
-                ch,
-                cells,
-                FallbackScale {
-                    ppem,
-                    glyph_advance: advance,
-                    coords,
-                },
-            )
+            None
         }
+    }
+
+    /// A system font covering `ch`, rasterized with swash or its color image.
+    fn place_system_font(&mut self, ch: char, cells: u8) -> Option<GlyphRect> {
+        let found = term_font::discover(self.face.family(), ch)?;
+        let bytes: &[u8] = found.data.as_ref();
+        let font = swash::FontRef::from_index(bytes, found.index as usize)?;
+        let gid = font.charmap().map(ch);
+        if gid == 0 {
+            return None;
+        }
+        let coords = regular_coords(&font);
+        let upem = f32::from(font.metrics(&coords).units_per_em.max(1));
+        // ppem is pixels per em at the chosen size; upem only converts
+        // the fallback face's advance units into pixels.
+        let ppem = self.ppem;
+        let advance = font.glyph_metrics(&coords).advance_width(gid) * ppem / upem;
+        if let Some((image, _)) =
+            term_font::color::rasterize(bytes, found.index, u32::from(gid), ppem, &[])
+        {
+            return self.place_color_image(cells, image);
+        }
+        if let Some((image, _)) = term_font::color::rasterize_bitmap(bytes, found.index, gid, ppem)
+        {
+            return self.place_color_image(cells, image);
+        }
+        self.place_face_glyph(
+            font,
+            gid,
+            ch,
+            cells,
+            FallbackScale {
+                ppem,
+                glyph_advance: advance,
+                coords,
+            },
+        )
     }
 
     /// Rasterize `gid` from a fallback face into a cell.
@@ -679,7 +685,6 @@ impl Atlas {
         );
     }
 
-    #[cfg(not(target_os = "macos"))]
     fn place_color_image(
         &mut self,
         cells: u8,
