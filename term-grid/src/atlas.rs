@@ -445,7 +445,9 @@ impl Atlas {
         if gid != 0 {
             let coords = regular_coords(&font);
             let upem = f32::from(font.metrics(&coords).units_per_em.max(1));
-            let ppem = self.ppem * upem / self.upem;
+            // ppem is pixels per em at the chosen size; upem only converts
+            // the fallback face's advance units into pixels.
+            let ppem = self.ppem;
             let advance = font.glyph_metrics(&coords).advance_width(gid) * ppem / upem;
             return self.place_face_glyph(
                 font,
@@ -474,30 +476,19 @@ impl Atlas {
             }
             let coords = regular_coords(&font);
             let upem = f32::from(font.metrics(&coords).units_per_em.max(1));
-            let ppem = self.ppem * upem / self.upem;
+            // ppem is pixels per em at the chosen size; upem only converts
+            // the fallback face's advance units into pixels.
+            let ppem = self.ppem;
             let advance = font.glyph_metrics(&coords).advance_width(gid) * ppem / upem;
             if let Some((image, _)) =
                 term_font::color::rasterize(bytes, found.index, u32::from(gid), ppem, &[])
             {
-                let origin = self.alloc(cells)?;
-                let slot_w = u32::from(cells) * self.cell.0;
-                let slot_h = self.cell.1;
-                self.paint_color_image(
-                    origin,
-                    slot_w,
-                    slot_h,
-                    image.width,
-                    image.height,
-                    &image.rgba,
-                );
-                self.color_dirty = true;
-                return Some(GlyphRect {
-                    x: origin.0,
-                    y: origin.1,
-                    w: slot_w,
-                    h: slot_h,
-                    atlas: 1,
-                });
+                return self.place_color_image(cells, image);
+            }
+            if let Some((image, _)) =
+                term_font::color::rasterize_bitmap(bytes, found.index, gid, ppem)
+            {
+                return self.place_color_image(cells, image);
             }
             self.place_face_glyph(
                 font,
@@ -686,6 +677,33 @@ impl Atlas {
             drawn.height,
             &drawn.bytes,
         );
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn place_color_image(
+        &mut self,
+        cells: u8,
+        image: term_font::color::RgbaImage,
+    ) -> Option<GlyphRect> {
+        let origin = self.alloc(cells)?;
+        let slot_w = u32::from(cells) * self.cell.0;
+        let slot_h = self.cell.1;
+        self.paint_color_image(
+            origin,
+            slot_w,
+            slot_h,
+            image.width,
+            image.height,
+            &image.rgba,
+        );
+        self.color_dirty = true;
+        Some(GlyphRect {
+            x: origin.0,
+            y: origin.1,
+            w: slot_w,
+            h: slot_h,
+            atlas: 1,
+        })
     }
 
     /// Scale premultiplied RGBA into a slot in the color atlas.
@@ -1152,6 +1170,20 @@ mod tests {
         let rect = atlas.ensure('中', 2).expect("CJK glyph");
         assert_eq!(rect.w, 20);
         assert!(ink_count(&atlas, rect) > 20, "fallback has ink");
+    }
+
+    #[test]
+    fn fallback_glyph_scales_to_a_face_with_another_upem() {
+        let mut atlas = Atlas::with_face(Face::bundled_cascadia(), 8, 16);
+        let rect = atlas.ensure('中', 2).expect("CJK glyph");
+        let columns = (0..rect.w)
+            .filter(|x| (0..rect.h).any(|y| px(&atlas, rect, *x, y) > 16))
+            .count();
+        assert!(
+            columns >= (rect.w / 2) as usize,
+            "glyph too narrow: {columns} of {}",
+            rect.w
+        );
     }
 
     fn px(atlas: &Atlas, rect: GlyphRect, x: u32, y: u32) -> u8 {

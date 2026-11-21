@@ -14,14 +14,14 @@ pub const BUNDLED_FAMILY: &str = "Maple Mono NF";
 /// The bundled face's family, kept as a name for callers that ask for Maple.
 pub const MAPLE_FAMILY: &str = BUNDLED_FAMILY;
 
-/// Maple Mono NF with Chinese and Japanese glyphs from WenYuan Rounded SC.
-pub const MAPLE_CN_FAMILY: &str = "Maple Mono NF CN";
+/// The other bundled face, kept so the two designs can be compared.
+pub const CASCADIA_FAMILY: &str = "Cascadia Code NF";
 
 /// The static regular face from the v8.0-beta.3 Nerd Font release of the
 /// variable branch. The grid draws one instance, so a variable file would
 /// only add bytes for axes it never sets.
 pub(crate) const BUNDLED: &[u8] = include_bytes!("../MapleMonoNF.ttf");
-pub(crate) const MAPLE_CN: &[u8] = include_bytes!("../MapleMonoNF-CN.ttf");
+pub(crate) const CASCADIA: &[u8] = include_bytes!("../CascadiaCodeNF.ttf");
 
 /// A compact subset of Maple Mono NF CN for codepoints the profile's face misses.
 pub(crate) const FAILOVER: &[u8] = include_bytes!("../CjkFallback.ttf");
@@ -51,10 +51,10 @@ impl Face {
         Self::bundled()
     }
 
-    /// The bundled Maple Mono NF CN face, adding Chinese and Japanese glyphs.
-    pub fn bundled_maple_cn() -> Self {
+    /// The bundled Cascadia Code NF face, selectable instead of the default.
+    pub fn bundled_cascadia() -> Self {
         static DATA: OnceLock<Blob<u8>> = OnceLock::new();
-        Self::bundled_named(MAPLE_CN_FAMILY, MAPLE_CN, &DATA)
+        Self::bundled_named(CASCADIA_FAMILY, CASCADIA, &DATA)
     }
 
     /// The compact face used for glyphs the profile's face does not cover.
@@ -85,8 +85,8 @@ impl Face {
         if family == MAPLE_FAMILY {
             return Self::bundled_maple();
         }
-        if family == MAPLE_CN_FAMILY {
-            return Self::bundled_maple_cn();
+        if family == CASCADIA_FAMILY {
+            return Self::bundled_cascadia();
         }
         static LOADED: Mutex<Option<HashMap<String, Face>>> = Mutex::new(None);
         let mut loaded = LOADED.lock().expect("faces");
@@ -145,15 +145,12 @@ fn scan() -> Vec<String> {
         .into_iter()
         // A dot names a face the system keeps for itself.
         .filter(|name| {
-            !name.starts_with('.')
-                && *name != BUNDLED_FAMILY
-                && *name != MAPLE_FAMILY
-                && *name != MAPLE_CN_FAMILY
+            !name.starts_with('.') && *name != BUNDLED_FAMILY && *name != CASCADIA_FAMILY
         })
         .filter(|name| installed_in(&mut collection, name).is_some_and(|face| face.monospaced()))
         .collect();
     families.sort_by_key(|name| name.to_lowercase());
-    families.insert(0, MAPLE_CN_FAMILY.to_owned());
+    families.insert(0, CASCADIA_FAMILY.to_owned());
     families.insert(0, BUNDLED_FAMILY.to_owned());
     families
 }
@@ -196,20 +193,20 @@ mod tests {
     }
 
     #[test]
-    fn maple_faces_load_their_own_bundled_bytes() {
+    fn bundled_families_load_their_own_bytes() {
         assert_eq!(Face::load(MAPLE_FAMILY), Face::bundled());
-        let cn = Face::load(MAPLE_CN_FAMILY);
-        assert_eq!(cn, Face::bundled_maple_cn());
-        assert_ne!(cn, Face::bundled());
-        assert_eq!(cn.family(), MAPLE_CN_FAMILY);
-        assert!(cn.monospaced());
+        let cascadia = Face::load(CASCADIA_FAMILY);
+        assert_eq!(cascadia, Face::bundled_cascadia());
+        assert_ne!(cascadia, Face::bundled());
+        assert_eq!(cascadia.family(), CASCADIA_FAMILY);
+        assert!(cascadia.monospaced());
     }
 
     #[cfg(target_os = "macos")]
     #[test]
     fn the_list_is_the_bundled_families_then_the_monospaced_ones() {
         let families = scan();
-        assert_eq!(&families[..2], [BUNDLED_FAMILY, MAPLE_CN_FAMILY]);
+        assert_eq!(&families[..2], [BUNDLED_FAMILY, CASCADIA_FAMILY]);
         assert!(families.iter().any(|f| f == "Menlo"), "{families:?}");
         assert!(!families.iter().any(|f| f == "Helvetica"), "{families:?}");
     }
