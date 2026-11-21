@@ -1,2 +1,5 @@
 /target
 /Cargo.lock
+
+# Detached placeholder crates build their own target dirs.
+publish/placeholders/*/target/
