@@ -190,10 +190,18 @@ impl Gui {
 /// drawing an empty grid or crashing on a missing face.
 fn check_font() -> Result<(), &'static str> {
     let resolved = crate::settings::ConfigFile::load().resolve();
-    if term_grid::Face::load(&resolved.font_family).valid() {
-        return Ok(());
+    let face = term_grid::Face::load(&resolved.font_family);
+    if !face.valid() {
+        return Err("no font installed: install any monospaced font (for example Maple Mono NF from https://font.subf.dev/) or rebuild with default features");
     }
-    Err("no font available: install Maple Mono NF from https://font.subf.dev/ or rebuild with default features")
+    let wanted = resolved.font_family.trim();
+    if !wanted.is_empty() && face.family() != wanted {
+        eprintln!(
+            "rune-term: font {wanted:?} not installed, using {:?}",
+            face.family()
+        );
+    }
+    Ok(())
 }
 
 #[cfg(test)]

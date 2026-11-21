@@ -88,5 +88,5 @@ comments, and docs: a pattern being there does not make it correct.
 - The cell is `face_cell()` of Maple Mono NF at 14 points. A cmap miss uses
   the bundled fallback tiers, then a system font `term-font` finds; CoreText
   is the last resort on macOS. Faces are Cargo features; a build with none
-  checks for an installed family and reports where to download one. No color
-  emoji file is embedded.
+  uses any installed font, or reports where to download one if there is none.
+  No color emoji file is embedded.

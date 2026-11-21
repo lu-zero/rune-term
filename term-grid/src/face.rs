@@ -110,10 +110,16 @@ impl Face {
 
     /// The regular face of `family`, or the bundled one when it is not installed. Bundled
     /// families stay bundled even when installed, so those profiles draw the same everywhere.
+    /// A build with no bundled face uses any installed font instead.
     pub fn load(family: &str) -> Self {
         let family = family.trim();
+        #[cfg(feature = "bundled-font")]
         if family.is_empty() || family == BUNDLED_FAMILY {
             return Self::bundled();
+        }
+        #[cfg(not(feature = "bundled-font"))]
+        if family.is_empty() {
+            return installed_default().unwrap_or_else(Self::bundled);
         }
         if family == MAPLE_FAMILY {
             return Self::bundled_maple();
@@ -128,7 +134,18 @@ impl Face {
         if let Some(face) = loaded.get(family) {
             return face.clone();
         }
-        let face = installed(family).unwrap_or_else(Self::bundled);
+        let face = installed(family)
+            .or_else(|| {
+                #[cfg(not(feature = "bundled-font"))]
+                {
+                    installed_default()
+                }
+                #[cfg(feature = "bundled-font")]
+                {
+                    None
+                }
+            })
+            .unwrap_or_else(Self::bundled);
         loaded.insert(family.to_owned(), face.clone());
         face
     }
@@ -213,6 +230,32 @@ fn installed(family: &str) -> Option<Face> {
         }),
         family,
     )
+}
+
+/// Any installed face, preferring a monospaced one. Used only by builds with
+/// no bundled font: a profile naming a missing family still gets text.
+#[cfg(not(feature = "bundled-font"))]
+fn installed_default() -> Option<Face> {
+    let mut collection = Collection::new(CollectionOptions {
+        shared: false,
+        system_fonts: true,
+    });
+    let names: Vec<String> = collection.family_names().map(str::to_owned).collect();
+    let mut any = None;
+    for name in names {
+        if name.starts_with('.') {
+            continue;
+        }
+        if let Some(face) = installed_in(&mut collection, &name) {
+            if face.monospaced() {
+                return Some(face);
+            }
+            if any.is_none() {
+                any = Some(face);
+            }
+        }
+    }
+    any
 }
 
 fn installed_in(collection: &mut Collection, family: &str) -> Option<Face> {

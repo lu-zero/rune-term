@@ -43,8 +43,9 @@ uses only installed fonts:
 | `+ font-cascadia` | a second selectable face | +2.4 MiB |
 | all tiers together | everything above | 65.3 MiB |
 
-With no bundled or installed font, rune-term exits with a link to download
-Maple Mono NF instead of drawing an empty window.
+A build with no bundled fonts uses any installed font, preferring a monospaced
+one, and names the family it chose. With no font at all, it exits with a link
+to download one instead of drawing an empty window.
 
 Dependencies, features and the crates: [`docs/building.md`](./docs/building.md).
 The patched Rune and Rio branches it builds against are in
