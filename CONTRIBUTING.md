@@ -26,6 +26,9 @@ rules for coding agents.
   decoded once at runtime by pure-Rust `ruzstd`. `term-atlas/fallback-subset.py`
   regenerates them from the installed V8 NF CN/JP/KR faces (needs `fonttools`
   and the `zstd` CLI).
+- **Keys**: `term-input` owns its key types and encoder; `rune-term-core`
+  converts them to librio at the host boundary. It has no Rune or librio
+  dependency and can be used by another frontend.
 - **Atlas**: `term-atlas` owns the CPU glyph atlas, sprites and fallback;
   `term-grid` only uploads its `pixels()`/`color_pixels()` to wgpu. The color
   byte order is chosen at construction (RGBA for wgpu, ARGB for softbuffer).

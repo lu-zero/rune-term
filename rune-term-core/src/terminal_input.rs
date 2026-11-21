@@ -249,9 +249,69 @@ pub fn scroll_by_lines(host: &mut HostSurface, lines: i32) {
     host.surface.scroll(lines);
 }
 
-pub fn deliver_mapped_key(host: &mut HostSurface, mapped: &librio::KeyEvent) -> bool {
+pub fn deliver_mapped_key(host: &mut HostSurface, mapped: &term_input::KeyEvent) -> bool {
     if mapped.key.is_none() && mapped.text.is_none() {
         return false;
     }
-    host.surface.key(mapped)
+    let event = librio::KeyEvent {
+        action: match mapped.action {
+            term_input::KeyAction::Press => librio::KeyAction::Press,
+            term_input::KeyAction::Repeat => librio::KeyAction::Repeat,
+            term_input::KeyAction::Release => librio::KeyAction::Release,
+        },
+        key: mapped.key.map(key),
+        mods: mods(mapped.mods),
+        consumed_mods: mods(mapped.consumed_mods),
+        text: mapped.text.clone(),
+        composing: mapped.composing,
+    };
+    host.surface.key(&event)
+}
+
+fn key(key: term_input::Key) -> librio::Key {
+    use term_input::Key as K;
+    match key {
+        K::Char(c) => librio::Key::Char(c),
+        K::Enter => librio::Key::Enter,
+        K::Tab => librio::Key::Tab,
+        K::Backspace => librio::Key::Backspace,
+        K::Escape => librio::Key::Escape,
+        K::Up => librio::Key::Up,
+        K::Down => librio::Key::Down,
+        K::Left => librio::Key::Left,
+        K::Right => librio::Key::Right,
+        K::Home => librio::Key::Home,
+        K::End => librio::Key::End,
+        K::PageUp => librio::Key::PageUp,
+        K::PageDown => librio::Key::PageDown,
+        K::Insert => librio::Key::Insert,
+        K::Delete => librio::Key::Delete,
+        K::F(n) => librio::Key::F(n),
+        K::CapsLock => librio::Key::CapsLock,
+        K::ShiftLeft => librio::Key::ShiftLeft,
+        K::ShiftRight => librio::Key::ShiftRight,
+        K::ControlLeft => librio::Key::ControlLeft,
+        K::ControlRight => librio::Key::ControlRight,
+        K::AltLeft => librio::Key::AltLeft,
+        K::AltRight => librio::Key::AltRight,
+        K::SuperLeft => librio::Key::SuperLeft,
+        K::SuperRight => librio::Key::SuperRight,
+    }
+}
+
+fn mods(mods: term_input::Modifiers) -> librio::Modifiers {
+    let mut out = librio::Modifiers::empty();
+    if mods.contains(term_input::Modifiers::SHIFT) {
+        out |= librio::Modifiers::SHIFT;
+    }
+    if mods.contains(term_input::Modifiers::CTRL) {
+        out |= librio::Modifiers::CTRL;
+    }
+    if mods.contains(term_input::Modifiers::ALT) {
+        out |= librio::Modifiers::ALT;
+    }
+    if mods.contains(term_input::Modifiers::SUPER) {
+        out |= librio::Modifiers::SUPER;
+    }
+    out
 }

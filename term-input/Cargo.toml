@@ -7,4 +7,4 @@ publish.workspace = true
 description = "Physical key and cell hit testing for rune-term. No window types."
 
 [dependencies]
-librio.workspace = true
+bitflags.workspace = true

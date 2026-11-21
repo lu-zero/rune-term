@@ -54,6 +54,7 @@ rune-kit = { git = "https://github.com/anomalyco/rune", branch = "dev", default-
 librio = { git = "https://github.com/raphamorim/rio", branch = "main", default-features = false }
 teletypewriter = { git = "https://github.com/raphamorim/rio", branch = "main" }
 
+bitflags = "2.9.0"
 bytemuck = { version = "1", features = ["derive"] }
 core-foundation = "0.10.1"
 core-graphics = "0.24.0"

@@ -1,11 +1,13 @@
-//! Physical keys and cell hit testing. This crate knows `librio::KeyEvent`
-//! and does not know the window. `map_key` copies platform `text` and
-//! `consumed_mods`. It does not synthesize a US-QWERTY string.
+//! Physical keys and cell hit testing. This crate has its own key event and
+//! encoder and does not know the window or the terminal core. `map_key` copies
+//! platform `text` and `consumed_mods`. It does not synthesize a US-QWERTY string.
 
-use librio::{Key, KeyAction, KeyEvent, Modifiers};
+pub mod key;
+
+pub use key::{EncodeContext, Key, KeyAction, KeyEvent, KittyFlags, Modifiers};
 
 /// Same fields as Rune's `Mods`. The app copies them; this crate does not
-/// depend on Rune. `cmd` is not translated onto `librio::Modifiers`.
+/// depend on Rune. `cmd` is not translated onto [`Modifiers`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Mods {
     pub shift: bool,
@@ -415,7 +417,7 @@ fn ctrl_shift_chord_key(key: PhysicalKeyCode) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use librio::EncodeContext;
+    use crate::EncodeContext;
 
     fn legacy() -> EncodeContext {
         EncodeContext {
@@ -425,7 +427,7 @@ mod tests {
     }
 
     fn encode(event: &KeyEvent) -> Option<Vec<u8>> {
-        librio::key::encode(event, &legacy())
+        crate::key::encode(event, &legacy())
     }
 
     fn shift() -> Mods {
