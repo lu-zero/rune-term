@@ -1,5 +1,5 @@
 //! One 2048² gray atlas, plus a color atlas for system emoji.
-//! The face is the profile's family, Cascadia Code NF by default. ASCII is rasterized up
+//! The face is the profile's family, Maple Mono NF by default. ASCII is rasterized up
 //! front. Every other covered codepoint is rasterized on demand into the
 //! same cell. A codepoint the face does not cover is drawn from the compact
 //! bundled fallback, then by the macOS cascade. The faces are OFL; see the
@@ -1142,7 +1142,7 @@ mod tests {
         assert!(g_bot > h_bot, "descender {g_bot} vs cap {h_bot}");
         assert!(g_bot + 1 < g.h, "g clipped at {g_bot} of {}", g.h);
         let (w, h) = face_cell();
-        assert!(w >= 8.0 && h >= 16.0, "cascadia cell {w}x{h}");
+        assert!(w >= 8.0 && h >= 16.0, "bundled cell {w}x{h}");
     }
 
     #[test]

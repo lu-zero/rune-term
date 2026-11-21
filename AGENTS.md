@@ -85,6 +85,6 @@ comments, and docs: a pattern being there does not make it correct.
 - `map_key` copies platform `text` and `consumed_mods`. It does not
   synthesize a US-QWERTY string. `logo` maps to super. Command chords stay
   with the window.
-- The cell is `face_cell()` of Cascadia Code NF at 14 points. A cmap miss
+- The cell is `face_cell()` of Maple Mono NF at 14 points. A cmap miss
   uses the compact bundled CJK fallback, then a system font `term-font` finds;
   macOS draws color emoji through CoreText. No color emoji file is embedded.

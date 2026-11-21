@@ -1,4 +1,4 @@
-//! The font files the grid draws with: bundled Cascadia Code NF, Maple Mono NF or Maple Mono NF CN, or an installed family.
+//! The font files the grid draws with: bundled Maple Mono NF or Maple Mono NF CN, or an installed family.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -9,20 +9,18 @@ use fontique::{Blob, Collection, CollectionOptions, FontStyle, FontWeight, FontW
 use swash::FontRef;
 
 /// The family the grid draws with when a profile names none, or one that is not installed.
-pub const BUNDLED_FAMILY: &str = "Cascadia Code NF";
+pub const BUNDLED_FAMILY: &str = "Maple Mono NF";
 
-/// The other bundled families, Nerd Fonts with wider language coverage.
-pub const MAPLE_FAMILY: &str = "Maple Mono NF";
+/// The bundled face's family, kept as a name for callers that ask for Maple.
+pub const MAPLE_FAMILY: &str = BUNDLED_FAMILY;
+
 /// Maple Mono NF with Chinese and Japanese glyphs from WenYuan Rounded SC.
 pub const MAPLE_CN_FAMILY: &str = "Maple Mono NF CN";
 
-/// Same bytes Sugarloaf embeds. Vendored so a clone builds without the Rio tree.
-pub(crate) const BUNDLED: &[u8] = include_bytes!("../CascadiaCodeNF.ttf");
-
-/// The static regular faces from the v8.0-beta.3 Nerd Font releases of the
+/// The static regular face from the v8.0-beta.3 Nerd Font release of the
 /// variable branch. The grid draws one instance, so a variable file would
 /// only add bytes for axes it never sets.
-pub(crate) const MAPLE: &[u8] = include_bytes!("../MapleMonoNF.ttf");
+pub(crate) const BUNDLED: &[u8] = include_bytes!("../MapleMonoNF.ttf");
 pub(crate) const MAPLE_CN: &[u8] = include_bytes!("../MapleMonoNF-CN.ttf");
 
 /// A compact subset of Maple Mono NF CN for codepoints the profile's face misses.
@@ -50,8 +48,7 @@ impl Face {
 
     /// The bundled Maple Mono NF face, with the same Nerd Font glyphs and wider language coverage.
     pub fn bundled_maple() -> Self {
-        static DATA: OnceLock<Blob<u8>> = OnceLock::new();
-        Self::bundled_named(MAPLE_FAMILY, MAPLE, &DATA)
+        Self::bundled()
     }
 
     /// The bundled Maple Mono NF CN face, adding Chinese and Japanese glyphs.
@@ -157,7 +154,6 @@ fn scan() -> Vec<String> {
         .collect();
     families.sort_by_key(|name| name.to_lowercase());
     families.insert(0, MAPLE_CN_FAMILY.to_owned());
-    families.insert(0, MAPLE_FAMILY.to_owned());
     families.insert(0, BUNDLED_FAMILY.to_owned());
     families
 }
@@ -201,26 +197,19 @@ mod tests {
 
     #[test]
     fn maple_faces_load_their_own_bundled_bytes() {
-        for (family, bundled) in [
-            (MAPLE_FAMILY, Face::bundled_maple()),
-            (MAPLE_CN_FAMILY, Face::bundled_maple_cn()),
-        ] {
-            let face = Face::load(family);
-            assert_eq!(face, bundled);
-            assert_ne!(face, Face::bundled());
-            assert_eq!(face.family(), family);
-            assert!(face.monospaced());
-        }
+        assert_eq!(Face::load(MAPLE_FAMILY), Face::bundled());
+        let cn = Face::load(MAPLE_CN_FAMILY);
+        assert_eq!(cn, Face::bundled_maple_cn());
+        assert_ne!(cn, Face::bundled());
+        assert_eq!(cn.family(), MAPLE_CN_FAMILY);
+        assert!(cn.monospaced());
     }
 
     #[cfg(target_os = "macos")]
     #[test]
     fn the_list_is_the_bundled_families_then_the_monospaced_ones() {
         let families = scan();
-        assert_eq!(
-            &families[..3],
-            [BUNDLED_FAMILY, MAPLE_FAMILY, MAPLE_CN_FAMILY]
-        );
+        assert_eq!(&families[..2], [BUNDLED_FAMILY, MAPLE_CN_FAMILY]);
         assert!(families.iter().any(|f| f == "Menlo"), "{families:?}");
         assert!(!families.iter().any(|f| f == "Helvetica"), "{families:?}");
     }

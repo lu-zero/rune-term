@@ -180,7 +180,7 @@ impl Transport {
 impl Default for Profile {
     fn default() -> Self {
         Self {
-            font_family: "Cascadia Code NF".to_owned(),
+            font_family: "Maple Mono NF".to_owned(),
             font_size: None,
             theme: None,
             backend: "local".to_owned(),
@@ -346,7 +346,7 @@ impl ConfigFile {
         let font_family = profile
             .map(|p| p.font_family.trim())
             .filter(|f| !f.is_empty())
-            .unwrap_or("Cascadia Code NF")
+            .unwrap_or("Maple Mono NF")
             .to_owned();
         let font_size = profile
             .and_then(|p| p.font_size)
@@ -1057,13 +1057,13 @@ theme = "Flexoki Black"
         fs::create_dir_all(dir.join("profiles")).unwrap();
         fs::write(
             dir.join("profiles/Default.toml"),
-            "font_family = \"Cascadia Code NF\"\nfont_size = 14.0\n",
+            "font_family = \"Maple Mono NF\"\nfont_size = 14.0\n",
         )
         .unwrap();
         fs::write(
             dir.join("profiles/Work.toml"),
             r#"
-font_family = "Cascadia Code NF"
+font_family = "Maple Mono NF"
 font_size = 18.0
 theme = "Flexoki Light"
 "#,

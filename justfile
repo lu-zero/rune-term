@@ -77,7 +77,7 @@ shots:
     settings settings-theme-menu-dark theme-menu.json dark
     settings settings-themes-dark themes.json dark
     settings settings-color-dark color.json dark
-    # 960×560 at scale 2, Cascadia 14pt (9×17). The pane is 106×30 cells.
+    # 960×560 at scale 2, Maple Mono NF 14pt. The pane is 106×30 cells.
     term() {
         local name="$1" source="$2" script="$3" home
         home="$(mktemp -d)"

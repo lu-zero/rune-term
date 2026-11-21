@@ -53,6 +53,7 @@ network, as mosh does: [`docs/agent.md`](./docs/agent.md).
 
 ## License
 
-MIT. Cascadia Code NF and Maple Mono NF, vendored in `term-grid/`, are SIL OFL 1.1.
+MIT. Maple Mono NF, vendored in `term-grid/` as the default face, is SIL OFL 1.1.
+Cascadia Code NF remains vendored but is no longer embedded.
 `CjkFallback.ttf` is a renamed, compact subset of Maple Mono NF CN under the same license.
 `term-font`'s COLR parser is adapted from Rune (MIT, Copyright 2026 Anomaly).
