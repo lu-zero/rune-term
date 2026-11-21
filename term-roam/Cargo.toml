@@ -3,6 +3,7 @@ name = "term-roam"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 publish = true
 description = "The roaming link between rune-term and rune-term-agent: a byte stream over QUIC."
 

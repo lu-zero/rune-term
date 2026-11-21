@@ -3,6 +3,7 @@ name = "term-font"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 publish = true
 description = "System font discovery and colour glyph rasterization for rune-term's grid. No Rune and no librio."
 

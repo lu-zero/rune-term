@@ -1,0 +1,29 @@
+[package]
+name = "term-atlas"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "CPU glyph atlas with font fallback and cell sprites. No rendering backend, no Rune and no librio."
+
+[features]
+default = ["bundled-font", "fallback-common"]
+# The one face every normal build embeds, so text always has a font.
+bundled-font = ["dep:core-foundation", "dep:core-graphics", "dep:core-text"]
+# CJK failover tiers, from smallest to largest.
+fallback-common = []
+fallback-ja = []
+fallback-zh-full = []
+# A second selectable face, off by default.
+cascadia = []
+
+[dependencies]
+fontique.workspace = true
+swash.workspace = true
+term-font.workspace = true
+tiny-skia.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = { workspace = true, optional = true }
+core-graphics = { workspace = true, optional = true }
+core-text = { workspace = true, optional = true }

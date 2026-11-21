@@ -72,6 +72,17 @@ pub struct GlyphRect {
     pub atlas: u32,
 }
 
+/// Byte order of the premultiplied color pixels a caller reads from the atlas.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PixelFormat {
+    /// Bytes `R, G, B, A` — what wgpu textures take.
+    #[default]
+    Rgba,
+    /// Bytes `B, G, R, A` — an ARGB8888 `u32` in little-endian memory, as
+    /// softbuffer's frame buffer stores it.
+    Argb,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 struct GlyphKey {
     code: u32,
@@ -98,9 +109,10 @@ pub struct Atlas {
     cursor: u32,
     /// Set when `extra` gains a gray bitmap. The renderer uploads once, then clears it.
     dirty: bool,
-    /// Premultiplied RGBA. Empty until the first color glyph.
+    /// Premultiplied color pixels in `format`. Empty until the first color glyph.
     color: Vec<u8>,
     color_dirty: bool,
+    format: PixelFormat,
     context: ScaleContext,
     coords: Vec<NormalizedCoord>,
     ppem: f32,
@@ -129,15 +141,20 @@ impl Atlas {
         Self::with_face(Face::bundled(), cell_w, cell_h)
     }
 
-    /// [`Self::with_cell`] in `face`.
+    /// [`Self::with_cell`] in `face`, with the default RGBA color bytes.
     pub fn with_face(face: Face, cell_w: u32, cell_h: u32) -> Self {
+        Self::with_face_format(face, cell_w, cell_h, PixelFormat::default())
+    }
+
+    /// Like [`Self::with_face`], with the byte order the caller's frame buffer wants.
+    pub fn with_face_format(face: Face, cell_w: u32, cell_h: u32, format: PixelFormat) -> Self {
         let cell_w = cell_w.max(1);
         let cell_h = cell_h.max(1);
         let mut pixels = vec![0u8; (ATLAS_SIZE * ATLAS_SIZE) as usize];
         let mut ascii = [None; 95];
         let cols = (ATLAS_SIZE / cell_w).max(1);
         let Some(font) = face.font() else {
-            return Self::empty(pixels, ascii, (cell_w, cell_h), cols);
+            return Self::empty(pixels, ascii, (cell_w, cell_h), cols, format);
         };
         let coords = regular_coords(&font);
         let metrics = font.metrics(&coords);
@@ -237,11 +254,18 @@ impl Atlas {
             upem,
             underline,
             has_font: true,
+            format,
             face,
         }
     }
 
-    fn empty(pixels: Vec<u8>, ascii: [Option<GlyphRect>; 95], cell: (u32, u32), cols: u32) -> Self {
+    fn empty(
+        pixels: Vec<u8>,
+        ascii: [Option<GlyphRect>; 95],
+        cell: (u32, u32),
+        cols: u32,
+        format: PixelFormat,
+    ) -> Self {
         Self {
             pixels,
             ascii,
@@ -263,6 +287,7 @@ impl Atlas {
             upem: 1.0,
             underline: (cell.1 as f32 - 2.0, 1.0),
             has_font: false,
+            format,
             face: Face::bundled(),
         }
     }
@@ -744,8 +769,17 @@ impl Atlas {
                 let sx = (x as f32 + 0.5 - ox) / scale - 0.5;
                 let sy = (y as f32 + 0.5 - oy) / scale - 0.5;
                 let sample = bilinear_rgba(rgba, width, height, sx, sy);
+                let sample = self.to_format(sample);
                 stamp_color(&mut self.color, origin, x, y, sample);
             }
+        }
+    }
+
+    /// Reorder premultiplied RGBA into the caller's chosen byte order.
+    fn to_format(&self, sample: [u8; 4]) -> [u8; 4] {
+        match self.format {
+            PixelFormat::Rgba => sample,
+            PixelFormat::Argb => [sample[2], sample[1], sample[0], sample[3]],
         }
     }
 
@@ -1116,6 +1150,15 @@ fn stamp(pixels: &mut [u8], origin: (u32, u32), x: u32, y: u32, sample: u8) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "bundled-font")]
+    #[test]
+    fn color_pixels_use_the_chosen_byte_order() {
+        let rgba = Atlas::new();
+        assert_eq!(rgba.to_format([1, 2, 3, 4]), [1, 2, 3, 4]);
+        let argb = Atlas::with_face_format(Face::bundled(), 8, 16, PixelFormat::Argb);
+        assert_eq!(argb.to_format([1, 2, 3, 4]), [3, 2, 1, 4]);
+    }
 
     fn ink_span(atlas: &Atlas, rect: GlyphRect) -> (u32, u32) {
         let mut top = rect.h;

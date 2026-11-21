@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "term-grid",
+    "term-atlas",
     "term-font",
     "term-input",
     "term-control",
@@ -30,6 +31,7 @@ font-picker = { path = "font-picker" }
 rune-term = { path = "rune-term", default-features = false }
 rune-term-core = { path = "rune-term-core", default-features = false }
 rune-term-keeper = { path = "rune-term-keeper" }
+term-atlas = { path = "term-atlas", default-features = false }
 term-control = { path = "term-control" }
 term-font = { path = "term-font" }
 term-grid = { path = "term-grid", default-features = false }

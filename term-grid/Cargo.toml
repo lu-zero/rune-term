@@ -8,24 +8,14 @@ description = "Cell-grid wgpu pass for rune-term. No Rune and no librio."
 
 [features]
 default = ["bundled-font", "fallback-common"]
-# The one face every normal build embeds, so text always has a font.
-bundled-font = ["dep:core-foundation", "dep:core-graphics", "dep:core-text"]
-# CJK failover tiers, from smallest to largest.
-fallback-common = []
-fallback-ja = []
-fallback-zh-full = []
-# A second selectable face, off by default.
-cascadia = []
+# Forwarded to the CPU atlas; the wgpu renderer needs no font bytes itself.
+bundled-font = ["term-atlas/bundled-font"]
+fallback-common = ["term-atlas/fallback-common"]
+fallback-ja = ["term-atlas/fallback-ja"]
+fallback-zh-full = ["term-atlas/fallback-zh-full"]
+cascadia = ["term-atlas/cascadia"]
 
 [dependencies]
 bytemuck.workspace = true
-fontique.workspace = true
-swash.workspace = true
-term-font.workspace = true
-tiny-skia.workspace = true
+term-atlas.workspace = true
 wgpu.workspace = true
-
-[target.'cfg(target_os = "macos")'.dependencies]
-core-foundation = { workspace = true, optional = true }
-core-graphics = { workspace = true, optional = true }
-core-text = { workspace = true, optional = true }

@@ -19,14 +19,14 @@ from fontTools.merge import Merger
 from fontTools.ttLib import TTFont
 
 ROOT = pathlib.Path(__file__).resolve().parent
-OUTPUT = ROOT / "CjkFallback.ttf"
+ASSETS = ROOT / "assets"
 FONTS_DIR = pathlib.Path.home() / "Library/Fonts"
 CN = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 else FONTS_DIR / "MapleMono-NF-CN-Regular.ttf"
 JP = pathlib.Path(sys.argv[2]) if len(sys.argv) > 2 else FONTS_DIR / "MapleMono-NF-JP-Regular.ttf"
 KR = pathlib.Path(sys.argv[3]) if len(sys.argv) > 3 else FONTS_DIR / "MapleMono-NF-KR-Regular.ttf"
-COMMON = ROOT / "CjkFallback.ttf"
-JAPANESE = ROOT / "JaFallback.ttf"
-CHINESE_FULL = ROOT / "ZhFullFallback.ttf"
+COMMON = ASSETS / "CjkFallback.ttf"
+JAPANESE = ASSETS / "JaFallback.ttf"
+CHINESE_FULL = ASSETS / "ZhFullFallback.ttf"
 FAMILY = "rune-term CJK Fallback"
 
 

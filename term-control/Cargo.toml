@@ -3,6 +3,7 @@ name = "term-control"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 publish = true
 description = "Control protocol types and helpers for rune-term IPC/CLI."
 

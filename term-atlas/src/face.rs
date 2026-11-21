@@ -22,17 +22,17 @@ pub const CASCADIA_FAMILY: &str = "Cascadia Code NF";
 /// variable branch. The grid draws one instance, so a variable file would
 /// only add bytes for axes it never sets.
 #[cfg(feature = "bundled-font")]
-pub(crate) const BUNDLED: &[u8] = include_bytes!("../MapleMonoNF.ttf");
+pub(crate) const BUNDLED: &[u8] = include_bytes!("../assets/MapleMonoNF.ttf");
 #[cfg(feature = "cascadia")]
-pub(crate) const CASCADIA: &[u8] = include_bytes!("../CascadiaCodeNF.ttf");
+pub(crate) const CASCADIA: &[u8] = include_bytes!("../assets/CascadiaCodeNF.ttf");
 
 /// Compact fallback faces for codepoints the profile's face misses.
 #[cfg(feature = "fallback-common")]
-pub(crate) const FAILOVER: &[u8] = include_bytes!("../CjkFallback.ttf");
+pub(crate) const FAILOVER: &[u8] = include_bytes!("../assets/CjkFallback.ttf");
 #[cfg(feature = "fallback-ja")]
-pub(crate) const FAILOVER_JA: &[u8] = include_bytes!("../JaFallback.ttf");
+pub(crate) const FAILOVER_JA: &[u8] = include_bytes!("../assets/JaFallback.ttf");
 #[cfg(feature = "fallback-zh-full")]
-pub(crate) const FAILOVER_ZH_FULL: &[u8] = include_bytes!("../ZhFullFallback.ttf");
+pub(crate) const FAILOVER_ZH_FULL: &[u8] = include_bytes!("../assets/ZhFullFallback.ttf");
 
 /// The embedded fallback faces, smallest tier first. Empty in a build with
 /// no fallback features: callers then rely on system fonts alone.
