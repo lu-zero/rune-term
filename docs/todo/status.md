@@ -261,6 +261,23 @@ These items extend [`rune-term.md`](./rune-term.md). Each links its design.
       [`../agent.md`](../agent.md), `just agent-install`. Design:
       [`agent.md`](./agent.md).
 
+- [ ] **25. Session status.** iTerm2's `OSC 21337` carries `status`,
+      `indicator`, `status-color` and `detail` fields as `key=value` pairs: a
+      tab subtitle, a coloured dot, and longer text for a session-status tool.
+      iTerm2's Claude Code integration installs hooks in `~/.claude/settings.json`
+      that report working/waiting/idle that way; `it2 session set-status` and
+      output-matching Set Tab Status triggers cover programs that do not emit
+      it themselves. Show the state on the tab and in a window-wide list, keep
+      it through mux sessions, and offer notify-on-status-change with a reveal
+      action. `anomalyco/rune#1173` still blocks a menu-bar list.
+- [ ] **26. Desktop notifications.** WezTerm turns `OSC 9; message` (iTerm2's
+      notification) and `OSC 777;notify;title;body` (the rxvt extension) into
+      system toasts, with `notification_handling` choosing when they fire and
+      a `toast_notification` event to forward them. They arrive as pane output,
+      so they work through multiplexed sessions too, including maki. Carry
+      both forms out through `SurfaceDelegate`, keep the title and body on the
+      originating tab, and route them to Rune's notification path.
+
 ## Outside this repository
 
 What Rio still needs, sent and drafted, is [`rio/`](./rio/README.md).
