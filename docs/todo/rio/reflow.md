@@ -1,6 +1,6 @@
 # Reflow: our commits on top of Rio main
 
-`lu-zero/rio` branch `rune-term-on-main` is Rio main at `635e661f` plus:
+`lu-zero/rio` branch `for-rune-term` is Rio main at `e7c05e43` plus:
 
 1. `1b80f604` crosswords: between OSC 133 `A` and `C`, a width change keeps
    the prompt's layout at the width the shell drew it. When the shell's
@@ -36,5 +36,6 @@ Without marks a zsh prompt loses a line within a few drags as bash's does.
 
 ## Upstreaming
 
-Both can go to Rio as they are. Ask Raphael first: 1 depends on prompt marks
-the shell may not send, and 2 delays every resize the child sees.
+Both can go to Rio as they are. No issue or PR has been filed for either. Ask
+Raphael first: 1 depends on prompt marks the shell may not send, and 2 delays
+every resize the child sees.

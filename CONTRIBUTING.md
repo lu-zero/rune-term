@@ -30,17 +30,21 @@ rules for coding agents.
   scrollback, selection, search and input delivery). `rune-term-core` is the
   Rune adapter: Rune-side key, pointer-phase and colour conversions live there.
 - **Keys**: `term-input` owns its key types and encoder; `term-vt` consumes
-  them directly. It has no Rune or librio dependency and can be used by
+  them directly. It has no Rune or Rio dependency and can be used by
   another frontend.
 - **VT**: `term-vt` is librio's host layer without the C ABI. It depends on
-  Rio's patched `rio-vt` for the parser and grid.
+  Rio's patched `rio-vt` for the parser and grid, so it cannot be published
+  until those fixes land upstream in a released 0.6.0.
 - **Atlas**: `term-atlas` owns the CPU glyph atlas, sprites and fallback;
   `term-grid` only uploads its `pixels()`/`color_pixels()` to wgpu. The color
   byte order is chosen at construction (RGBA for wgpu, ARGB for softbuffer).
   A glyph the profile's face misses is drawn from it before asking `term-font`
   for a system font. `term-font` also rasterizes COLR v1 color glyphs; its
   parser is adapted from Rune and lives outside `term-grid` so that crate
-  stays free of Rune and librio.
+  stays free of Rune and Rio.
+- **Published**: `term-font`, `term-atlas` and the `term-font-data-*` faces are
+  on crates.io. The rest wait on Rune or Rio releases, or on names already
+  taken; 0.0.1 placeholders reserve those names.
 
 Sibling checkouts (`../rune`, `../rio`, `../wezterm`) are for reading. The
 workspace depends on upstream `rune` and Rio's crates. `[patch]` replaces those

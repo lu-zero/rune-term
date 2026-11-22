@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Generic terminal host state and input delivery. No Rune and no librio frontend."
+description = "Generic terminal host state and input delivery. No Rune and no terminal frontend."
 
 [dependencies]
 term-vt.workspace = true

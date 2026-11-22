@@ -1,4 +1,4 @@
-//! Kitty image quads. No librio dependency.
+//! Kitty image quads. The caller provides the terminal state.
 
 use std::collections::HashMap;
 

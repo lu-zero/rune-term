@@ -1,5 +1,5 @@
-//! A local shell on a PTY. librio is built without its own PTY, so the shell's
-//! output is read here into `inject_output`, and `SurfaceDelegate::output` is
+//! A local shell on a PTY. The terminal is built without its own PTY, so the
+//! shell's output is read here into `inject_output`, and `SurfaceDelegate::output` is
 //! written back to it. A shell that outlived the app, adopted from a keeper,
 //! is the same over the keeper's master.
 
@@ -260,7 +260,7 @@ fn dup(fd: libc::c_int) -> io::Result<File> {
 }
 
 /// A GUI host inherits no TERM, or a stale one. Prefer Rio's terminfo when it
-/// is installed, as librio's own PTY did.
+/// is installed, as a terminal's own PTY would.
 fn env() -> Vec<(String, String)> {
     let term = if teletypewriter::terminfo_exists("xterm-rio") {
         "xterm-rio"

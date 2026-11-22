@@ -39,7 +39,10 @@ this tree.
 
 ## On the fork
 
-rune-term builds against `lu-zero/rio` branch `rune-term-on-main`: Rio main
-and two commits of ours on top, listed in [`reflow.md`](./reflow.md).
-Everything the older `reflow-cursor-on-2058` and `librio-update-rearm-reflow`
-branches carried is upstream or replaced.
+rune-term builds against `lu-zero/rio` branch `for-rune-term`, rebased on
+`origin/main` at `e7c05e43`. Only two of its non-merge changes are still
+needed: `1b80f604` (prompt rows on resize) and `d8b4aad3` (PTY size after
+resizes settle), both in `rio-vt` and listed in [`reflow.md`](./reflow.md).
+Neither has an upstream issue or PR. The rest is obsolete: librio's key
+encoding moved to `term-input`, `update_rearm` landed as #2053 and lives in
+`term-vt`, and #2084 made the empty-input patch unnecessary.

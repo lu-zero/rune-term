@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Cell-grid wgpu pass for rune-term. No Rune and no librio."
+description = "Cell-grid wgpu pass for rune-term. No Rune and no Rio."
 
 [features]
 default = ["bundled-font", "fallback-common"]

@@ -1,6 +1,6 @@
 [book]
 title = "rune-term"
-description = "A terminal emulator built on Rune and librio"
+description = "A terminal emulator built on Rune and term-vt"
 language = "en"
 src = "../target/site-src"
 

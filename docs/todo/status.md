@@ -122,7 +122,7 @@ The numbers are that plan's.
       families this tree targets. Other symbols still come from the face or
       cascade.
 - [ ] **18. Sixel and iTerm2.**
-- [~] **19. Hyperlinks and URL opening.** OSC 8 links come from librio's
+- [~] **19. Hyperlinks and URL opening.** OSC 8 links come from term-vt's
       render state and plain URLs from `Surface::url_at`; OSC 8 wins. The
       hovered link is underlined in the theme's accent, and with Cmd (Ctrl
       elsewhere) held it takes a pointer cursor and a click opens it, before
@@ -134,7 +134,7 @@ The numbers are that plan's.
             `xdg-open`, or `rundll32` on Windows.
       - [ ] **Wrapped links.** Only the hovered row is underlined. OSC 8 can
             walk the rows here; `url_at` clips to the row, so plain URLs need
-            librio to return the whole span.
+            term-vt to return the whole span.
       - [x] **Where a link goes.** Show the address while Cmd is held, and
             Open Link and Copy Link in the pane's menu.
       - [x] **Holding Cmd still.** `App::on_modifiers` redraws the hovered
@@ -185,11 +185,11 @@ These items extend [`rune-term.md`](./rune-term.md). Each links its design.
       install across lean/fat/helper compositions. Design:
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
 - [~] **23. Multiplexer-backed sessions.** Explicit session concept and
-      backend abstraction (local `librio` vs multiplexer), covering create /
+      backend abstraction (local `term-vt` vs multiplexer), covering create /
       attach / detach / resume, multi-client policy, and remoting/share
       capabilities. tmux first, then rmux; ssh and mosh are raw links. The
       layers, the mapping (session → group, window → tab, pane → leaf) and the
-      P0–P4 order are decided. P0 is in: librio is built without its `pty`
+      P0–P4 order are decided. P0 is in: term-vt is built without its `pty`
       feature, and rune-term spawns the shell on a teletypewriter PTY, reads
       it into `inject_output` on a thread, and writes the delegate's `output`
       back to it. The winsize follows the grid. P1 is in: `term-mux` holds the
@@ -275,8 +275,10 @@ takes any 30.x.
 - [x] **Wakeup order and focus reports.** Upstream: the host clears its
       flag before `RenderState::update` (#2053), and `Surface::set_focus`
       reports focus (#2051).
-- [~] **3. Reflow.** `lu-zero/rio` branch `for-rune-term`: Rio main plus
-      our prompt and resize commits. A multi-line bash prompt survives a width
+- [~] **3. Reflow.** `lu-zero/rio` branch `for-rune-term`: Rio main at
+      `e7c05e43` plus our prompt and resize commits, the only rio-vt fixes
+      still needed; neither has an upstream issue or PR. A multi-line bash
+      prompt survives a width
       change only with OSC 133 marks, from `rune-term shell-integration bash`
       or `zsh`. `preserve_scrollback` is still false on macOS in the plan.
 

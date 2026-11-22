@@ -38,14 +38,21 @@ when the program is not installed.
 
 ## Crates
 
-- `term-grid`: the cell pass and the atlas. No Rune and no librio.
+- `term-atlas`: the CPU glyph atlas, sprites, faces and fallback. No rendering
+  backend, no Rune and no Rio.
+- `term-font`: system font discovery and colour glyph rasterization. No Rune
+  and no Rio.
+- `term-font-data-*`: the zstd-compressed bundled faces read by `term-atlas`.
+- `term-grid`: the wgpu cell pass over `term-atlas` pixels. No Rune and no Rio.
 - `term-vt`: librio's host layer without the C ABI; the app's terminal state.
+  It needs Rio's unreleased 0.6.0 fixes, so it is not on crates.io yet.
 - `term-input`: physical keys to `term_input::KeyEvent`, and cell hit testing. No
   window types.
 - `term-mux`: tmux control mode and its layouts, in cells.
 - `term-roam`: the QUIC link between rune-term and rune-term-agent.
+- `term-host`: generic terminal state and input delivery. No Rune.
 - `term-control`: the IPC protocol `rune-term-ctl` speaks.
-- `rune-term-core`: the terminal component.
+- `rune-term-core`: the Rune adapter over `term-host`; Rune-side conversions.
 - `color-picker`, `font-picker`: settings widgets.
 - `rune-term`: the binary.
 - `rune-term-ctl`: the control command line.

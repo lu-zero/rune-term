@@ -3,7 +3,7 @@
 
 use winnow_args::{report, Args, Subcommand};
 
-/// A terminal emulator built on Rune and librio.
+/// A terminal emulator built on Rune and term-vt.
 #[derive(Args, Debug)]
 #[arg(multicall, name = "rune-term")]
 pub struct RuneTerm {

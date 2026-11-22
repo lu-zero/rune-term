@@ -48,6 +48,12 @@ A build with no bundled fonts uses any installed font, preferring a monospaced
 one, and names the family it chose. With no font at all, it exits with a link
 to download one instead of drawing an empty window.
 
+The reusable pieces are on crates.io: `term-font` (font discovery and colour
+glyphs), `term-atlas` (the CPU glyph atlas, sprites and fallback) and the
+zstd-compressed `term-font-data-*` faces. `term-atlas 0.1.1` can build a face
+from bytes or a file path. The rest waits on Rune and Rio releases or on name
+collisions; 0.0.1 placeholders hold the names.
+
 Dependencies, features and the crates: [`docs/building.md`](./docs/building.md).
 The patched Rune and Rio branches it builds against are in
 [`docs/todo/status.md`](./docs/todo/status.md).
@@ -71,8 +77,9 @@ network, as mosh does: [`docs/agent.md`](./docs/agent.md).
 
 ## License
 
-MIT. Maple Mono NF, vendored in `term-grid/` as the default face, is SIL OFL 1.1.
-Cascadia Code NF is bundled as a second selectable face.
+MIT. Maple Mono NF (the default face) and Cascadia Code NF (a second selectable
+face) are SIL OFL 1.1, shipped zstd-compressed in the `term-font-data-*` crates
+and decoded by `term-font` and `term-atlas`.
 The fallback subset is a renamed merge of Maple Mono NF CN and NF KR under the same
-license, shipped zstd-compressed in the `term-font-data-*` crates.
+license, shipped in the same way.
 `term-font`'s COLR parser is adapted from Rune (MIT, Copyright 2026 Anomaly).
