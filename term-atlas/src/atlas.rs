@@ -1046,7 +1046,7 @@ impl Atlas {
 
     fn alloc_impl(&mut self, cells: u8, color: bool) -> Option<(u32, u32)> {
         let need = u32::from(cells.max(1));
-        let (size, cols, cursor) = if color {
+        let (size, cols, mut cursor) = if color {
             (COLOR_ATLAS_SIZE, self.color_cols, self.color_cursor)
         } else {
             (ATLAS_SIZE, self.cols, self.cursor)
@@ -1057,12 +1057,7 @@ impl Atlas {
             let col = cursor % cols;
             let row = cursor / cols;
             if col + need > cols {
-                let next = row.saturating_add(1).saturating_mul(cols);
-                if color {
-                    self.color_cursor = next;
-                } else {
-                    self.cursor = next;
-                }
+                cursor = row.saturating_add(1).saturating_mul(cols);
                 continue;
             }
             let origin_x = col * cell_w;
@@ -1070,11 +1065,11 @@ impl Atlas {
             if origin_y + cell_h > size || origin_x + need * cell_w > size {
                 return None;
             }
-            let next = cursor + need;
+            cursor += need;
             if color {
-                self.color_cursor = next;
+                self.color_cursor = cursor;
             } else {
-                self.cursor = next;
+                self.cursor = cursor;
             }
             return Some((origin_x, origin_y));
         }
@@ -1498,6 +1493,29 @@ fn stamp(pixels: &mut [u8], origin: (u32, u32), x: u32, y: u32, sample: u8) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_wide_glyph_at_the_last_column_wraps_without_reclaiming() {
+        let mut atlas = Atlas::with_cell(18, 38);
+        for color in [false, true] {
+            let cols = (ATLAS_SIZE / 18).max(1);
+            let cursor = if color {
+                &mut atlas.color_cursor
+            } else {
+                &mut atlas.cursor
+            };
+            for _ in 0..cols + 2 {
+                if *cursor % cols == cols - 1 {
+                    break;
+                }
+                *cursor += 1;
+            }
+            assert_eq!(*cursor % cols, cols - 1);
+            let at = atlas.alloc_impl(2, color).expect("wrapped slot");
+            assert_eq!(at.0, 0, "the wrap starts a new row");
+            assert!(!atlas.needs_reset, "a wide glyph must not empty the caches");
+        }
+    }
 
     #[cfg(feature = "bundled-font")]
     #[test]
