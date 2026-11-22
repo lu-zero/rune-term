@@ -10,9 +10,9 @@ mod tests {
     use crate::delegate;
     use crate::grid_source::SurfaceGrid;
     use crate::model;
-    use librio::Modifiers;
     use rune_term_core::hyperlink::{open_decision, resolve, tint, OpenDecision};
     use term_grid::GridSource;
+    use term_vt::Modifiers;
 
     fn host() -> crate::model::Model {
         let mut model = model::init();

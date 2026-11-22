@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use librio::Engine;
 use rune::AppHandle;
+use term_vt::Engine;
 
 use crate::chrome::{Leaf, LeafId, Node, Tab, TabGroup, LEAF, PANE_MARK};
 use crate::delegate::{self, Shared};

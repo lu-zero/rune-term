@@ -3,8 +3,8 @@
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
-use librio::SurfaceId;
 use term_grid::{Face, GridRenderer};
+use term_vt::SurfaceId;
 
 use crate::grid_source::SurfaceGrid;
 use crate::hyperlink::{self, HoverLink};

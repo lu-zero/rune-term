@@ -2,7 +2,6 @@
 
 use std::collections::HashMap;
 
-use librio::SurfaceId;
 use rune::compose::DeviceKey;
 #[cfg(all(unix, feature = "pty"))]
 use rune::fast_exit;
@@ -11,6 +10,7 @@ use rune::{App, AppSpec, Compositor, Frame, Titlebar, Tx};
 use rune_term_core::terminal::PaneGrid;
 use term_grid::images::ImageBucket;
 use term_grid::{DrawSlot, GridRenderer, SolidSlot};
+use term_vt::SurfaceId;
 
 use crate::chrome;
 use crate::delegate;

@@ -1,6 +1,6 @@
 # rune-term
 
-A terminal emulator. Rune owns the window, librio the VT and render state, and
+A terminal emulator. Rune owns the window, term-vt the VT and render state, and
 the cell grid is a wgpu pass on Rune's device. macOS first; tmux and rmux
 sessions are tab groups. The plan is in [`docs/todo/`](./docs/todo/).
 

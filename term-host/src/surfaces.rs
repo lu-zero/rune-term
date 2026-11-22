@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
-use librio::{RenderState, Surface, SurfaceId};
+use term_vt::{RenderState, Surface, SurfaceId};
 
 use crate::hyperlink::HoverLink;
 use crate::scrollback::ScrollbarState;

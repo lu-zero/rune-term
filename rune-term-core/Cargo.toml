@@ -12,7 +12,7 @@ path = "src/lib.rs"
 
 [dependencies]
 rune.workspace = true
-librio.workspace = true
+term-vt.workspace = true
 term-grid.workspace = true
 term-host.workspace = true
 term-input.workspace = true
@@ -28,5 +28,5 @@ font-fallback-common = ["term-grid/fallback-common"]
 font-fallback-ja = ["term-grid/fallback-ja"]
 font-fallback-zh-full = ["term-grid/fallback-zh-full"]
 font-cascadia = ["term-grid/cascadia"]
-pty = ["librio/graphics"]
-graphics = ["librio/graphics"]
+pty = ["term-vt/graphics"]
+graphics = ["term-vt/graphics"]

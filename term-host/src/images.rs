@@ -1,7 +1,7 @@
 //! Kitty image rendering.
 
-use librio::RenderState;
 use term_grid::images::{ImageBucket, ImageInfo, ImagePass, ImagePlacement, ImageProvider};
+use term_vt::RenderState;
 use wgpu::{Device, Queue, RenderPass, TextureFormat};
 
 pub struct Images {

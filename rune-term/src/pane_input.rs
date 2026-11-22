@@ -541,7 +541,7 @@ mod tests {
         assert!(model.shared.take_output().is_empty());
     }
 
-    fn leaf_surface(model: &Model, index: usize) -> librio::SurfaceId {
+    fn leaf_surface(model: &Model, index: usize) -> term_vt::SurfaceId {
         let crate::chrome::Node::Leaf(leaf) = &model.tabs[index].root else {
             panic!("tab {index} is not one shell");
         };
@@ -1010,7 +1010,7 @@ mod tests {
         x: f32,
         y: f32,
         clicks: u32,
-        mods: librio::Modifiers,
+        mods: term_vt::Modifiers,
     ) -> core_terminal::LinkAction {
         let mark = model
             .terminal
@@ -1046,9 +1046,16 @@ mod tests {
             .surface
             .inject_output(b"HELLO WORLD");
         // Pitch is 10. Column 0's left half, then column 4's right half.
-        gesture_at(model, Phase::Down, 1.0, 1.0, 1, librio::Modifiers::empty());
-        gesture_at(model, Phase::Move, 47.0, 1.0, 1, librio::Modifiers::empty());
-        gesture_at(model, Phase::Up, 47.0, 1.0, 1, librio::Modifiers::empty());
+        gesture_at(model, Phase::Down, 1.0, 1.0, 1, term_vt::Modifiers::empty());
+        gesture_at(
+            model,
+            Phase::Move,
+            47.0,
+            1.0,
+            1,
+            term_vt::Modifiers::empty(),
+        );
+        gesture_at(model, Phase::Up, 47.0, 1.0, 1, term_vt::Modifiers::empty());
     }
 
     #[test]
@@ -1083,7 +1090,7 @@ mod tests {
             11.0,
             1.0,
             2,
-            librio::Modifiers::empty(),
+            term_vt::Modifiers::empty(),
         );
         gesture_at(
             &mut model,
@@ -1091,7 +1098,7 @@ mod tests {
             11.0,
             1.0,
             2,
-            librio::Modifiers::empty(),
+            term_vt::Modifiers::empty(),
         );
         let text = model
             .terminal
@@ -1120,7 +1127,7 @@ mod tests {
             11.0,
             1.0,
             3,
-            librio::Modifiers::empty(),
+            term_vt::Modifiers::empty(),
         );
         gesture_at(
             &mut model,
@@ -1128,7 +1135,7 @@ mod tests {
             11.0,
             1.0,
             3,
-            librio::Modifiers::empty(),
+            term_vt::Modifiers::empty(),
         );
         let text = model
             .terminal
@@ -1156,7 +1163,7 @@ mod tests {
             55.0,
             1.0,
             1,
-            librio::Modifiers::empty(),
+            term_vt::Modifiers::empty(),
         );
         gesture_at(
             &mut model,
@@ -1164,7 +1171,7 @@ mod tests {
             1.0,
             1.0,
             1,
-            librio::Modifiers::empty(),
+            term_vt::Modifiers::empty(),
         );
         let text = model
             .terminal
@@ -1192,7 +1199,7 @@ mod tests {
             1.0,
             1.0,
             1,
-            librio::Modifiers::empty(),
+            term_vt::Modifiers::empty(),
         );
         gesture_at(
             &mut model,
@@ -1200,7 +1207,7 @@ mod tests {
             21.0,
             1.0,
             1,
-            librio::Modifiers::empty(),
+            term_vt::Modifiers::empty(),
         );
         assert!(model
             .terminal
@@ -1228,7 +1235,7 @@ mod tests {
             1.0,
             1.0,
             1,
-            librio::Modifiers::SHIFT,
+            term_vt::Modifiers::SHIFT,
         );
         gesture_at(
             &mut model,
@@ -1236,7 +1243,7 @@ mod tests {
             47.0,
             1.0,
             1,
-            librio::Modifiers::SHIFT,
+            term_vt::Modifiers::SHIFT,
         );
         let text = model
             .terminal
@@ -1261,9 +1268,9 @@ mod tests {
             host.render.update();
         }
         let mods = if cfg!(target_os = "macos") {
-            librio::Modifiers::SUPER
+            term_vt::Modifiers::SUPER
         } else {
-            librio::Modifiers::CTRL
+            term_vt::Modifiers::CTRL
         };
         assert_eq!(
             gesture_at(&mut model, Phase::Down, 1.0, 1.0, 1, mods),
@@ -1644,9 +1651,9 @@ mod tests {
             host.render.update();
         }
         let mods = if cfg!(target_os = "macos") {
-            librio::Modifiers::SUPER
+            term_vt::Modifiers::SUPER
         } else {
-            librio::Modifiers::CTRL
+            term_vt::Modifiers::CTRL
         };
         gesture_at(&mut model, Phase::Down, 1.0, 1.0, 1, mods);
         assert_eq!(model.pending_link_open.as_deref(), Some("file:///tmp/x"));
@@ -1695,7 +1702,7 @@ mod tests {
             .unwrap()
             .surface
             .inject_output(b"HELLO WORLD\x1b[?1000h\x1b[?1006h");
-        let mods = librio::Modifiers::empty();
+        let mods = term_vt::Modifiers::empty();
         gesture_at(&mut model, Phase::Down, 1.0, 1.0, 1, mods);
         assert_eq!(model.terminal.primary().unwrap().pointer_button, Some(0));
         assert!(!model.terminal.primary().unwrap().selecting);
@@ -1733,7 +1740,7 @@ mod tests {
             1.0,
             1.0,
             1,
-            librio::Modifiers::empty(),
+            term_vt::Modifiers::empty(),
         );
         gesture_at(
             &mut model,
@@ -1741,7 +1748,7 @@ mod tests {
             47.0,
             1.0,
             1,
-            librio::Modifiers::empty(),
+            term_vt::Modifiers::empty(),
         );
         gesture_at(
             &mut model,
@@ -1749,7 +1756,7 @@ mod tests {
             5000.0,
             5000.0,
             1,
-            librio::Modifiers::empty(),
+            term_vt::Modifiers::empty(),
         );
         gesture_at(
             &mut model,
@@ -1757,7 +1764,7 @@ mod tests {
             5000.0,
             5000.0,
             1,
-            librio::Modifiers::empty(),
+            term_vt::Modifiers::empty(),
         );
         let text = model
             .terminal

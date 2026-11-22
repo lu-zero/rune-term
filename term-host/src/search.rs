@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use librio::{RenderState, Surface};
 use term_grid::{CellSample, CursorSample, GridSource};
+use term_vt::{RenderState, Surface};
 
 use crate::theme::Palette;
 

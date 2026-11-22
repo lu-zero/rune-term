@@ -3,8 +3,8 @@
 
 use std::ops::Range;
 
-use librio::SurfaceId;
 use rune::Tx;
+use term_vt::SurfaceId;
 
 use crate::chrome::{Leaf, LeafId, Node, Tab, TabGroupId};
 use crate::closing::{self, Close};

@@ -2,13 +2,13 @@
 
 use std::sync::Arc;
 
-use librio::{AnsiColor, NamedColor, Square, Style, StyleFlags, TermColors};
 use term_grid::{CellSample, CursorSample, GridSource};
+use term_vt::{AnsiColor, NamedColor, Square, Style, StyleFlags, TermColors};
 
 use crate::theme::Palette;
 
 pub struct SurfaceGrid<'a> {
-    pub render: &'a mut librio::RenderState,
+    pub render: &'a mut term_vt::RenderState,
     pub palette: Arc<Palette>,
 }
 

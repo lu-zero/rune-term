@@ -10,8 +10,8 @@ use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time::Duration;
 
-use librio::{Surface, SurfaceDesc, SurfaceId};
 use teletypewriter::Pty;
+use term_vt::{Surface, SurfaceDesc, SurfaceId};
 
 use crate::delegate::Shared;
 
@@ -294,7 +294,7 @@ mod tests {
     #[test]
     fn an_adopted_link_answers_a_shell_line_through_the_adopted_master() {
         let shared = Shared::new();
-        let engine = librio::Engine::new(shared.delegate());
+        let engine = term_vt::Engine::new(shared.delegate());
         let desc = SurfaceDesc {
             shell: Some("/bin/sh".to_owned()),
             args: vec![
@@ -316,7 +316,7 @@ mod tests {
             .expect("the adopted link");
         assert!(adopted.is_adopted());
         adopted.write(b"hi\r");
-        let mut render = librio::RenderState::new(&surface);
+        let mut render = term_vt::RenderState::new(&surface);
         assert!(within(5, || {
             render.update();
             (0..render.lines()).any(|line| render.text_row(line).contains("got:hi"))

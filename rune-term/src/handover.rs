@@ -242,14 +242,14 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("rune-term-keepers-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         let shared = delegate::Shared::new();
-        let engine = librio::Engine::new(shared.delegate());
-        let desc = librio::SurfaceDesc {
+        let engine = term_vt::Engine::new(shared.delegate());
+        let desc = term_vt::SurfaceDesc {
             shell: Some("/bin/sh".to_owned()),
             args: vec![
                 "-c".to_owned(),
                 r#"read line; printf 'got:%s' "$line""#.to_owned(),
             ],
-            ..librio::SurfaceDesc::default()
+            ..term_vt::SurfaceDesc::default()
         };
         let surface = std::sync::Arc::new(engine.create_surface(&desc).expect("create surface"));
         let mut link = crate::link::PtyLink::spawn(
@@ -268,7 +268,7 @@ mod tests {
             .fd
             .write_all(b"hi\r")
             .expect("write the adopted master");
-        let mut render = librio::RenderState::new(&surface);
+        let mut render = term_vt::RenderState::new(&surface);
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
         loop {
             render.update();

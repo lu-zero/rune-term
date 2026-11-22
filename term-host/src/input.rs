@@ -44,17 +44,17 @@ pub fn edge_cell(local: f32, pitch: f32, count: u16) -> u16 {
     }
 }
 
-/// The first half of the cell is [`librio::Side::Left`]. A backwards drag
+/// The first half of the cell is [`term_vt::Side::Left`]. A backwards drag
 /// can include column 0 because the side follows the pointer.
-pub fn side_at(x: f32, col: u16, pitch: f32) -> librio::Side {
+pub fn side_at(x: f32, col: u16, pitch: f32) -> term_vt::Side {
     if pitch.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) {
-        return librio::Side::Left;
+        return term_vt::Side::Left;
     }
     let into = x - f32::from(col) * pitch;
     if into >= pitch * 0.5 {
-        librio::Side::Right
+        term_vt::Side::Right
     } else {
-        librio::Side::Left
+        term_vt::Side::Left
     }
 }
 

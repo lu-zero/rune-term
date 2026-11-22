@@ -1,8 +1,8 @@
 //! A close that would end a running program asks first. A shell at its prompt
 //! closes without asking, as in WezTerm.
 
-use librio::SurfaceId;
 use rune::Tx;
+use term_vt::SurfaceId;
 
 use crate::chrome::TabGroupId;
 use crate::model::Model;

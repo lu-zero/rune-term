@@ -39,7 +39,8 @@ when the program is not installed.
 ## Crates
 
 - `term-grid`: the cell pass and the atlas. No Rune and no librio.
-- `term-input`: physical keys to `librio::KeyEvent`, and cell hit testing. No
+- `term-vt`: librio's host layer without the C ABI; the app's terminal state.
+- `term-input`: physical keys to `term_input::KeyEvent`, and cell hit testing. No
   window types.
 - `term-mux`: tmux control mode and its layouts, in cells.
 - `term-roam`: the QUIC link between rune-term and rune-term-agent.

@@ -2,8 +2,8 @@
 
 use std::sync::Arc;
 
-use librio::{SelectionKind, ViewportSelection};
 use term_grid::{CellSample, CursorSample, GridSource};
+use term_vt::{SelectionKind, ViewportSelection};
 
 use crate::grid_source::SurfaceGrid;
 use crate::theme::Palette;

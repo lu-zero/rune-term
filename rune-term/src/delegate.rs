@@ -5,8 +5,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 
-use librio::{Action, ClipboardType, RenderState, SurfaceDelegate, SurfaceDesc, SurfaceId};
 use rune::{Tx, Waker};
+use term_vt::{Action, ClipboardType, RenderState, SurfaceDelegate, SurfaceDesc, SurfaceId};
 
 use crate::chrome::PANE_MARK;
 use crate::model::Model;
@@ -528,7 +528,7 @@ pub(crate) fn open_bare(
     cols: u16,
     rows: u16,
     desc: &SurfaceDesc,
-) -> Arc<librio::Surface> {
+) -> Arc<term_vt::Surface> {
     let flag = Arc::new(AtomicBool::new(false));
     let surface = Arc::new(model.engine.create_surface(desc).expect("create surface"));
     let id = surface.id();
@@ -868,9 +868,9 @@ mod pty_tests {
     use super::*;
     use std::time::{Duration, Instant};
 
-    fn shell(script: &str) -> (Arc<Shared>, librio::Engine, Arc<librio::Surface>) {
+    fn shell(script: &str) -> (Arc<Shared>, term_vt::Engine, Arc<term_vt::Surface>) {
         let shared = Shared::new();
-        let engine = librio::Engine::new(shared.delegate());
+        let engine = term_vt::Engine::new(shared.delegate());
         let desc = SurfaceDesc {
             shell: Some("/bin/sh".to_owned()),
             args: vec!["-c".to_owned(), script.to_owned()],

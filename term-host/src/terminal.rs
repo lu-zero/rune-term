@@ -2,9 +2,9 @@
 
 use std::sync::Arc;
 
-use librio::SurfaceId;
 use term_grid::GridRenderer;
 use term_input::Mods;
+use term_vt::SurfaceId;
 
 use crate::hyperlink::HoverLink;
 use crate::images::Images;

@@ -37,8 +37,8 @@ mod tests {
     use crate::delegate;
     use crate::grid_source::SurfaceGrid;
     use crate::model;
-    use librio::{SelectionKind, Side};
     use term_grid::GridSource;
+    use term_vt::{SelectionKind, Side};
 
     fn host() -> crate::model::Model {
         let mut model = model::init();

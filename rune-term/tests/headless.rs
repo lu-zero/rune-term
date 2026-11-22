@@ -91,11 +91,11 @@ fn an_unsized_shell_leaves_the_pane_empty() {
     let mut images = rune_term_core::images::Images::new(&gpu.device, format);
     let palette = rune_term_core::theme::default_palette();
 
-    let engine = librio::Engine::new(std::sync::Arc::new(NullDelegate));
+    let engine = term_vt::Engine::new(std::sync::Arc::new(NullDelegate));
     let surface = engine
-        .create_surface(&librio::SurfaceDesc::default())
+        .create_surface(&term_vt::SurfaceDesc::default())
         .expect("surface");
-    let render = librio::RenderState::new(&surface);
+    let render = term_vt::RenderState::new(&surface);
     let mut host = rune_term_core::surfaces::HostSurface {
         surface: std::sync::Arc::new(surface),
         render,
@@ -157,15 +157,15 @@ fn every_pane_on_screen_fills_its_own_grid() {
     let gpu = rune::render::Gpu::headless();
     let format = wgpu::TextureFormat::Rgba8Unorm;
     let mut images = rune_term_core::images::Images::new(&gpu.device, format);
-    let engine = librio::Engine::new(std::sync::Arc::new(NullDelegate));
+    let engine = term_vt::Engine::new(std::sync::Arc::new(NullDelegate));
     let mut terminal = rune_term_core::terminal::Terminal::new(String::new());
     let mut ids = Vec::new();
     for mark in 1..=2 {
         let surface = engine
-            .create_surface(&librio::SurfaceDesc::default())
+            .create_surface(&term_vt::SurfaceDesc::default())
             .expect("surface");
         surface.inject_output(b"pane");
-        let render = librio::RenderState::new(&surface);
+        let render = term_vt::RenderState::new(&surface);
         ids.push(surface.id());
         terminal.insert(rune_term_core::surfaces::HostSurface {
             surface: std::sync::Arc::new(surface),
@@ -219,17 +219,17 @@ fn every_pane_on_screen_fills_its_own_grid() {
 
 struct NullDelegate;
 
-impl librio::SurfaceDelegate for NullDelegate {
-    fn wakeup(&self, _surface: librio::SurfaceId) {}
-    fn action(&self, _surface: librio::SurfaceId, _action: librio::Action) {}
+impl term_vt::SurfaceDelegate for NullDelegate {
+    fn wakeup(&self, _surface: term_vt::SurfaceId) {}
+    fn action(&self, _surface: term_vt::SurfaceId, _action: term_vt::Action) {}
     fn clipboard_write(
         &self,
-        _surface: librio::SurfaceId,
-        _kind: librio::ClipboardType,
+        _surface: term_vt::SurfaceId,
+        _kind: term_vt::ClipboardType,
         _text: String,
     ) {
     }
-    fn close_surface(&self, _surface: librio::SurfaceId) {}
+    fn close_surface(&self, _surface: term_vt::SurfaceId) {}
 }
 
 fn bytes(color: Color) -> [u8; 3] {

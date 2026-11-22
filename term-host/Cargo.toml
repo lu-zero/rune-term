@@ -7,7 +7,7 @@ publish.workspace = true
 description = "Generic terminal host state and input delivery. No Rune and no librio frontend."
 
 [dependencies]
-librio.workspace = true
+term-vt.workspace = true
 term-grid.workspace = true
 term-input.workspace = true
 wgpu.workspace = true

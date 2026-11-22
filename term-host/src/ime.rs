@@ -244,15 +244,15 @@ pub fn set_preedit(preedit: &mut Option<Preedit>, text: String, cursor: Option<(
     }
 }
 
-pub fn commit_text(surface: &librio::Surface, text: &str) -> bool {
+pub fn commit_text(surface: &term_vt::Surface, text: &str) -> bool {
     if text.is_empty() {
         return false;
     }
-    let event = librio::KeyEvent {
-        action: librio::KeyAction::Press,
+    let event = term_vt::KeyEvent {
+        action: term_vt::KeyAction::Press,
         key: None,
-        mods: librio::Modifiers::empty(),
-        consumed_mods: librio::Modifiers::empty(),
+        mods: term_vt::Modifiers::empty(),
+        consumed_mods: term_vt::Modifiers::empty(),
         text: Some(text.to_owned()),
         composing: false,
     };

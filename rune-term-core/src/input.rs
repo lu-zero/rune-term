@@ -2,8 +2,8 @@
 
 pub use term_host::input::*;
 
-use librio::Modifiers;
 use rune::{Key, Mods, PhysicalKeyCode, PointerButton};
+use term_vt::Modifiers;
 
 pub fn button_code(button: PointerButton) -> Option<u8> {
     match button {
@@ -14,7 +14,7 @@ pub fn button_code(button: PointerButton) -> Option<u8> {
     }
 }
 
-/// The host's generic modifier set as librio modifiers.
+/// The host's generic modifier set as term-vt modifiers.
 pub fn host_modifiers(mods: term_input::Mods) -> Modifiers {
     let mut out = Modifiers::empty();
     if mods.shift {

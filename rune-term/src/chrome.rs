@@ -904,7 +904,7 @@ mod tests {
         assert!(label[0] < tab[0], "the group label comes first");
     }
 
-    fn order(rt: &Runtime<Model>) -> Vec<librio::SurfaceId> {
+    fn order(rt: &Runtime<Model>) -> Vec<term_vt::SurfaceId> {
         rt.state
             .tabs
             .iter()

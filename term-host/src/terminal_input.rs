@@ -5,7 +5,7 @@ use crate::input;
 use crate::input::Phase;
 use crate::selection;
 use crate::surfaces::HostSurface;
-use librio::Modifiers;
+use term_vt::Modifiers;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LinkAction {
@@ -252,11 +252,11 @@ pub fn deliver_mapped_key(host: &mut HostSurface, mapped: &term_input::KeyEvent)
     if mapped.key.is_none() && mapped.text.is_none() {
         return false;
     }
-    let event = librio::KeyEvent {
+    let event = term_vt::KeyEvent {
         action: match mapped.action {
-            term_input::KeyAction::Press => librio::KeyAction::Press,
-            term_input::KeyAction::Repeat => librio::KeyAction::Repeat,
-            term_input::KeyAction::Release => librio::KeyAction::Release,
+            term_input::KeyAction::Press => term_vt::KeyAction::Press,
+            term_input::KeyAction::Repeat => term_vt::KeyAction::Repeat,
+            term_input::KeyAction::Release => term_vt::KeyAction::Release,
         },
         key: mapped.key.map(key),
         mods: mods(mapped.mods),
@@ -267,50 +267,50 @@ pub fn deliver_mapped_key(host: &mut HostSurface, mapped: &term_input::KeyEvent)
     host.surface.key(&event)
 }
 
-fn key(key: term_input::Key) -> librio::Key {
+fn key(key: term_input::Key) -> term_vt::Key {
     use term_input::Key as K;
     match key {
-        K::Char(c) => librio::Key::Char(c),
-        K::Enter => librio::Key::Enter,
-        K::Tab => librio::Key::Tab,
-        K::Backspace => librio::Key::Backspace,
-        K::Escape => librio::Key::Escape,
-        K::Up => librio::Key::Up,
-        K::Down => librio::Key::Down,
-        K::Left => librio::Key::Left,
-        K::Right => librio::Key::Right,
-        K::Home => librio::Key::Home,
-        K::End => librio::Key::End,
-        K::PageUp => librio::Key::PageUp,
-        K::PageDown => librio::Key::PageDown,
-        K::Insert => librio::Key::Insert,
-        K::Delete => librio::Key::Delete,
-        K::F(n) => librio::Key::F(n),
-        K::CapsLock => librio::Key::CapsLock,
-        K::ShiftLeft => librio::Key::ShiftLeft,
-        K::ShiftRight => librio::Key::ShiftRight,
-        K::ControlLeft => librio::Key::ControlLeft,
-        K::ControlRight => librio::Key::ControlRight,
-        K::AltLeft => librio::Key::AltLeft,
-        K::AltRight => librio::Key::AltRight,
-        K::SuperLeft => librio::Key::SuperLeft,
-        K::SuperRight => librio::Key::SuperRight,
+        K::Char(c) => term_vt::Key::Char(c),
+        K::Enter => term_vt::Key::Enter,
+        K::Tab => term_vt::Key::Tab,
+        K::Backspace => term_vt::Key::Backspace,
+        K::Escape => term_vt::Key::Escape,
+        K::Up => term_vt::Key::Up,
+        K::Down => term_vt::Key::Down,
+        K::Left => term_vt::Key::Left,
+        K::Right => term_vt::Key::Right,
+        K::Home => term_vt::Key::Home,
+        K::End => term_vt::Key::End,
+        K::PageUp => term_vt::Key::PageUp,
+        K::PageDown => term_vt::Key::PageDown,
+        K::Insert => term_vt::Key::Insert,
+        K::Delete => term_vt::Key::Delete,
+        K::F(n) => term_vt::Key::F(n),
+        K::CapsLock => term_vt::Key::CapsLock,
+        K::ShiftLeft => term_vt::Key::ShiftLeft,
+        K::ShiftRight => term_vt::Key::ShiftRight,
+        K::ControlLeft => term_vt::Key::ControlLeft,
+        K::ControlRight => term_vt::Key::ControlRight,
+        K::AltLeft => term_vt::Key::AltLeft,
+        K::AltRight => term_vt::Key::AltRight,
+        K::SuperLeft => term_vt::Key::SuperLeft,
+        K::SuperRight => term_vt::Key::SuperRight,
     }
 }
 
-fn mods(mods: term_input::Modifiers) -> librio::Modifiers {
-    let mut out = librio::Modifiers::empty();
+fn mods(mods: term_input::Modifiers) -> term_vt::Modifiers {
+    let mut out = term_vt::Modifiers::empty();
     if mods.contains(term_input::Modifiers::SHIFT) {
-        out |= librio::Modifiers::SHIFT;
+        out |= term_vt::Modifiers::SHIFT;
     }
     if mods.contains(term_input::Modifiers::CTRL) {
-        out |= librio::Modifiers::CTRL;
+        out |= term_vt::Modifiers::CTRL;
     }
     if mods.contains(term_input::Modifiers::ALT) {
-        out |= librio::Modifiers::ALT;
+        out |= term_vt::Modifiers::ALT;
     }
     if mods.contains(term_input::Modifiers::SUPER) {
-        out |= librio::Modifiers::SUPER;
+        out |= term_vt::Modifiers::SUPER;
     }
     out
 }

@@ -259,9 +259,10 @@ What Rune still needs is [`rune/`](./rune/README.md).
 
 Until these land upstream, `[patch]` builds against forks: Rune and the crates
 it vendors (winit, parley_engine, the AccessKit adapters) from `lu-zero/rune`
-branch `physical-key-text`, rebased on Rune `dev` of 2026-11-18, and librio and
-teletypewriter from `lu-zero/rio` branch `rune-term-on-main`. wgpu is
-pinned at `=30.0.1`; Rune itself takes any 30.x.
+branch `physical-key-text`, rebased on Rune `dev` of 2026-11-18, and Rio's
+`rio-vt`, `rio-graphics`, `corcovado` and `teletypewriter` from
+`lu-zero/rio` branch `for-rune-term`. wgpu is pinned at `=30.0.1`; Rune itself
+takes any 30.x.
 
 - [x] **4. Rune paired text.** `PhysicalInput::Key` carries `text` and
       `consumed_mods` on `lu-zero/rune` branch `physical-key-text`.
@@ -274,7 +275,7 @@ pinned at `=30.0.1`; Rune itself takes any 30.x.
 - [x] **Wakeup order and focus reports.** Upstream: the host clears its
       flag before `RenderState::update` (#2053), and `Surface::set_focus`
       reports focus (#2051).
-- [~] **3. Reflow.** `lu-zero/rio` branch `rune-term-on-main`: Rio main plus
+- [~] **3. Reflow.** `lu-zero/rio` branch `for-rune-term`: Rio main plus
       our prompt and resize commits. A multi-line bash prompt survives a width
       change only with OSC 133 marks, from `rune-term shell-integration bash`
       or `zsh`. `preserve_scrollback` is still false on macOS in the plan.

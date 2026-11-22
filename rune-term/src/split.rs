@@ -2,7 +2,7 @@
 //! resize one cell at a time, left or top first, and will not take a leaf's
 //! last cell.
 
-use librio::SurfaceId;
+use term_vt::SurfaceId;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct LeafId(pub u32);

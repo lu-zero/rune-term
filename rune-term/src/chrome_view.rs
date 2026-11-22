@@ -33,7 +33,7 @@ pub fn area(model: &Model, cx: &mut Cx<Model>) -> El {
 
 /// Each pane on screen: its effect mark and the surface it shows. A lone leaf
 /// is the one pane at [`PANE_MARK`], showing the selected shell.
-pub fn visible(model: &Model) -> Vec<(u32, librio::SurfaceId)> {
+pub fn visible(model: &Model) -> Vec<(u32, term_vt::SurfaceId)> {
     let Some(root @ Node::Split { .. }) = model.tabs.get(model.active).map(|tab| &tab.root) else {
         return model
             .terminal
@@ -47,7 +47,7 @@ pub fn visible(model: &Model) -> Vec<(u32, librio::SurfaceId)> {
 }
 
 /// The surface created at startup belongs to the one leaf.
-pub fn attach_initial(model: &mut Model, id: librio::SurfaceId) {
+pub fn attach_initial(model: &mut Model, id: term_vt::SurfaceId) {
     let Some(tab) = model.tabs.get_mut(model.active) else {
         return;
     };
@@ -466,7 +466,7 @@ fn layout_tree(model: &mut Model, slot: (f32, f32), scale: f32, tx: &mut Tx) {
 
 fn layout_leaf(
     model: &mut Model,
-    surface: librio::SurfaceId,
+    surface: term_vt::SurfaceId,
     slot: (f32, f32),
     scale: f32,
     tx: &mut Tx,
@@ -639,7 +639,7 @@ fn leaf_shape(node: &Node, id: LeafId) -> Option<(u16, u16, u32)> {
 }
 
 #[cfg_attr(any(not(test), feature = "pty"), allow(dead_code))]
-fn leaf_surface(node: &Node, id: LeafId) -> Option<librio::SurfaceId> {
+fn leaf_surface(node: &Node, id: LeafId) -> Option<term_vt::SurfaceId> {
     match node {
         Node::Leaf(leaf) if leaf.id == id => Some(leaf.surface),
         Node::Leaf(_) => None,

@@ -1,0 +1,25 @@
+[package]
+name = "term-vt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Terminal state and host transport for rune-term, extracted from librio. No C ABI and no Rune."
+
+[dependencies]
+bitflags.workspace = true
+rio-graphics.workspace = true
+rio-vt.workspace = true
+rustc-hash.workspace = true
+term-input.workspace = true
+tracing.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+teletypewriter = { workspace = true, optional = true }
+corcovado = { workspace = true, optional = true }
+
+[features]
+default = []
+# The app enables pty/graphics: a workspace-wide test must not unify them on.
+pty = ["rio-vt/pty", "dep:teletypewriter", "dep:corcovado"]
+graphics = ["rio-vt/graphics"]

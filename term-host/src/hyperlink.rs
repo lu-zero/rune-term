@@ -1,7 +1,7 @@
 //! Hyperlink types and helpers shared by the terminal component.
 
-use librio::Modifiers;
 use term_grid::{CellSample, CursorSample, GridSource};
+use term_vt::Modifiers;
 
 use crate::surfaces::HostSurface;
 
@@ -104,8 +104,8 @@ pub fn resolve(host: &HostSurface, line: usize, col: usize) -> Option<HoverLink>
 }
 
 pub fn resolve_surface(
-    surface: &librio::Surface,
-    render: &librio::RenderState,
+    surface: &term_vt::Surface,
+    render: &term_vt::RenderState,
     line: usize,
     col: usize,
 ) -> Option<HoverLink> {

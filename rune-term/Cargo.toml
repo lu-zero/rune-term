@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
-description = "Rune shell over librio."
+description = "Rune shell over term-vt."
 
 [lib]
 name = "rune_term"
@@ -23,7 +23,7 @@ term-roam.workspace = true
 rune.workspace = true
 font-picker.workspace = true
 rune-kit.workspace = true
-librio.workspace = true
+term-vt.workspace = true
 teletypewriter = { workspace = true, optional = true }
 libc = { workspace = true, optional = true }
 term-grid.workspace = true
@@ -48,10 +48,10 @@ pty = [
     "dep:teletypewriter",
     "dep:libc",
     "dep:rune-term-keeper",
-    "librio/graphics",
+    "term-vt/graphics",
     "rune-term-core/pty",
 ]
-graphics = ["librio/graphics", "rune-term-core/graphics"]
+graphics = ["term-vt/graphics", "rune-term-core/graphics"]
 
 [dev-dependencies]
 png.workspace = true

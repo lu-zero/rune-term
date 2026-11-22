@@ -15,10 +15,10 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use librio::{Surface, SurfaceDesc, SurfaceId};
 use rune::{PopupItem, PopupMenu, Tx};
 use term_mux::tmux::{self, Update, Window};
 use term_mux::Layout;
+use term_vt::{Surface, SurfaceDesc, SurfaceId};
 
 use crate::chrome::{Leaf, LeafId, Node, Tab, TabGroup, TabGroupId};
 use crate::closing::Close;
