@@ -6,20 +6,50 @@ use fontique::{
     Blob, Collection, CollectionOptions, FallbackKey, GenericFamily, QueryFamily, QueryStatus,
     Script, SourceCache, SourceCacheOptions,
 };
+use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hash, Hasher};
+use std::sync::{Mutex, OnceLock};
 
 pub mod color;
 pub mod data;
 
 /// A system font that covers a codepoint, with the face index inside its file.
+#[derive(Clone)]
 pub struct FallbackFont {
     pub data: Blob<u8>,
     pub index: u32,
 }
 
+/// The result of a font scan is stable for the life of the process. Cache by
+/// family and codepoint so a host with many novel cells does not rebuild a
+/// fontique collection for every one.
+type Discovered = HashMap<(u64, char), (Box<str>, Option<FallbackFont>)>;
+
+static DISCOVERED: OnceLock<Mutex<Discovered>> = OnceLock::new();
+
 /// Find an installed font covering `ch`, preferring `primary_family` and then
 /// monospace, UI and sans families before the platform's script fallbacks.
-/// Every miss is cached by the caller, so discovery runs once per codepoint.
+/// Both hits and misses are cached; the family string is kept to rule out a
+/// hash collision returning another family's font.
 pub fn discover(primary_family: &str, ch: char) -> Option<FallbackFont> {
+    let mut cache = DISCOVERED
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut hasher = DefaultHasher::new();
+    primary_family.hash(&mut hasher);
+    let key = (hasher.finish(), ch);
+    if let Some((known, hit)) = cache.get(&key) {
+        if known.as_ref() == primary_family {
+            return hit.clone();
+        }
+    }
+    let found = discover_uncached(primary_family, ch);
+    cache.insert(key, (primary_family.into(), found.clone()));
+    found
+}
+
+fn discover_uncached(primary_family: &str, ch: char) -> Option<FallbackFont> {
     let mut collection = Collection::new(CollectionOptions {
         shared: false,
         system_fonts: true,

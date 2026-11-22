@@ -65,9 +65,14 @@ pub fn face_cell_for(face: &Face, font_size: f32) -> (f32, f32) {
 }
 
 fn regular_coords(font: &FontRef<'_>) -> Vec<NormalizedCoord> {
-    font.variations()
-        .normalized_coords([("wght", 400.0)])
-        .collect()
+    let mut out = Vec::new();
+    regular_coords_into(font, &mut out);
+    out
+}
+
+fn regular_coords_into(font: &FontRef<'_>, out: &mut Vec<NormalizedCoord>) {
+    out.clear();
+    out.extend(font.variations().normalized_coords([("wght", 400.0)]));
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -115,6 +120,11 @@ pub struct Atlas {
     /// of the text and the cell count. The text is kept to rule out a hash
     /// collision returning another cluster's glyph.
     clusters: HashMap<u64, (Box<str>, Option<GlyphRect>)>,
+    /// Scratch buffers reused by cluster rasterization, so a miss does not
+    /// allocate a fresh slot bitmap and coordinate list each time.
+    cluster_color: Vec<u8>,
+    cluster_gray: Vec<u8>,
+    cluster_coords: Vec<NormalizedCoord>,
     /// Cached misses in `extra` and `clusters`.
     misses: usize,
     /// The next free slot in each atlas, and where a reset starts again.
@@ -258,6 +268,9 @@ impl Atlas {
             ascii,
             extra: HashMap::new(),
             clusters: HashMap::new(),
+            cluster_color: Vec::new(),
+            cluster_gray: Vec::new(),
+            cluster_coords: Vec::new(),
             misses: 0,
             color_cursor: 0,
             color_cols: (COLOR_ATLAS_SIZE / cell_w).max(1),
@@ -299,6 +312,9 @@ impl Atlas {
             ascii,
             extra: HashMap::new(),
             clusters: HashMap::new(),
+            cluster_color: Vec::new(),
+            cluster_gray: Vec::new(),
+            cluster_coords: Vec::new(),
             misses: 0,
             color_cursor: 0,
             color_cols: (COLOR_ATLAS_SIZE / cell.0).max(1),
@@ -431,13 +447,18 @@ impl Atlas {
         buffer.push_str(text);
         let shaped = rustybuzz::shape(&face, &[], buffer);
         let font = swash::FontRef::from_index(bytes, index as usize)?;
-        let coords = regular_coords(&font);
+        let mut coords = std::mem::take(&mut self.cluster_coords);
+        regular_coords_into(&font, &mut coords);
         let upem = f32::from(font.metrics(&coords).units_per_em.max(1));
         let scale = self.ppem / upem;
         let slot_w = u32::from(cells.max(1)) * self.cell.0;
         let slot_h = self.cell.1;
-        let mut color = vec![0u8; (slot_w * slot_h * 4) as usize];
-        let mut gray = vec![0u8; (slot_w * slot_h) as usize];
+        let mut color = std::mem::take(&mut self.cluster_color);
+        color.clear();
+        color.resize((slot_w * slot_h * 4) as usize, 0);
+        let mut gray = std::mem::take(&mut self.cluster_gray);
+        gray.clear();
+        gray.resize((slot_w * slot_h) as usize, 0);
         let mut has_color = false;
         let mut has_ink = false;
         let mut pen = 0.0f32;
@@ -446,7 +467,9 @@ impl Atlas {
             let x = pen + pos.x_offset as f32 * scale;
             let y = pos.y_offset as f32 * scale;
             pen += advance;
-            let gid = u16::try_from(info.glyph_id).ok()?;
+            let Ok(gid) = u16::try_from(info.glyph_id) else {
+                continue;
+            };
             if gid == 0 {
                 continue;
             }
@@ -499,52 +522,57 @@ impl Atlas {
             );
             has_ink = true;
         }
-        if !has_ink {
-            return None;
-        }
-        if has_color {
-            let origin = self.alloc_color(cells)?;
-            if self.color.is_empty() {
-                self.color = vec![0u8; (COLOR_ATLAS_SIZE * COLOR_ATLAS_SIZE * 4) as usize];
-            }
-            for row in 0..slot_h {
-                for col in 0..slot_w {
-                    let i = ((row * slot_w + col) * 4) as usize;
-                    let sample = [color[i], color[i + 1], color[i + 2], color[i + 3]];
-                    let sample = self.to_format(sample);
-                    stamp_color(&mut self.color, origin, col, row, sample);
+        let result = if !has_ink {
+            None
+        } else if has_color {
+            self.alloc_color(cells).map(|origin| {
+                if self.color.is_empty() {
+                    self.color = vec![0u8; (COLOR_ATLAS_SIZE * COLOR_ATLAS_SIZE * 4) as usize];
                 }
-            }
-            self.color_dirty = true;
-            Some(GlyphRect {
-                x: origin.0,
-                y: origin.1,
-                w: slot_w,
-                h: slot_h,
-                atlas: 1,
+                for row in 0..slot_h {
+                    for col in 0..slot_w {
+                        let i = ((row * slot_w + col) * 4) as usize;
+                        let sample = [color[i], color[i + 1], color[i + 2], color[i + 3]];
+                        let sample = self.to_format(sample);
+                        stamp_color(&mut self.color, origin, col, row, sample);
+                    }
+                }
+                self.color_dirty = true;
+                GlyphRect {
+                    x: origin.0,
+                    y: origin.1,
+                    w: slot_w,
+                    h: slot_h,
+                    atlas: 1,
+                }
             })
         } else {
-            let origin = self.alloc(cells)?;
-            for row in 0..slot_h {
-                for col in 0..slot_w {
-                    stamp(
-                        &mut self.pixels,
-                        origin,
-                        col,
-                        row,
-                        gray[(row * slot_w + col) as usize],
-                    );
+            self.alloc(cells).map(|origin| {
+                for row in 0..slot_h {
+                    for col in 0..slot_w {
+                        stamp(
+                            &mut self.pixels,
+                            origin,
+                            col,
+                            row,
+                            gray[(row * slot_w + col) as usize],
+                        );
+                    }
                 }
-            }
-            self.dirty = true;
-            Some(GlyphRect {
-                x: origin.0,
-                y: origin.1,
-                w: slot_w,
-                h: slot_h,
-                atlas: 0,
+                self.dirty = true;
+                GlyphRect {
+                    x: origin.0,
+                    y: origin.1,
+                    w: slot_w,
+                    h: slot_h,
+                    atlas: 0,
+                }
             })
-        }
+        };
+        self.cluster_color = color;
+        self.cluster_gray = gray;
+        self.cluster_coords = coords;
+        result
     }
 
     /// A stroke `cells` wide (1 or 2) where the face puts its underline, drawn under a cell.
