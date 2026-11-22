@@ -7,12 +7,13 @@ publish.workspace = true
 description = "Cell-grid wgpu pass for rune-term. No Rune and no Rio."
 
 [features]
-default = ["bundled-font", "fallback-common"]
+default = ["bundled-font", "fallback-common", "emoji-fallback"]
 # Forwarded to the CPU atlas; the wgpu renderer needs no font bytes itself.
 bundled-font = ["term-atlas/bundled-font"]
 fallback-common = ["term-atlas/fallback-common"]
 fallback-ja = ["term-atlas/fallback-ja"]
 fallback-zh-full = ["term-atlas/fallback-zh-full"]
+emoji-fallback = ["term-atlas/emoji-fallback"]
 cascadia = ["term-atlas/cascadia"]
 
 [dependencies]

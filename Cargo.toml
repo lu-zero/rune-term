@@ -39,7 +39,7 @@ font-picker = { path = "font-picker" }
 rune-term = { path = "rune-term", default-features = false }
 rune-term-core = { path = "rune-term-core", default-features = false }
 rune-term-keeper = { path = "rune-term-keeper" }
-term-atlas = { path = "term-atlas", version = "0.1.0", default-features = false }
+term-atlas = { path = "term-atlas", version = "0.1.5", default-features = false }
 term-control = { path = "term-control" }
 term-font = { path = "term-font", version = "0.1.2" }
 term-host = { path = "term-host", default-features = false }
