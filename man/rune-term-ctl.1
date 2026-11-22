@@ -1,0 +1,37 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH rune-term-ctl 1
+.SH NAME
+\fBrune\-term\-ctl\fR \- Control and inspect rune\-term (profiles, tabs, runtime state).
+.SH SYNOPSIS
+rune\-term\-ctl [OPTIONS] <COMMAND>
+.SH DESCRIPTION
+Control and inspect rune\-term (profiles, tabs, runtime state).
+.SH COMMANDS
+.TP
+\fBinfo\fR
+Print basic CLI/protocol information.
+.TP
+\fBprofiles\fR
+Inspect configured profiles.
+.TP
+\fBtabs\fR
+Inspect live tabs/panes (requires a running rune\-term control endpoint).
+.TP
+\fBhandover\fR
+Flip the running instance\*(Aqs handover on: its exit hands its shells to keepers.
+.SH OPTIONS
+.TP
+\fB\-\-json\fR
+Output machine\-readable JSON.
+.TP
+\fB\-\-socket\fR\fI <PATH>\fR
+Path to the control socket.
+.TP
+\fB\-h, \-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.TP
+\fB\-V, \-\-version\fR
+Print version
+.SH VERSION
+v0.1.0

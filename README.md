@@ -54,6 +54,9 @@ zstd-compressed `term-font-data-*` faces. `term-atlas 0.1.1` can build a face
 from bytes or a file path. The rest waits on Rune and Rio releases or on name
 collisions; 0.0.1 placeholders hold the names.
 
+The control CLI's generated reference is in [`docs/cli/`](./docs/cli/); `just
+docs-cli` regenerates it and the man pages in `man/`.
+
 Dependencies, features and the crates: [`docs/building.md`](./docs/building.md).
 The patched Rune and Rio branches it builds against are in
 [`docs/todo/status.md`](./docs/todo/status.md).

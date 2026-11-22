@@ -80,7 +80,8 @@ cargo test -p rune-term --no-default-features --test headless
 README.md, the docs pages and those images into `target/site-src`, then builds
 an mdBook into `target/site`; `just site-serve` previews it on port 3000. mdBook
 is needed (`cargo install mdbook`), and edits under `docs/` need a re-run of
-either site recipe.
+either site recipe. `just docs-cli` regenerates `docs/cli/` and `man/` from the
+`winnow-args` derive spec; commit both with CLI changes.
 
 ## The PTY handover
 

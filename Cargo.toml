@@ -88,7 +88,10 @@ tokio = { version = "1", features = ["io-util", "macros", "net", "process", "rt"
 toml = "0.8"
 ruzstd = "0.9"
 wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }
-winnow-args = { version = "0.6", default-features = false, features = ["derive", "help-text"] }
+winnow-args = { version = "0.6.4", default-features = false, features = ["derive", "help-text"] }
+winnow-args-man = "0.6.4"
+winnow-args-markdown = "0.6.4"
+winnow-args-spec = "0.6.4"
 
 [patch."https://github.com/anomalyco/rune"]
 rune = { git = "https://github.com/lu-zero/rune", branch = "physical-key-text" }

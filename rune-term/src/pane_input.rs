@@ -186,6 +186,7 @@ pub fn on_secondary_mark(
         .separator()
         .item(rune::PopupItem::new("search", "Search"))
         .item(rune::PopupItem::new("new-tab", "New Tab"))
+        .item(rune::PopupItem::new("edit-profile", "Edit Profile…"))
         .separator()
         .item(rune::PopupItem::new("split-right", "Split Right").key_equivalent(shortcut("cmd+d")))
         .item(
@@ -252,6 +253,15 @@ fn context_action(model: &mut Model, mark: u32, id: &str, tx: &mut Tx) {
             tx.copy(text);
         }
         "paste" => tx.request_paste(),
+        "edit-profile" => {
+            let name = model
+                .tabs
+                .get(model.active)
+                .map(|tab| tab.profile.clone())
+                .unwrap_or_else(|| model.config.default_profile_name().to_owned());
+            crate::settings_ui::open_profile(model, &name);
+            tx.live_only();
+        }
         "search" => crate::search::toggle(model),
         "new-tab" => {
             if !crate::mux::open_window(model) {
@@ -1342,6 +1352,27 @@ mod tests {
             model.menu_link.as_ref().map(|link| link.uri.as_str()),
             Some("https://example.com")
         );
+    }
+
+    #[test]
+    fn the_pane_menu_offers_edit_profile() {
+        let mut rt = Runtime::new(
+            host(),
+            crate::chrome::view,
+            (800.0, 500.0),
+            Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        let pane = rt
+            .elements()
+            .into_iter()
+            .find(|el| el.key.as_deref() == Some("pane"))
+            .expect("pane");
+        rt.secondary_down(pane.rect[0] + 2.0, pane.rect[1] + 2.0);
+        rt.secondary_up(pane.rect[0] + 2.0, pane.rect[1] + 2.0);
+        rt.frame(0.0);
+        rt.resolve_popup(Some("edit-profile"))
+            .expect("Edit Profile item");
     }
 
     #[test]

@@ -208,6 +208,29 @@ pub fn open(model: &mut Model) {
     }
 }
 
+/// Opens the settings window on the profiles tab with `name` selected. A pane
+/// whose profile is not configured falls back to the first row.
+pub fn open_profile(model: &mut Model, name: &str) {
+    let Some(handle) = &model.settings else {
+        return;
+    };
+    let name = name.to_owned();
+    handle.update(move |settings, tx| {
+        settings.tab = Tab::Profiles;
+        let index = settings
+            .config
+            .profiles
+            .keys()
+            .position(|key| key == &name)
+            .unwrap_or(0);
+        settings.selected = index;
+        settings.status = None;
+        reload_draft(settings);
+        tx.focus(row_key(settings, index), false);
+    });
+    handle.open();
+}
+
 /// Keys the window handles itself: its close chord, and the list's arrows. A
 /// focused field takes the arrows first.
 fn on_key(model: &mut SettingsModel, event: &KeyEvent, tx: &mut Tx) -> bool {

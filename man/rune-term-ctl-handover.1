@@ -1,0 +1,20 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH rune-term-ctl-handover 1
+.SH NAME
+\fBrune\-term\-ctl\-handover\fR \- Flip the running instance\*(Aqs handover on: its exit hands its shells to keepers.
+.SH SYNOPSIS
+rune\-term\-ctl handover [OPTIONS]
+.SH DESCRIPTION
+Flip the running instance\*(Aqs handover on: its exit hands its shells to keepers.
+.SH OPTIONS
+.TP
+\fB\-h, \-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.SH "GLOBAL OPTIONS"
+.TP
+\fB\-\-json\fR
+Output machine\-readable JSON.
+.TP
+\fB\-\-socket\fR\fI <PATH>\fR
+Path to the control socket.

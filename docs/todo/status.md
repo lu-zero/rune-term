@@ -113,7 +113,8 @@ The numbers are that plan's.
       Adaptive follows the desktop, either named variant pins one theme. A
       single theme offers Add Light/Dark counterpart, which copies it with the
       other appearance and pairs the two; a custom theme's Appearance field
-      flips the metadata.
+      flips the metadata. The pane menu's Edit Profile… opens the profiles tab
+      on the current pane's profile.
       Pictures: [`docs/config.md`](../config.md). Design:
       [`settings-profiles.md`](./settings-profiles.md). Follow-on:
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
@@ -189,7 +190,8 @@ These items extend [`rune-term.md`](./rune-term.md). Each links its design.
 - [~] **22. CLI, docs, and tooling.** CLI aligned with IPC using `winnow-args`,
       with generated man pages/reference docs; `justfile` for build/test/run and
       install across lean/fat/helper compositions. The CLI and the queries
-      above exist; generated docs and the compositions do not. Design:
+      above, and generated man pages/reference docs (`just docs-cli`) exist;
+      the lean/fat/helper install compositions do not. Design:
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
 - [~] **23. Multiplexer-backed sessions.** Explicit session concept and
       backend abstraction (local `term-vt` vs multiplexer), covering create /

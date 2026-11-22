@@ -114,6 +114,11 @@ site-serve host="localhost":
     python3 site/stage.py
     mdbook serve site --hostname {{host}}
 
+# Regenerate the CLI man pages and Markdown reference from the derive spec.
+docs-cli:
+    WINNOW_ARGS_SPEC="$(pwd)/target/spec" cargo check -p rune-term-ctl
+    cargo run -p rune-term-ctl --example generate-docs
+
 ci: check-all
 
 # The prompt marks as files to source, for every shell.

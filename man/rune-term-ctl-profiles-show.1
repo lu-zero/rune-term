@@ -1,0 +1,24 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH rune-term-ctl-profiles-show 1
+.SH NAME
+\fBrune\-term\-ctl\-profiles\-show\fR \- Show one profile by name.
+.SH SYNOPSIS
+rune\-term\-ctl profiles show [OPTIONS] <NAME>
+.SH DESCRIPTION
+Show one profile by name.
+.SH ARGUMENTS
+.TP
+\fB<NAME>\fR
+Profile name.
+.SH OPTIONS
+.TP
+\fB\-h, \-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.SH "GLOBAL OPTIONS"
+.TP
+\fB\-\-json\fR
+Output machine\-readable JSON.
+.TP
+\fB\-\-socket\fR\fI <PATH>\fR
+Path to the control socket.
