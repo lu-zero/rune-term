@@ -32,30 +32,57 @@ static DISCOVERED: OnceLock<Mutex<Discovered>> = OnceLock::new();
 /// Both hits and misses are cached; the family string is kept to rule out a
 /// hash collision returning another family's font.
 pub fn discover(primary_family: &str, ch: char) -> Option<FallbackFont> {
-    let mut cache = DISCOVERED
-        .get_or_init(Default::default)
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
     let mut hasher = DefaultHasher::new();
     primary_family.hash(&mut hasher);
     let key = (hasher.finish(), ch);
-    if let Some((known, hit)) = cache.get(&key) {
-        if known.as_ref() == primary_family {
-            return hit.clone();
+    {
+        let cache = DISCOVERED
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some((known, hit)) = cache.get(&key) {
+            if known.as_ref() == primary_family {
+                return hit.clone();
+            }
         }
     }
     let found = discover_uncached(primary_family, ch);
-    cache.insert(key, (primary_family.into(), found.clone()));
+    DISCOVERED
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(key, (primary_family.into(), found.clone()));
     found
 }
 
+/// One font collection and source cache for the life of the process: building
+/// either scans installed fonts, so doing it per codepoint costs tens of
+/// milliseconds per glyph on a first render of non-Latin text.
+struct Sources {
+    collection: Collection,
+    cache: SourceCache,
+}
+
+static SOURCES: OnceLock<Mutex<Sources>> = OnceLock::new();
+
+fn sources() -> &'static Mutex<Sources> {
+    SOURCES.get_or_init(|| {
+        Mutex::new(Sources {
+            collection: Collection::new(CollectionOptions {
+                shared: false,
+                system_fonts: true,
+            }),
+            cache: SourceCache::new(SourceCacheOptions::default()),
+        })
+    })
+}
+
 fn discover_uncached(primary_family: &str, ch: char) -> Option<FallbackFont> {
-    let mut collection = Collection::new(CollectionOptions {
-        shared: false,
-        system_fonts: true,
-    });
-    let mut cache = SourceCache::new(SourceCacheOptions::default());
-    let mut query = collection.query(&mut cache);
+    let mut sources = sources()
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let Sources { collection, cache } = &mut *sources;
+    let mut query = collection.query(cache);
     query.set_families([
         QueryFamily::Named(primary_family),
         QueryFamily::Generic(GenericFamily::Monospace),

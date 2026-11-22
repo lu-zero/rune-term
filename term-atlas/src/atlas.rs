@@ -793,7 +793,9 @@ impl Atlas {
             .context
             .builder(font)
             .size(scale.ppem)
-            .hint(true)
+            // Autohinting a fallback glyph rebuilds a cmap-derived style map;
+            // unhinted outlines are visually equivalent at cell sizes.
+            .hint(false)
             .normalized_coords(scale.coords.iter().copied())
             .build();
         let image = Render::new(&[Source::Outline]).render(&mut scaler, gid);
