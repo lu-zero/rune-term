@@ -41,7 +41,7 @@ rune-term-core = { path = "rune-term-core", default-features = false }
 rune-term-keeper = { path = "rune-term-keeper" }
 term-atlas = { path = "term-atlas", version = "0.1.0", default-features = false }
 term-control = { path = "term-control" }
-term-font = { path = "term-font", version = "0.1.1" }
+term-font = { path = "term-font", version = "0.1.2" }
 term-host = { path = "term-host", default-features = false }
 term-font-data-maple = { path = "term-font-data-maple", version = "0.1.0" }
 term-font-data-cascadia = { path = "term-font-data-cascadia", version = "0.1.0" }
