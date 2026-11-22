@@ -39,7 +39,9 @@ rules for coding agents.
   `term-grid` only uploads its `pixels()`/`color_pixels()` to wgpu. The color
   byte order is chosen at construction (RGBA for wgpu, ARGB for softbuffer).
   A glyph the profile's face misses is drawn from it before asking `term-font`
-  for a system font. `term-font` also rasterizes COLR v1 color glyphs; its
+  for a system font. Multi-codepoint clusters (flags, ZWJ emoji, modifiers)
+  are shaped with rustybuzz against the installed emoji face, then rasterized
+  by the same colour path. `term-font` also rasterizes COLR v1 color glyphs; its
   parser is adapted from Rune and lives outside `term-grid` so that crate
   stays free of Rune and Rio.
 - **Published**: `term-font`, `term-atlas` and the `term-font-data-*` faces are

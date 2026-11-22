@@ -59,6 +59,39 @@ pub fn fallback_bytes() -> &'static [Blob<u8>] {
     })
 }
 
+/// An installed emoji face, for shaping multi-codepoint clusters. Cached for
+/// the process: Apple's color emoji file is large enough that a scan per frame
+/// would be wasteful.
+pub(crate) fn emoji_font() -> Option<&'static (Blob<u8>, u32)> {
+    static EMOJI: OnceLock<Option<(Blob<u8>, u32)>> = OnceLock::new();
+    EMOJI
+        .get_or_init(|| {
+            let mut collection = Collection::new(CollectionOptions {
+                shared: false,
+                system_fonts: true,
+            });
+            for name in ["Apple Color Emoji", "Noto Color Emoji", "Segoe UI Emoji"] {
+                let Some(info) = collection.family_by_name(name) else {
+                    continue;
+                };
+                let Some(font) = info.match_font(
+                    FontWidth::NORMAL,
+                    FontStyle::Normal,
+                    FontWeight::NORMAL,
+                    false,
+                ) else {
+                    continue;
+                };
+                let Some(data) = font.load(None) else {
+                    continue;
+                };
+                return Some((data, font.index()));
+            }
+            None
+        })
+        .as_ref()
+}
+
 #[derive(Clone, Debug)]
 pub struct Face {
     family: Arc<str>,

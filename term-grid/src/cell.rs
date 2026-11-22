@@ -67,9 +67,12 @@ const _: () = {
     assert!(GridUniforms::FLAG_DISPLAY_P3 == 1);
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CellSample {
     pub ch: char,
+    /// The full grapheme cluster when it spans more than one codepoint, as
+    /// with flags and ZWJ emoji. `ch` is its first codepoint.
+    pub cluster: Option<Box<str>>,
     pub width: u8,
     pub fg: [u8; 4],
     pub bg: [u8; 4],

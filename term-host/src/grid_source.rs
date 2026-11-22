@@ -35,6 +35,7 @@ impl GridSource for SurfaceGrid<'_> {
         let mut sample = match (sq.raw() >> 30) & 0b11 {
             1 => CellSample {
                 ch: ' ',
+                cluster: None,
                 width: 0,
                 fg: [0, 0, 0, 0],
                 bg: opaque(indexed(colors, sq.bg_palette_index() as usize, palette)),
@@ -44,13 +45,14 @@ impl GridSource for SurfaceGrid<'_> {
                 let (r, g, b) = sq.bg_rgb();
                 CellSample {
                     ch: ' ',
+                    cluster: None,
                     width: 0,
                     fg: [0, 0, 0, 0],
                     bg: [r, g, b, 255],
                     underline: false,
                 }
             }
-            _ => codepoint(sq, &style, colors, palette),
+            _ => codepoint(line, col, sq, &style, self.render, colors, palette),
         };
         if style.flags.contains(StyleFlags::DIM) {
             sample.fg = dim(sample.fg);
@@ -82,6 +84,7 @@ impl GridSource for SurfaceGrid<'_> {
 fn blank() -> CellSample {
     CellSample {
         ch: ' ',
+        cluster: None,
         width: 0,
         fg: [0, 0, 0, 0],
         bg: [0, 0, 0, 0],
@@ -89,7 +92,15 @@ fn blank() -> CellSample {
     }
 }
 
-fn codepoint(sq: Square, style: &Style, colors: &TermColors, palette: &Palette) -> CellSample {
+fn codepoint(
+    line: usize,
+    col: usize,
+    sq: Square,
+    style: &Style,
+    render: &term_vt::RenderState,
+    colors: &TermColors,
+    palette: &Palette,
+) -> CellSample {
     let mut fg = opaque(resolve(colors, &style.fg, palette));
     let mut bg = opaque(resolve(colors, &style.bg, palette));
     let inverse = style.flags.contains(StyleFlags::INVERSE);
@@ -103,8 +114,16 @@ fn codepoint(sq: Square, style: &Style, colors: &TermColors, palette: &Palette) 
     }
     let hidden = style.flags.contains(StyleFlags::HIDDEN);
     let width = if hidden { 0 } else { width_of(sq) };
+    let cluster = if width == 0 {
+        None
+    } else {
+        render
+            .cell_cluster_text(line, col)
+            .map(String::into_boxed_str)
+    };
     CellSample {
         ch: if width == 0 { ' ' } else { sq.c() },
+        cluster,
         width,
         fg,
         bg,

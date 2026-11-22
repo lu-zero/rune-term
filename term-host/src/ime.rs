@@ -154,6 +154,7 @@ mod tests {
         fn cell(&self, _line: usize, col: usize) -> CellSample {
             self.cells.get(col).cloned().unwrap_or(CellSample {
                 ch: ' ',
+                cluster: None,
                 width: 1,
                 fg: [255, 255, 255, 255],
                 bg: [0, 0, 0, 255],
@@ -178,6 +179,7 @@ mod tests {
             cells: vec![
                 CellSample {
                     ch: 'a',
+                    cluster: None,
                     width: 1,
                     fg: [255, 255, 255, 255],
                     bg: [0, 0, 0, 255],

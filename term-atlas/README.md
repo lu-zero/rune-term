@@ -41,7 +41,8 @@ A codepoint missing from the profile's face is looked up in:
 3. CoreText's cascade on macOS.
 
 Color glyphs come from COLR/sbix strikes through `term-font`; no color emoji
-font is embedded.
+font is embedded. Grapheme clusters spanning several codepoints (flags, ZWJ
+emoji, modifiers) are shaped with rustybuzz against the installed emoji face.
 
 ## Features
 

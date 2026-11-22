@@ -6,6 +6,7 @@
 //! `LICENSE-OFL.txt` in the `term-font-data-*` crates.
 
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 
 use swash::scale::image::Image;
 use swash::scale::{Render, ScaleContext, Source};
@@ -103,6 +104,9 @@ pub struct Atlas {
     pixels: Vec<u8>,
     ascii: [Option<GlyphRect>; 95],
     extra: HashMap<GlyphKey, Option<GlyphRect>>,
+    /// Grapheme clusters that span more than one codepoint, keyed by a hash
+    /// of the text and the cell count.
+    clusters: HashMap<u64, Option<GlyphRect>>,
     cell: (u32, u32),
     /// Cell columns in the atlas. Dynamic glyphs pack after the ASCII rows.
     cols: u32,
@@ -236,6 +240,7 @@ impl Atlas {
             pixels,
             ascii,
             extra: HashMap::new(),
+            clusters: HashMap::new(),
             cell: (cell_w, cell_h),
             cols,
             // ASCII occupies the first rows. Dynamic glyphs start below them.
@@ -270,6 +275,7 @@ impl Atlas {
             pixels,
             ascii,
             extra: HashMap::new(),
+            clusters: HashMap::new(),
             cell,
             cols,
             cursor: 0,
@@ -335,6 +341,70 @@ impl Atlas {
         }
         self.extra.insert(key, rect);
         rect
+    }
+
+    /// Rasterize a grapheme cluster (a flag, ZWJ emoji, a modifier) into a
+    /// slot `cells` wide. A single codepoint takes the ordinary path; misses
+    /// are cached so a later frame does not shape the cluster again.
+    pub fn ensure_str(&mut self, text: &str, cells: u8) -> Option<GlyphRect> {
+        let cells = if cells >= 2 { 2 } else { 1 };
+        let mut chars = text.chars();
+        let first = chars.next()?;
+        if chars.next().is_none() {
+            return self.ensure(first, cells);
+        }
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        text.hash(&mut hasher);
+        cells.hash(&mut hasher);
+        let key = hasher.finish();
+        if let Some(hit) = self.clusters.get(&key) {
+            return *hit;
+        }
+        let rect = self.rasterize_cluster(text, cells);
+        self.clusters.insert(key, rect);
+        rect
+    }
+
+    /// Shape a cluster with rustybuzz, then rasterize its leading glyph through
+    /// the same colour or outline path a single codepoint uses.
+    fn rasterize_cluster(&mut self, text: &str, cells: u8) -> Option<GlyphRect> {
+        if !self.has_font || self.ppem <= 0.0 {
+            return None;
+        }
+        let (blob, index) = crate::face::emoji_font()?;
+        let bytes: &[u8] = blob.data();
+        let face = rustybuzz::Face::from_slice(bytes, *index)?;
+        let mut buffer = rustybuzz::UnicodeBuffer::new();
+        buffer.push_str(text);
+        let shaped = rustybuzz::shape(&face, &[], buffer);
+        let gid = u16::try_from(shaped.glyph_infos().first()?.glyph_id).ok()?;
+        if gid == 0 {
+            return None;
+        }
+        if let Some((image, _)) =
+            term_font::color::rasterize(bytes, *index, u32::from(gid), self.ppem, &[])
+        {
+            return self.place_color_image(cells, image);
+        }
+        if let Some((image, _)) = term_font::color::rasterize_bitmap(bytes, *index, gid, self.ppem)
+        {
+            return self.place_color_image(cells, image);
+        }
+        let font = swash::FontRef::from_index(bytes, *index as usize)?;
+        let coords = regular_coords(&font);
+        let upem = f32::from(font.metrics(&coords).units_per_em.max(1));
+        let advance = font.glyph_metrics(&coords).advance_width(gid) * self.ppem / upem;
+        self.place_face_glyph(
+            font,
+            gid,
+            text.chars().next()?,
+            cells,
+            FallbackScale {
+                ppem: self.ppem,
+                glyph_advance: advance,
+                coords,
+            },
+        )
     }
 
     /// A stroke `cells` wide (1 or 2) where the face puts its underline, drawn under a cell.
@@ -1348,6 +1418,26 @@ mod tests {
         assert!(atlas.take_dirty());
         assert_eq!(atlas.ensure('\u{276F}', 1), Some(mark));
         assert!(!atlas.take_dirty());
+    }
+
+    #[cfg(all(target_os = "macos", feature = "bundled-font"))]
+    #[test]
+    fn a_flag_cluster_shapes_into_one_color_glyph() {
+        let mut atlas = Atlas::with_cell(18, 34);
+        let flag = atlas
+            .ensure_str("\u{1F1FA}\u{1F1E6}", 2)
+            .expect("Ukrainian flag");
+        assert_eq!(flag.atlas, 1);
+        let pixels = atlas.color_pixels().expect("color atlas");
+        let mut alpha = 0u8;
+        for y in 0..flag.h {
+            for x in 0..flag.w {
+                let i = (((flag.y + y) * ATLAS_SIZE + flag.x + x) * 4) as usize;
+                alpha = alpha.max(pixels[i + 3]);
+            }
+        }
+        assert!(alpha > 16, "flag alpha {alpha}");
+        assert_eq!(atlas.ensure_str("\u{1F1FA}\u{1F1E6}", 2), Some(flag));
     }
 
     #[cfg(all(target_os = "macos", feature = "bundled-font"))]

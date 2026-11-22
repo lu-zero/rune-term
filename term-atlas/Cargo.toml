@@ -22,6 +22,7 @@ cascadia = ["dep:term-font-data-cascadia"]
 
 [dependencies]
 fontique.workspace = true
+rustybuzz.workspace = true
 swash.workspace = true
 term-font.workspace = true
 term-font-data-maple = { workspace = true, optional = true }

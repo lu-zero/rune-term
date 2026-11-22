@@ -381,10 +381,11 @@ fn push_glyph(
     // A wide glyph's bitmap already fills both cells. The spacer cell has width 0.
     let cells = if sample.width >= 2 { 2 } else { 1 };
     let underline = sample.underline.then(|| atlas.underline(cells)).flatten();
-    for rect in [atlas.ensure(sample.ch, cells), underline]
-        .into_iter()
-        .flatten()
-    {
+    let glyph = match &sample.cluster {
+        Some(cluster) => atlas.ensure_str(cluster, cells),
+        None => atlas.ensure(sample.ch, cells),
+    };
+    for rect in [glyph, underline].into_iter().flatten() {
         text.push(CellText {
             glyph_pos: [rect.x, rect.y],
             glyph_size: [rect.w, rect.h],

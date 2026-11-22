@@ -176,6 +176,7 @@ impl GrayGrid {
     fn new() -> Self {
         let cell = |alpha| CellSample {
             ch: ' ',
+            cluster: None,
             width: 0,
             fg: [0, 0, 0, 0],
             bg: [128, 128, 128, alpha],
@@ -198,7 +199,7 @@ impl GridSource for GrayGrid {
         true
     }
     fn cell(&self, _: usize, col: usize) -> CellSample {
-        self.cells[col]
+        self.cells[col].clone()
     }
     fn cursor(&self) -> CursorSample {
         CursorSample {
