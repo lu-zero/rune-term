@@ -121,6 +121,12 @@ docs-cli:
 
 ci: check-all
 
+# Build the app, keeper and control CLI into ~/.local/bin.
+install:
+    cargo build --release -p rune-term -p rune-term-keeper -p rune-term-ctl
+    install -d "$HOME/.local/bin"
+    install -m 755 target/release/rune-term target/release/rune-term-keeper target/release/rune-term-ctl "$HOME/.local/bin/"
+
 # The prompt marks as files to source, for every shell.
 install-shell-integration dir: (install-shell-integration-bash dir) (install-shell-integration-zsh dir)
 
