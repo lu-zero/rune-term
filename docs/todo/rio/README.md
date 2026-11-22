@@ -65,8 +65,8 @@ against the host layer rune-term actually uses:
 ## On the fork
 
 rune-term builds against `lu-zero/rio` branch `for-rune-term`, rebased on
-`origin/main` at `e7c05e43`; upstream is now `d2400983`, so the fork needs a
-rebase. Only two of its non-merge changes are still
+`origin/main` at `d2400983` (fork head `993a7cb3`). Only two of its non-merge
+changes are still
 needed: `1b80f604` (prompt rows on resize) and `d8b4aad3` (PTY size after
 resizes settle), both in `rio-vt` and listed in [`reflow.md`](./reflow.md).
 Neither has an upstream issue or PR. The rest is obsolete: librio's key
