@@ -16,6 +16,13 @@ use crate::face::Face;
 
 pub const ATLAS_SIZE: u32 = 2048;
 
+/// Colour glyphs are sparse, so their atlas is a quarter of the gray one.
+pub const COLOR_ATLAS_SIZE: u32 = 1024;
+
+/// Cap on cached misses, so a stream of novel codepoints cannot grow the
+/// lookup tables without bound.
+const MAX_MISSES: usize = 4096;
+
 /// Rio's default font size, in points.
 const DEFAULT_FACE_PX: f32 = 14.0;
 
@@ -105,8 +112,18 @@ pub struct Atlas {
     ascii: [Option<GlyphRect>; 95],
     extra: HashMap<GlyphKey, Option<GlyphRect>>,
     /// Grapheme clusters that span more than one codepoint, keyed by a hash
-    /// of the text and the cell count.
-    clusters: HashMap<u64, Option<GlyphRect>>,
+    /// of the text and the cell count. The text is kept to rule out a hash
+    /// collision returning another cluster's glyph.
+    clusters: HashMap<u64, (Box<str>, Option<GlyphRect>)>,
+    /// Cached misses in `extra` and `clusters`.
+    misses: usize,
+    /// The next free slot in each atlas, and where a reset starts again.
+    color_cursor: u32,
+    color_cols: u32,
+    reset_cursor: u32,
+    reset_color_cursor: u32,
+    /// Set when an atlas ran out of room; the caller rebuilds on the next frame.
+    needs_reset: bool,
     cell: (u32, u32),
     /// Cell columns in the atlas. Dynamic glyphs pack after the ASCII rows.
     cols: u32,
@@ -241,6 +258,12 @@ impl Atlas {
             ascii,
             extra: HashMap::new(),
             clusters: HashMap::new(),
+            misses: 0,
+            color_cursor: 0,
+            color_cols: (COLOR_ATLAS_SIZE / cell_w).max(1),
+            reset_cursor: ascii_rows.max(2) * cols,
+            reset_color_cursor: 0,
+            needs_reset: false,
             cell: (cell_w, cell_h),
             cols,
             // ASCII occupies the first rows. Dynamic glyphs start below them.
@@ -276,6 +299,12 @@ impl Atlas {
             ascii,
             extra: HashMap::new(),
             clusters: HashMap::new(),
+            misses: 0,
+            color_cursor: 0,
+            color_cols: (COLOR_ATLAS_SIZE / cell.0).max(1),
+            reset_cursor: 0,
+            reset_color_cursor: 0,
+            needs_reset: false,
             cell,
             cols,
             cursor: 0,
@@ -320,7 +349,8 @@ impl Atlas {
     }
 
     /// Rasterize `ch` into a slot `cells` wide (1 or 2). ASCII is already
-    /// placed. A miss is cached so a later frame does not rasterize it again.
+    /// placed. Misses are cached up to a bound, so a stream of novel
+    /// codepoints cannot grow the table without limit.
     pub fn ensure(&mut self, ch: char, cells: u8) -> Option<GlyphRect> {
         let cells = if cells >= 2 { 2 } else { 1 };
         let code = u32::from(ch);
@@ -339,13 +369,19 @@ impl Atlas {
         if rect.is_some_and(|rect| rect.atlas == 0) {
             self.dirty = true;
         }
-        self.extra.insert(key, rect);
+        if rect.is_some() || self.misses < MAX_MISSES {
+            if rect.is_none() {
+                self.misses += 1;
+            }
+            self.extra.insert(key, rect);
+        }
         rect
     }
 
     /// Rasterize a grapheme cluster (a flag, ZWJ emoji, a modifier) into a
-    /// slot `cells` wide. A single codepoint takes the ordinary path; misses
-    /// are cached so a later frame does not shape the cluster again.
+    /// slot `cells` wide. A single codepoint takes the ordinary path. The
+    /// text is cached alongside its hash so a collision cannot reuse another
+    /// cluster's glyph.
     pub fn ensure_str(&mut self, text: &str, cells: u8) -> Option<GlyphRect> {
         let cells = if cells >= 2 { 2 } else { 1 };
         let mut chars = text.chars();
@@ -357,11 +393,18 @@ impl Atlas {
         text.hash(&mut hasher);
         cells.hash(&mut hasher);
         let key = hasher.finish();
-        if let Some(hit) = self.clusters.get(&key) {
-            return *hit;
+        if let Some((known, hit)) = self.clusters.get(&key) {
+            if known.as_ref() == text {
+                return *hit;
+            }
         }
         let rect = self.rasterize_cluster(text, cells);
-        self.clusters.insert(key, rect);
+        if rect.is_some() || self.misses < MAX_MISSES {
+            if rect.is_none() {
+                self.misses += 1;
+            }
+            self.clusters.insert(key, (text.into(), rect));
+        }
         rect
     }
 
@@ -792,7 +835,7 @@ impl Atlas {
         cells: u8,
         image: term_font::color::RgbaImage,
     ) -> Option<GlyphRect> {
-        let origin = self.alloc(cells)?;
+        let origin = self.alloc_color(cells)?;
         let slot_w = u32::from(cells) * self.cell.0;
         let slot_h = self.cell.1;
         self.paint_color_image(
@@ -824,7 +867,7 @@ impl Atlas {
         rgba: &[u8],
     ) {
         if self.color.is_empty() {
-            self.color = vec![0u8; (ATLAS_SIZE * ATLAS_SIZE * 4) as usize];
+            self.color = vec![0u8; (COLOR_ATLAS_SIZE * COLOR_ATLAS_SIZE * 4) as usize];
         }
         if width == 0 || height == 0 || slot_w == 0 || slot_h == 0 {
             return;
@@ -876,26 +919,75 @@ impl Atlas {
         })
     }
 
-    pub(crate) fn alloc(&mut self, cells: u8) -> Option<(u32, u32)> {
+    fn alloc_impl(&mut self, cells: u8, color: bool) -> Option<(u32, u32)> {
         let need = u32::from(cells.max(1));
-        let cols = self.cols.max(1);
+        let (size, cols, cursor) = if color {
+            (COLOR_ATLAS_SIZE, self.color_cols, self.color_cursor)
+        } else {
+            (ATLAS_SIZE, self.cols, self.cursor)
+        };
+        let cols = cols.max(1);
         let (cell_w, cell_h) = self.cell;
         for _ in 0..cols + 2 {
-            let col = self.cursor % cols;
-            let row = self.cursor / cols;
+            let col = cursor % cols;
+            let row = cursor / cols;
             if col + need > cols {
-                self.cursor = row.saturating_add(1).saturating_mul(cols);
+                let next = row.saturating_add(1).saturating_mul(cols);
+                if color {
+                    self.color_cursor = next;
+                } else {
+                    self.cursor = next;
+                }
                 continue;
             }
             let origin_x = col * cell_w;
             let origin_y = row * cell_h;
-            if origin_y + cell_h > ATLAS_SIZE || origin_x + need * cell_w > ATLAS_SIZE {
+            if origin_y + cell_h > size || origin_x + need * cell_w > size {
                 return None;
             }
-            self.cursor += need;
+            let next = cursor + need;
+            if color {
+                self.color_cursor = next;
+            } else {
+                self.cursor = next;
+            }
             return Some((origin_x, origin_y));
         }
         None
+    }
+
+    pub(crate) fn alloc(&mut self, cells: u8) -> Option<(u32, u32)> {
+        if let Some(at) = self.alloc_impl(cells, false) {
+            return Some(at);
+        }
+        self.needs_reset = true;
+        None
+    }
+
+    fn alloc_color(&mut self, cells: u8) -> Option<(u32, u32)> {
+        if let Some(at) = self.alloc_impl(cells, true) {
+            return Some(at);
+        }
+        self.needs_reset = true;
+        None
+    }
+
+    /// Whether the caller should rebuild the caches at a frame boundary.
+    pub fn needs_reset(&self) -> bool {
+        self.needs_reset
+    }
+
+    /// Drop every cached glyph and start packing both atlases again. The
+    /// caller forces a full re-upload on the same frame.
+    pub fn reclaim(&mut self) {
+        self.extra.clear();
+        self.clusters.clear();
+        self.misses = 0;
+        self.cursor = self.reset_cursor;
+        self.color_cursor = self.reset_color_cursor;
+        self.needs_reset = false;
+        self.dirty = true;
+        self.color_dirty = true;
     }
 
     /// Insert a bitmap. The box-drawing pass uses this. ASCII occupies the
@@ -1204,7 +1296,7 @@ fn stamp_color(pixels: &mut [u8], origin: (u32, u32), x: u32, y: u32, sample: [u
     if sample[3] == 0 {
         return;
     }
-    let dst = (((origin.1 + y) * ATLAS_SIZE + origin.0 + x) * 4) as usize;
+    let dst = (((origin.1 + y) * COLOR_ATLAS_SIZE + origin.0 + x) * 4) as usize;
     if dst + 4 <= pixels.len() {
         pixels[dst..dst + 4].copy_from_slice(&sample);
     }
@@ -1223,6 +1315,39 @@ fn stamp(pixels: &mut [u8], origin: (u32, u32), x: u32, y: u32, sample: u8) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "bundled-font")]
+    #[test]
+    fn a_colliding_cluster_hash_does_not_return_the_wrong_glyph() {
+        let mut atlas = Atlas::with_cell(18, 34);
+        let text = "\u{1F1FA}\u{1F1E6}";
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        text.hash(&mut hasher);
+        2u8.hash(&mut hasher);
+        let bogus = GlyphRect {
+            x: 1,
+            y: 1,
+            w: 1,
+            h: 1,
+            atlas: 0,
+        };
+        atlas
+            .clusters
+            .insert(hasher.finish(), ("other".into(), Some(bogus)));
+        assert_ne!(atlas.ensure_str(text, 2), Some(bogus));
+    }
+
+    #[cfg(feature = "bundled-font")]
+    #[test]
+    fn reclaim_clears_caches_and_restarts_packing() {
+        let mut atlas = Atlas::with_cell(18, 34);
+        let before = atlas.ensure('λ', 1).expect("lambda");
+        atlas.reclaim();
+        assert!(atlas.take_dirty());
+        assert!(atlas.take_color_dirty());
+        assert!(!atlas.needs_reset());
+        assert_eq!(atlas.ensure('λ', 1), Some(before));
+    }
 
     #[cfg(feature = "bundled-font")]
     #[test]
@@ -1432,7 +1557,7 @@ mod tests {
         let mut alpha = 0u8;
         for y in 0..flag.h {
             for x in 0..flag.w {
-                let i = (((flag.y + y) * ATLAS_SIZE + flag.x + x) * 4) as usize;
+                let i = (((flag.y + y) * COLOR_ATLAS_SIZE + flag.x + x) * 4) as usize;
                 alpha = alpha.max(pixels[i + 3]);
             }
         }
@@ -1451,7 +1576,7 @@ mod tests {
         let mut alpha = 0u8;
         for y in 0..snake.h {
             for x in 0..snake.w {
-                let i = (((snake.y + y) * ATLAS_SIZE + snake.x + x) * 4) as usize;
+                let i = (((snake.y + y) * COLOR_ATLAS_SIZE + snake.x + x) * 4) as usize;
                 alpha = alpha.max(pixels[i + 3]);
             }
         }

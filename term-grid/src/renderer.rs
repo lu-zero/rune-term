@@ -153,7 +153,11 @@ impl GridRenderer {
             || self.rows != rows
             || self.cell_px != cell_px
             || self.atlas.face() != face;
-        let dirty = (0..rows as usize).any(|line| source.row_dirty(line));
+        let reclaim = self.atlas.needs_reset();
+        if reclaim {
+            self.atlas.reclaim();
+        }
+        let dirty = reclaim || (0..rows as usize).any(|line| source.row_dirty(line));
         if !force && !size_changed && !dirty {
             source.reset_dirty();
             return;
@@ -492,7 +496,7 @@ fn upload_gray(queue: &wgpu::Queue, texture: &wgpu::Texture, atlas: &Atlas) {
 }
 
 fn color_texture(device: &wgpu::Device) -> wgpu::Texture {
-    let size = term_atlas::ATLAS_SIZE;
+    let size = term_atlas::COLOR_ATLAS_SIZE;
     device.create_texture(&wgpu::TextureDescriptor {
         label: Some("grid.atlas.color"),
         size: wgpu::Extent3d {
@@ -510,7 +514,7 @@ fn color_texture(device: &wgpu::Device) -> wgpu::Texture {
 }
 
 fn clear_color(queue: &wgpu::Queue, texture: &wgpu::Texture) {
-    let size = term_atlas::ATLAS_SIZE;
+    let size = term_atlas::COLOR_ATLAS_SIZE;
     let bytes = vec![0u8; (size as usize) * (size as usize) * 4];
     queue.write_texture(
         texture.as_image_copy(),
@@ -528,7 +532,7 @@ fn upload_color(queue: &wgpu::Queue, texture: &wgpu::Texture, atlas: &Atlas) {
     let Some(pixels) = atlas.color_pixels() else {
         return;
     };
-    let size = term_atlas::ATLAS_SIZE;
+    let size = term_atlas::COLOR_ATLAS_SIZE;
     queue.write_texture(
         texture.as_image_copy(),
         pixels,

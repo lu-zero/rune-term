@@ -8,7 +8,9 @@ mod face;
 mod fallback;
 mod sprite;
 
-pub use atlas::{face_cell, face_cell_for, Atlas, GlyphRect, PixelFormat, ATLAS_SIZE};
+pub use atlas::{
+    face_cell, face_cell_for, Atlas, GlyphRect, PixelFormat, ATLAS_SIZE, COLOR_ATLAS_SIZE,
+};
 #[cfg(feature = "cascadia")]
 pub use face::CASCADIA_FAMILY;
 pub use face::{fallback_bytes, monospace_families, Face, BUNDLED_FAMILY, MAPLE_FAMILY};
