@@ -173,6 +173,16 @@ impl GridRenderer {
         self.cell_px = cell_px;
         self.bg.clear();
         self.text.clear();
+        let mut missing = Vec::new();
+        for line in 0..rows as usize {
+            for col in 0..cols as usize {
+                let sample = source.cell(line, col);
+                if sample.cluster.is_none() {
+                    missing.push((sample.ch, sample.width));
+                }
+            }
+        }
+        self.atlas.warm_glyphs(missing);
         self.bg.resize(n as usize, CellBg::TRANSPARENT);
         for line in 0..rows as usize {
             for col in 0..cols as usize {

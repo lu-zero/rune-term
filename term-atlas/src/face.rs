@@ -243,6 +243,14 @@ impl Face {
         FontRef::from_index(self.data.data(), self.index as usize)
     }
 
+    pub(crate) fn data(&self) -> &Blob<u8> {
+        &self.data
+    }
+
+    pub(crate) fn index(&self) -> u32 {
+        self.index
+    }
+
     /// Whether this face has font data that can be drawn.
     pub fn valid(&self) -> bool {
         self.font().is_some()

@@ -7,6 +7,9 @@ use tiny_skia::{FillRule, LineCap, Paint, Path, PathBuilder, Pixmap, Stroke, Tra
 use crate::atlas::{Atlas, GlyphRect};
 
 pub(crate) fn raster(atlas: &mut Atlas, ch: char, cells: u8) -> Option<GlyphRect> {
+    if !covers(ch) {
+        return None;
+    }
     let cp = u32::from(ch);
     match cp {
         0x2500..=0x257F => box_drawing(atlas, cp, cells),
@@ -25,6 +28,31 @@ pub(crate) fn raster(atlas: &mut Atlas, ch: char, cells: u8) -> Option<GlyphRect
         0xF5D0..=0xF60D => branch(atlas, cp, cells),
         _ => None,
     }
+}
+
+pub(crate) fn covers(ch: char) -> bool {
+    let cp = u32::from(ch);
+    matches!(
+        cp,
+        0x2500..=0x257F
+            | 0x2580..=0x259F
+            | 0x2800..=0x28FF
+            | 0x1FB00..=0x1FB3B
+            | 0x1CD00..=0x1CDE5
+            | 0x1CEA0
+            | 0x1CEA3
+            | 0x1CEA8
+            | 0x1CEAB
+            | 0x1FBE6
+            | 0x1FBE7
+            | 0xE0B0..=0xE0BF
+            | 0xE0D2
+            | 0xE0D4
+            | 0x25E2..=0x25E5
+            | 0x25F8..=0x25FA
+            | 0x25FF
+            | 0xF5D0..=0xF60D
+    )
 }
 
 struct Canvas {

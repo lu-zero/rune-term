@@ -5,7 +5,7 @@
 //! bundled fallback, then by the macOS cascade. The faces are OFL; see
 //! `LICENSE-OFL.txt` in the `term-font-data-*` crates.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 
 use swash::scale::image::Image;
@@ -120,6 +120,8 @@ pub struct Atlas {
     /// of the text and the cell count. The text is kept to rule out a hash
     /// collision returning another cluster's glyph.
     clusters: HashMap<u64, (Box<str>, Option<GlyphRect>)>,
+    /// Glyphs warm-up leaves to `ensure`: color images and CoreText draws.
+    warm_skipped: HashSet<GlyphKey>,
     /// Scratch buffers reused by cluster rasterization, so a miss does not
     /// allocate a fresh slot bitmap and coordinate list each time.
     cluster_color: Vec<u8>,
@@ -268,6 +270,7 @@ impl Atlas {
             ascii,
             extra: HashMap::new(),
             clusters: HashMap::new(),
+            warm_skipped: HashSet::new(),
             cluster_color: Vec::new(),
             cluster_gray: Vec::new(),
             cluster_coords: Vec::new(),
@@ -312,6 +315,7 @@ impl Atlas {
             ascii,
             extra: HashMap::new(),
             clusters: HashMap::new(),
+            warm_skipped: HashSet::new(),
             cluster_color: Vec::new(),
             cluster_gray: Vec::new(),
             cluster_coords: Vec::new(),
@@ -361,6 +365,134 @@ impl Atlas {
             self.ascii[(code - 0x20) as usize]
         } else {
             None
+        }
+    }
+
+    /// Rasterize the outlines of `keys` that are not cached yet, in parallel.
+    /// Slot allocation and painting stay on the calling thread, so rects and
+    /// atlas contents remain deterministic. Color and CoreText glyphs are
+    /// left to [`Self::ensure`].
+    pub fn warm_glyphs(&mut self, keys: impl IntoIterator<Item = (char, u8)>) {
+        if !self.has_font || self.ppem <= 0.0 {
+            return;
+        }
+        let ppem = self.ppem;
+        let mut work: Vec<(GlyphKey, char, fontique::Blob<u8>, u32, u16)> = Vec::new();
+        for (ch, cells) in keys {
+            let cells = if cells >= 2 { 2 } else { 1 };
+            let code = u32::from(ch);
+            if (cells == 1 && (0x20..0x7f).contains(&code)) || crate::sprite::covers(ch) {
+                continue;
+            }
+            let key = GlyphKey { code, cells };
+            if self.extra.contains_key(&key) || self.warm_skipped.contains(&key) {
+                continue;
+            }
+            let face_gid = self
+                .face
+                .font()
+                .map(|font| font.charmap().map(ch))
+                .unwrap_or(0);
+            let (blob, index, gid) = if face_gid != 0 {
+                (self.face.data().clone(), self.face.index(), face_gid)
+            } else if let Some((blob, index, gid)) =
+                crate::fallback_bytes().iter().find_map(|blob| {
+                    let font = FontRef::from_index(blob.data(), 0)?;
+                    let gid = font.charmap().map(ch);
+                    (gid != 0).then_some((blob.clone(), 0, gid))
+                })
+            {
+                (blob, index, gid)
+            } else {
+                let Some(found) = term_font::discover(self.face.family(), ch) else {
+                    continue;
+                };
+                let Some(font) = FontRef::from_index(found.data.data(), found.index as usize)
+                else {
+                    continue;
+                };
+                let gid = font.charmap().map(ch);
+                if gid == 0 {
+                    self.warm_skipped.insert(key);
+                    continue;
+                }
+                if term_font::color::rasterize(
+                    found.data.data(),
+                    found.index,
+                    u32::from(gid),
+                    ppem,
+                    &[],
+                )
+                .is_some()
+                    || term_font::color::rasterize_bitmap(found.data.data(), found.index, gid, ppem)
+                        .is_some()
+                {
+                    self.warm_skipped.insert(key);
+                    continue;
+                }
+                (found.data.clone(), found.index, gid)
+            };
+            work.push((key, ch, blob, index, gid));
+        }
+        work.sort_by_key(|(key, _, _, _, _)| (key.code, key.cells));
+        work.dedup_by_key(|(key, _, _, _, _)| *key);
+        if work.is_empty() {
+            return;
+        }
+        let threads = std::thread::available_parallelism()
+            .map_or(1, |n| n.get())
+            .min(10)
+            .min(work.len());
+        if threads < 2 {
+            return;
+        }
+        let chunk_size = work.len().div_ceil(threads);
+        let mut rendered: Vec<(usize, GlyphKey, char, Image, f32)> = Vec::new();
+        std::thread::scope(|scope| {
+            let mut handles = Vec::new();
+            for (part, chunk) in work.chunks(chunk_size).enumerate() {
+                handles.push(scope.spawn(move || {
+                    let mut context = ScaleContext::new();
+                    let mut out = Vec::new();
+                    for (ix, (key, ch, blob, index, gid)) in chunk.iter().enumerate() {
+                        let Some(font) = FontRef::from_index(blob.data(), *index as usize) else {
+                            continue;
+                        };
+                        let coords = regular_coords(&font);
+                        let upem = f32::from(font.metrics(&coords).units_per_em.max(1)).max(1.0);
+                        let advance = font.glyph_metrics(&coords).advance_width(*gid) * ppem / upem;
+                        let mut scaler = context
+                            .builder(font)
+                            .size(ppem)
+                            .hint(true)
+                            .normalized_coords(coords.iter().copied())
+                            .build();
+                        if let Some(image) =
+                            Render::new(&[Source::Outline]).render(&mut scaler, *gid)
+                        {
+                            out.push((part * chunk_size + ix, *key, *ch, image, advance));
+                        }
+                    }
+                    out
+                }));
+            }
+            for handle in handles {
+                if let Ok(mut part) = handle.join() {
+                    rendered.append(&mut part);
+                }
+            }
+        });
+        rendered.sort_by_key(|item| item.0);
+        for (_, key, ch, image, advance) in rendered {
+            if let Some(rect) = self.stamp_outline(ch, key.cells, image, advance) {
+                if rect.atlas == 0 {
+                    self.dirty = true;
+                }
+                self.extra.insert(key, Some(rect));
+            } else if self.misses < MAX_MISSES {
+                self.misses += 1;
+                self.extra.insert(key, None);
+            }
         }
     }
 
@@ -793,14 +925,23 @@ impl Atlas {
             .context
             .builder(font)
             .size(scale.ppem)
-            // Autohinting a fallback glyph rebuilds a cmap-derived style map;
-            // only wide CJK glyphs skip it, narrow fallback text stays hinted.
-            .hint(cells == 1)
+            .hint(true)
             .normalized_coords(scale.coords.iter().copied())
             .build();
         let image = Render::new(&[Source::Outline]).render(&mut scaler, gid);
         let _ = scaler;
         let image = image?;
+        self.stamp_outline(ch, cells, image, scale.glyph_advance)
+    }
+
+    /// Allocate a slot and paint an already rasterized outline into it.
+    fn stamp_outline(
+        &mut self,
+        ch: char,
+        cells: u8,
+        image: Image,
+        glyph_advance: f32,
+    ) -> Option<GlyphRect> {
         let (gw, gh) = (image.placement.width, image.placement.height);
         if gw == 0 || gh == 0 || image.data.len() < (gw * gh) as usize {
             return None;
@@ -814,7 +955,7 @@ impl Atlas {
         let em_w = self.advance_px * f32::from(cells);
         let mode = fit_mode(
             ch,
-            scale.glyph_advance,
+            glyph_advance,
             slot_w as f32,
             &image,
             em_w,
@@ -1495,6 +1636,22 @@ fn stamp(pixels: &mut [u8], origin: (u32, u32), x: u32, y: u32, sample: u8) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn warmed_glyphs_have_the_same_ink_as_sequential_ones() {
+        let keys = [('中', 2), ('日', 2), ('語', 2), ('ф', 1)];
+        let mut warmed = Atlas::with_cell(18, 34);
+        warmed.warm_glyphs(keys);
+        let mut sequential = Atlas::with_cell(18, 34);
+        for (ch, cells) in keys {
+            let _ = sequential.ensure(ch, cells);
+        }
+        for (ch, cells) in keys {
+            let a = warmed.ensure(ch, cells).expect("warmed rect");
+            let b = sequential.ensure(ch, cells).expect("sequential rect");
+            assert_eq!(ink_count(&warmed, a), ink_count(&sequential, b), "{ch}");
+        }
+    }
 
     #[test]
     fn a_wide_glyph_at_the_last_column_wraps_without_reclaiming() {
