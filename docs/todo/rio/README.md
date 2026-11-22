@@ -27,7 +27,8 @@ against the host layer rune-term actually uses:
 - [#2121](https://github.com/raphamorim/rio/commit/d2400983c39be5715c85d69138047f78ba583dd7):
   a large kitty-keyboard rewrite (shifted alternates and associated text,
   keypad/DECKPAM, `modifyOtherKeys` levels and editing keys, releases).
-  **Support:** port the encoder into `term-input`; our copy predates it. This
+  **Ported** into `term-input` (upstream tests included): shifted alternates,
+  associated text, keypad/DECKPAM and `modifyOtherKeys` levels now work. This
   also carries the Ctrl/Shift+Enter work from #2105, so those fork patches are
   now obsolete.
 - [#2115](https://github.com/raphamorim/rio/commit/bbd83b03b275d166aed4d7b37977f95c4959cb96)

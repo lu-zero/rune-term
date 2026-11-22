@@ -4,7 +4,7 @@
 
 pub mod key;
 
-pub use key::{EncodeContext, Key, KeyAction, KeyEvent, KittyFlags, Modifiers};
+pub use key::{EncodeContext, Key, KeyAction, KeyEvent, Keypad, KittyFlags, Modifiers};
 
 /// Same fields as Rune's `Mods`. The app copies them; this crate does not
 /// depend on Rune. `cmd` is not translated onto [`Modifiers`].
@@ -311,7 +311,8 @@ fn identify(code: PhysicalKeyCode) -> Option<Key> {
         Backslash => Key::Char('\\'),
         Semicolon => Key::Char(';'),
         Space => Key::Char(' '),
-        Enter | NumpadEnter => Key::Enter,
+        Enter => Key::Enter,
+        NumpadEnter => Key::Keypad(Keypad::Enter),
         Tab => Key::Tab,
         Backspace => Key::Backspace,
         Escape => Key::Escape,
@@ -358,21 +359,21 @@ fn identify(code: PhysicalKeyCode) -> Option<Key> {
         SuperLeft => Key::SuperLeft,
         SuperRight => Key::SuperRight,
         CapsLock => Key::CapsLock,
-        Numpad0 => Key::Char('0'),
-        Numpad1 => Key::Char('1'),
-        Numpad2 => Key::Char('2'),
-        Numpad3 => Key::Char('3'),
-        Numpad4 => Key::Char('4'),
-        Numpad5 => Key::Char('5'),
-        Numpad6 => Key::Char('6'),
-        Numpad7 => Key::Char('7'),
-        Numpad8 => Key::Char('8'),
-        Numpad9 => Key::Char('9'),
-        NumpadDecimal => Key::Char('.'),
-        NumpadAdd => Key::Char('+'),
-        NumpadSubtract => Key::Char('-'),
-        NumpadMultiply => Key::Char('*'),
-        NumpadDivide => Key::Char('/'),
+        Numpad0 => Key::Keypad(Keypad::Digit(0)),
+        Numpad1 => Key::Keypad(Keypad::Digit(1)),
+        Numpad2 => Key::Keypad(Keypad::Digit(2)),
+        Numpad3 => Key::Keypad(Keypad::Digit(3)),
+        Numpad4 => Key::Keypad(Keypad::Digit(4)),
+        Numpad5 => Key::Keypad(Keypad::Digit(5)),
+        Numpad6 => Key::Keypad(Keypad::Digit(6)),
+        Numpad7 => Key::Keypad(Keypad::Digit(7)),
+        Numpad8 => Key::Keypad(Keypad::Digit(8)),
+        Numpad9 => Key::Keypad(Keypad::Digit(9)),
+        NumpadDecimal => Key::Keypad(Keypad::Decimal),
+        NumpadAdd => Key::Keypad(Keypad::Add),
+        NumpadSubtract => Key::Keypad(Keypad::Subtract),
+        NumpadMultiply => Key::Keypad(Keypad::Multiply),
+        NumpadDivide => Key::Keypad(Keypad::Divide),
         Unknown => return None,
     })
 }
@@ -600,7 +601,7 @@ mod tests {
             None,
             Mods::default(),
         );
-        assert_eq!(bare.key, Some(Key::Char('5')));
+        assert_eq!(bare.key, Some(Key::Keypad(Keypad::Digit(5))));
         assert_eq!(encode(&bare).as_deref(), Some(b"5".as_slice()));
 
         let typed = map_key(
@@ -611,14 +612,20 @@ mod tests {
             Some("5"),
             Mods::default(),
         );
-        assert_eq!(typed.key, Some(Key::Char('5')));
+        assert_eq!(typed.key, Some(Key::Keypad(Keypad::Digit(5))));
         assert_eq!(encode(&typed).as_deref(), Some(b"5".as_slice()));
         assert_eq!(
             identify(PhysicalKeyCode::NumpadDecimal),
-            Some(Key::Char('.'))
+            Some(Key::Keypad(Keypad::Decimal))
         );
-        assert_eq!(identify(PhysicalKeyCode::NumpadEnter), Some(Key::Enter));
-        assert_eq!(identify(PhysicalKeyCode::NumpadAdd), Some(Key::Char('+')));
+        assert_eq!(
+            identify(PhysicalKeyCode::NumpadEnter),
+            Some(Key::Keypad(Keypad::Enter))
+        );
+        assert_eq!(
+            identify(PhysicalKeyCode::NumpadAdd),
+            Some(Key::Keypad(Keypad::Add))
+        );
     }
 
     #[test]

@@ -286,6 +286,7 @@ fn key(key: term_input::Key) -> term_vt::Key {
         K::Insert => term_vt::Key::Insert,
         K::Delete => term_vt::Key::Delete,
         K::F(n) => term_vt::Key::F(n),
+        K::Keypad(k) => term_vt::Key::Keypad(k),
         K::CapsLock => term_vt::Key::CapsLock,
         K::ShiftLeft => term_vt::Key::ShiftLeft,
         K::ShiftRight => term_vt::Key::ShiftRight,

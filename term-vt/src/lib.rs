@@ -527,8 +527,6 @@ impl Engine {
 }
 
 /// Translate the terminal's kitty keyboard flags into the encoder's own set.
-/// Only the flags that change what a key produces are carried across; see the
-/// note in [`key`] about the two that are not implemented.
 fn kitty_flags(modes: rio_vt::ansi::KeyboardModes) -> KittyFlags {
     use rio_vt::ansi::KeyboardModes;
     let mut flags = KittyFlags::empty();
@@ -540,6 +538,12 @@ fn kitty_flags(modes: rio_vt::ansi::KeyboardModes) -> KittyFlags {
     }
     if modes.contains(KeyboardModes::REPORT_ALL_KEYS_AS_ESC) {
         flags |= KittyFlags::REPORT_ALL_AS_ESC;
+    }
+    if modes.contains(KeyboardModes::REPORT_ALTERNATE_KEYS) {
+        flags |= KittyFlags::REPORT_ALTERNATE_KEYS;
+    }
+    if modes.contains(KeyboardModes::REPORT_ASSOCIATED_TEXT) {
+        flags |= KittyFlags::REPORT_ASSOCIATED_TEXT;
     }
     flags
 }
@@ -1003,6 +1007,7 @@ impl Surface {
             let terminal = self.terminal.lock();
             EncodeContext {
                 app_cursor: terminal.mode().contains(Mode::APP_CURSOR),
+                app_keypad: terminal.mode().contains(Mode::APP_KEYPAD),
                 kitty: kitty_flags(terminal.keyboard_mode()),
                 modify_other_keys: terminal.modify_other_keys(),
                 alt_is_meta: self.alt_is_meta.load(Ordering::Relaxed),
