@@ -53,8 +53,10 @@ The numbers are that plan's.
       as an element cannot observe it: `anomalyco/rune#106`.
 - [x] **11. Selection and clipboard.** A drag the program did not take
       selects cells. Two clicks select a word and three select a line.
-      The copy chord copies that text, and paste calls `Surface::paste`.
-      OSC 52 still drops the payload and logs its type and length. The
+      The copy chord copies that text, and paste calls `Surface::paste`. A
+      paste with line breaks or a bracket end asks first; the encoder replaces
+      control bytes the tty would act on with spaces. OSC 52 still drops the
+      payload and logs its type and length. The
       tint swaps the selected cells. Keys, the wheel, and the pointer
       still address the first pane.
 - [x] **12. Scrollback viewport.** A bar beside each pane tracks

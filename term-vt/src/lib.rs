@@ -5,6 +5,8 @@
 
 mod render_state;
 
+pub mod paste;
+
 pub use render_state::{ImageLayer, ImagePlacement, ImageProtocol, RenderState, ViewportSelection};
 /// What a host that draws Glyph Protocol glyphs needs: the registry's
 /// entries, their placement (§8.5), and the `glyf` and `vg` decoders.
@@ -646,15 +648,6 @@ fn mouse_report(button: u8, col: u16, row: u16, pressed: bool, sgr: bool, utf8: 
     out
 }
 
-fn encode_paste(text: &str, bracketed: bool) -> Vec<u8> {
-    if bracketed {
-        let filtered = text.replace(['\x1b', '\x03', '\u{9b}'], "");
-        format!("\x1b[200~{filtered}\x1b[201~").into_bytes()
-    } else {
-        text.replace("\r\n", "\r").replace('\n', "\r").into_bytes()
-    }
-}
-
 /// A pty with the shell `desc` names, or the user's login shell.
 #[cfg(feature = "pty")]
 fn spawn_pty(desc: &SurfaceDesc) -> std::io::Result<teletypewriter::Pty> {
@@ -915,18 +908,33 @@ impl Surface {
         self.write(text.as_bytes().to_vec());
     }
 
-    /// Paste text the way terminals do: when the program asked for
-    /// bracketed paste (mode 2004) the text is sent verbatim inside
-    /// ESC[200~/ESC[201~ markers, minus ESC, ETX and the 8-bit CSI so
-    /// the payload can never close the bracket early and inject
-    /// keystrokes; otherwise newlines are normalized to CR, what the
-    /// Enter key produces.
-    pub fn paste(&self, text: &str) {
+    /// Paste text the way xterm does. Control bytes that the tty treats as
+    /// signals or line editing become spaces, so a paste cannot act as typed
+    /// input or end its own bracket. Unbracketed, LF becomes CR, what Enter
+    /// sends; CRLF is two CRs. An owned `String` is encoded in place and sent
+    /// as the text plus the two bracket markers, without a copy.
+    pub fn paste(&self, text: impl Into<String>) {
+        let text = text.into();
         if text.is_empty() {
             return;
         }
         let bracketed = self.terminal.lock().mode().contains(Mode::BRACKETED_PASTE);
-        self.write(encode_paste(text, bracketed));
+        let encoded = paste::encode_owned(text, bracketed);
+        if bracketed {
+            self.write(paste::BRACKETED_START);
+            self.send(encoded.text);
+            self.send(paste::BRACKETED_END);
+        } else {
+            self.write(encoded.text);
+        }
+    }
+
+    /// Whether a paste can be sent without asking first: no line break when
+    /// unbracketed, and no bracket-end sequence in either mode. The host can
+    /// confirm an unsafe paste before calling [`Self::paste`].
+    pub fn paste_is_safe(&self, text: &str) -> bool {
+        let bracketed = self.terminal.lock().mode().contains(Mode::BRACKETED_PASTE);
+        paste::is_safe_with(text, bracketed)
     }
 
     /// A stable, C-friendly view of the terminal modes an embedder needs

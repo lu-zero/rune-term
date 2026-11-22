@@ -33,6 +33,8 @@ pub struct Model {
     /// What went wrong opening or keeping a session, until it is closed.
     pub(crate) notice: Option<crate::chrome::Notice>,
     pub(crate) closing: Option<crate::closing::Closing>,
+    /// An unsafe paste waiting for confirmation: the pane's effect mark and the text.
+    pub(crate) pending_paste: Option<(u32, String)>,
     pub(crate) strip_drag: Option<crate::tabs::StripDrag>,
     /// A drop just ended on the strip. Rune runs the press its release also makes after it.
     pub(crate) strip_dropped: bool,
@@ -99,6 +101,7 @@ pub fn init() -> Model {
         name_prompt: None,
         notice: None,
         closing: None,
+        pending_paste: None,
         strip_drag: None,
         strip_dropped: false,
         settings: None,

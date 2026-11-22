@@ -11,7 +11,9 @@ Used in:
 
 - `term-vt/src/lib.rs` and `term-vt/src/render_state.rs`: the host layer of
   `librio`, without its C ABI.
-- `term-input/src/key.rs`: adapted from `librio/src/key.rs`.
+- `term-input/src/key.rs`: upstream `librio/src/key.rs` encoder.
+- `term-vt/src/paste.rs`: `rio-vt/src/paste.rs`, the xterm paste encoder and
+  safety check.
 - `term-atlas/src/sprite.rs`: the sprite rasterizers from Sugarloaf.
 - `term-grid/src/cell.rs` and `term-grid/src/grid.wgsl`: the cell layouts and
   grid shader from Sugarloaf's grid.

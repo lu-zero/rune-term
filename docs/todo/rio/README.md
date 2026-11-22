@@ -34,8 +34,8 @@ against the host layer rune-term actually uses:
 - [#2115](https://github.com/raphamorim/rio/commit/bbd83b03b275d166aed4d7b37977f95c4959cb96)
   and [#2116](https://github.com/raphamorim/rio/commit/6ca11531e5ffac0fe2305dc1ee10b410398d9575):
   paste encoding moves to `rio_vt::paste` with xterm semantics and a
-  `Surface::paste_is_safe` confirmation hook. **Support:** port the encoder
-  into `term-vt` and offer the confirmation in the app.
+  `Surface::paste_is_safe` confirmation hook. **Ported** into `term-vt`, with
+  a confirmation dialog in the app before an unsafe paste is sent.
 - [#1747](https://github.com/raphamorim/rio/commit/d449cc273253a091649c5c40a74ee7a998f46c0e):
   `~` expansion and validation of `working_dir` moves into teletypewriter's
   shared module. **Free on rebase:** rune-term passes `SurfaceDesc.working_dir`

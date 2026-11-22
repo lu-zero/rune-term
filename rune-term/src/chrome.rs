@@ -140,6 +140,11 @@ pub fn view(model: &Model, cx: &mut Cx<Model>) -> El {
         confirm_close(closing, &crate::settings_ui::kit(p), &mut layer);
         root = root.children(layer);
     }
+    if let Some((_, text)) = &model.pending_paste {
+        let mut layer = Vec::new();
+        confirm_paste(text, &crate::settings_ui::kit(p), &mut layer);
+        root = root.children(layer);
+    }
     if let Some(notice) = &model.notice {
         let k = crate::settings_ui::kit(p);
         let toast = Toast::new("notice", notice.title.as_str())
@@ -258,6 +263,41 @@ fn confirm_close(closing: &crate::closing::Closing, k: &Kit, layer: &mut Vec<El>
         .fit()
         .open(true)
         .on_close(|model: &mut Model| model.closing = None)
+        .child(col().w_full().pl(16.0).pr(16.0).pb(16.0).child(buttons))
+        .build(k, layer);
+}
+
+/// Paste asks before text that could run as Enter or close a bracket.
+fn confirm_paste(text: &str, k: &Kit, layer: &mut Vec<El>) {
+    let reason = if text.contains(['\r', '\n']) {
+        "It contains line breaks. The program may read them as Enter."
+    } else {
+        "It contains the end of a bracketed paste."
+    };
+    let preview: String = text.chars().take(60).collect();
+    let buttons = row()
+        .w_full()
+        .gap(8.0)
+        .justify_end()
+        .child(
+            Button::new("Cancel")
+                .on_press(|model: &mut Model| model.pending_paste = None)
+                .build(k)
+                .key("cancel-paste"),
+        )
+        .child(
+            Button::new("Paste")
+                .variant(ButtonVariant::Danger)
+                .on_press_tx(crate::selection::confirm_paste)
+                .build(k)
+                .key("confirm-paste"),
+        );
+    Dialog::new("confirm-paste-dialog", "Paste this text?")
+        .description(format!("{reason}\n\n{preview}"))
+        .width(360.0)
+        .fit()
+        .open(true)
+        .on_close(|model: &mut Model| model.pending_paste = None)
         .child(col().w_full().pl(16.0).pr(16.0).pb(16.0).child(buttons))
         .build(k, layer);
 }

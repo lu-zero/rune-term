@@ -20,13 +20,30 @@ pub fn copy(model: &Model, tx: &mut Tx) {
     tx.copy(text);
 }
 
-/// A user paste. Bracketed paste is `Surface::paste`'s concern.
+/// A user paste. `Surface::paste` encodes it; a paste that could run as
+/// Enter or close a bracket waits for confirmation first.
 pub fn on_paste(model: &mut Model, text: &str, tx: &mut Tx) {
     if text.is_empty() {
         return;
     }
-    if let Some(host) = model.terminal.primary_mut() {
+    let Some(host) = model.terminal.primary_mut() else {
+        return;
+    };
+    if host.surface.paste_is_safe(text) {
         host.surface.paste(text);
+        tx.live_only();
+    } else {
+        let mark = host.mark;
+        model.pending_paste = Some((mark, text.to_owned()));
+    }
+}
+
+/// Send the paste the user confirmed, to the pane that received it.
+pub fn confirm_paste(model: &mut Model, tx: &mut Tx) {
+    if let Some((mark, text)) = model.pending_paste.take() {
+        if let Some(host) = model.terminal.by_mark_mut(mark) {
+            host.surface.paste(text);
+        }
     }
     tx.live_only();
 }
@@ -37,6 +54,7 @@ mod tests {
     use crate::delegate;
     use crate::grid_source::SurfaceGrid;
     use crate::model;
+    use rune::{Env, Runtime};
     use term_grid::GridSource;
     use term_vt::{SelectionKind, Side};
 
@@ -44,6 +62,43 @@ mod tests {
         let mut model = model::init();
         delegate::setup(&mut model, std::sync::Arc::new(|| {}));
         model
+    }
+
+    #[test]
+    fn an_unsafe_paste_waits_for_confirmation_then_sends() {
+        let mut rt = Runtime::new(
+            host(),
+            crate::chrome::view,
+            (800.0, 500.0),
+            Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        rt.update(|model, tx| {
+            crate::selection::on_paste(model, "echo hi\n", tx);
+        });
+        assert!(rt.state.shared.take_output().is_empty());
+        assert!(rt.state.pending_paste.is_some());
+        rt.update(|model, tx| {
+            crate::selection::confirm_paste(model, tx);
+        });
+        let out = rt.state.shared.take_output();
+        assert_eq!(out, b"echo hi\r");
+    }
+
+    #[test]
+    fn a_safe_paste_goes_straight_to_the_shell() {
+        let mut rt = Runtime::new(
+            host(),
+            crate::chrome::view,
+            (800.0, 500.0),
+            Env::new(true, 1.0),
+        );
+        rt.frame(0.0);
+        rt.update(|model, tx| {
+            crate::selection::on_paste(model, "echo hi", tx);
+        });
+        assert_eq!(rt.state.shared.take_output(), b"echo hi");
+        assert!(rt.state.pending_paste.is_none());
     }
 
     #[test]
