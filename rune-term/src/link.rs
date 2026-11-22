@@ -132,7 +132,8 @@ impl PtyLink {
             Core::Adopted { fd: None, .. } => return None,
         };
         let group = unsafe { libc::tcgetpgrp(fd) };
-        if group <= 0 || group == shell {
+        let shell_group = unsafe { libc::getpgid(shell as libc::pid_t) };
+        if group <= 0 || group == shell as libc::pid_t || group == shell_group {
             return None;
         }
         Some(teletypewriter::foreground_process_name(fd, shell as u32))
@@ -289,6 +290,37 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
         false
+    }
+
+    #[test]
+    fn a_shell_at_its_prompt_does_not_count_as_running() {
+        let shared = Shared::new();
+        let engine = term_vt::Engine::new(shared.delegate());
+        let desc = SurfaceDesc {
+            shell: Some("/bin/sh".to_owned()),
+            args: vec!["-i".to_owned()],
+            ..SurfaceDesc::default()
+        };
+        let surface = Arc::new(engine.create_surface(&desc).expect("create surface"));
+        let link = PtyLink::spawn(Arc::clone(&surface), &desc, Arc::clone(&shared))
+            .expect("spawn the shell");
+        link.write(b"echo ready\n");
+        let mut render = term_vt::RenderState::new(&surface);
+        assert!(within(5, || {
+            render.update();
+            (0..render.lines()).any(|line| render.text_row(line).contains("ready"))
+        }));
+        assert_eq!(
+            link.running(),
+            None,
+            "the shell at its prompt is not a program"
+        );
+
+        link.write(b"sleep 5\n");
+        assert!(within(5, || link
+            .running()
+            .as_deref()
+            .is_some_and(|name| name.contains("sleep"))));
     }
 
     #[test]
