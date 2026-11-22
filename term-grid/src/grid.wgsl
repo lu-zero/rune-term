@@ -1,3 +1,5 @@
+// From Sugarloaf's grid shader, Copyright (c) 2022-present Raphael Amorim.
+// MIT licensed; see THIRD-PARTY-NOTICES.md.
 // Grid shader. Straight sRGB comes from the CPU. FLAG_LINEAR_BLENDING
 // (bit 1) writes linear premultiplied color; otherwise the output stays
 // sRGB-encoded and premultiplied. Display P3 is not applied.

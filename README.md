@@ -83,3 +83,7 @@ and decoded by `term-font` and `term-atlas`.
 The fallback subset is a renamed merge of Maple Mono NF CN and NF KR under the same
 license, shipped in the same way.
 `term-font`'s COLR parser is adapted from Rune (MIT, Copyright 2026 Anomaly).
+The terminal host, key encoder, sprites and grid shader come from Rio (MIT,
+Copyright 2022-present Raphael Amorim). Each bundled font's notice is in its
+data crate's `LICENSE-OFL.txt`; the full third-party notices are in
+[`THIRD-PARTY-NOTICES.md`](./THIRD-PARTY-NOTICES.md).

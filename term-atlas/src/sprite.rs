@@ -1,4 +1,6 @@
 //! Geometric glyphs rasterized into the gray atlas.
+//! From Rio's Sugarloaf sprite rasterizers, Copyright (c) 2022-present
+//! Raphael Amorim. MIT licensed; see `THIRD-PARTY-NOTICES.md`.
 
 use tiny_skia::{FillRule, LineCap, Paint, Path, PathBuilder, Pixmap, Stroke, Transform};
 

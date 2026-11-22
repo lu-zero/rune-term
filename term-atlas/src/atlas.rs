@@ -2,8 +2,8 @@
 //! The face is the profile's family, Maple Mono NF by default. ASCII is rasterized up
 //! front. Every other covered codepoint is rasterized on demand into the
 //! same cell. A codepoint the face does not cover is drawn from the compact
-//! bundled fallback, then by the macOS cascade. The faces are OFL; see the
-//! `*-LICENSE.txt` files beside the TTFs.
+//! bundled fallback, then by the macOS cascade. The faces are OFL; see
+//! `LICENSE-OFL.txt` in the `term-font-data-*` crates.
 
 use std::collections::HashMap;
 

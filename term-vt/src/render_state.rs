@@ -1,3 +1,7 @@
+//! Render-state snapshot, from librio's `render_state.rs`.
+//! Copyright (c) 2022-present Raphael Amorim. MIT licensed; see
+//! `THIRD-PARTY-NOTICES.md`.
+
 use crate::{InlineImages, Listener, Surface};
 use rio_graphics::{atlas_image_key, ColorType, GraphicData};
 use rio_vt::ansi::graphics::{

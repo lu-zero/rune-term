@@ -60,5 +60,6 @@ The font bytes live, zstd-compressed, in the `term-font-data-*` crates and are
 decoded once at runtime by `ruzstd`. `fallback-subset.py` regenerates them from
 the installed V8 Maple Mono CN/JP/KR faces (needs `fonttools` and `zstd`).
 
-MIT licensed. The bundled fonts are SIL OFL 1.1; see the license files in
-`assets/`.
+MIT licensed. The bundled fonts are SIL OFL 1.1; each data crate carries its
+font's notice in `LICENSE-OFL.txt`, also collected in the workspace's
+`THIRD-PARTY-NOTICES.md`.

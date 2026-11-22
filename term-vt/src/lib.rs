@@ -1,5 +1,7 @@
 //! Terminal state and host transport, extracted from Rio's `librio`.
 //! The C ABI stays in Rio; key events come from `term-input`.
+//! Copyright (c) 2022-present Raphael Amorim. MIT licensed; see
+//! `THIRD-PARTY-NOTICES.md`.
 
 mod render_state;
 

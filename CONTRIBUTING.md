@@ -45,6 +45,10 @@ rules for coding agents.
 - **Published**: `term-font`, `term-atlas` and the `term-font-data-*` faces are
   on crates.io. The rest wait on Rune or Rio releases, or on names already
   taken; 0.0.1 placeholders reserve those names.
+- **Licenses**: code adapted from Rio and Rune is credited in
+  `THIRD-PARTY-NOTICES.md`. The `term-font-data-*` crates are OFL-1.1, not MIT,
+  and each ships its font's notice in `LICENSE-OFL.txt`. Keep both up to date
+  when lifting code or adding a face.
 
 Sibling checkouts (`../rune`, `../rio`, `../wezterm`) are for reading. The
 workspace depends on upstream `rune` and Rio's crates. `[patch]` replaces those

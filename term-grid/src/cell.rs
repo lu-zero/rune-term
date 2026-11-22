@@ -1,4 +1,6 @@
 //! GPU cell layouts. Straight sRGB plus alpha. The shader premultiplies.
+//! Layouts from Sugarloaf, Copyright (c) 2022-present Raphael Amorim.
+//! MIT licensed; see `THIRD-PARTY-NOTICES.md`.
 
 use bytemuck::{Pod, Zeroable};
 
