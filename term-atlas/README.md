@@ -21,6 +21,17 @@ let rect = atlas.ensure('中', 2).expect("a glyph");
 stores premultiplied color as little-endian ARGB8888 bytes, as softbuffer's
 frame buffer does.
 
+## Custom font files
+
+`Face::from_bytes(bytes, index)` takes raw font bytes and a TTC index; the
+family name comes from the font's own name table. `Face::from_file(path)` reads
+the first face of a file:
+
+```rust
+let face = Face::from_file("/path/to/face.ttf")?;
+assert!(face.valid());
+```
+
 ## Fallback
 
 A codepoint missing from the profile's face is looked up in:

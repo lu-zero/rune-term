@@ -1,12 +1,13 @@
 //! The font files the grid draws with: bundled Maple Mono NF or Maple Mono NF CN, or an installed family.
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::thread;
 
 use fontique::{Blob, Collection, CollectionOptions, FontStyle, FontWeight, FontWidth};
-use swash::FontRef;
+use swash::{FontRef, StringId};
 
 /// The family the grid draws with when a profile names none, or one that is not installed.
 pub const BUNDLED_FAMILY: &str = "Maple Mono NF";
@@ -115,6 +116,31 @@ impl Face {
                 .clone(),
             index: 0,
         }
+    }
+
+    /// A face from font bytes at TTC index `index`. The family name comes from
+    /// the font's own name table. Malformed bytes give an unusable face; check
+    /// [`Self::valid`] before drawing with it.
+    pub fn from_bytes(bytes: impl Into<Vec<u8>>, index: u32) -> Self {
+        let data = Blob::new(Arc::new(bytes.into()));
+        let family = FontRef::from_index(data.data(), index as usize)
+            .and_then(|font| {
+                font.localized_strings()
+                    .find_by_id(StringId::Family, None)
+                    .map(|name| name.chars().collect::<String>())
+            })
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| "unnamed font".to_owned());
+        Self {
+            family: family.into(),
+            data,
+            index,
+        }
+    }
+
+    /// The first face in `path`.
+    pub fn from_file(path: impl AsRef<Path>) -> std::io::Result<Self> {
+        Ok(Self::from_bytes(std::fs::read(path)?, 0))
     }
 
     /// The regular face of `family`, or the bundled one when it is not installed. Bundled
@@ -286,6 +312,22 @@ fn installed_in(collection: &mut Collection, family: &str) -> Option<Face> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "bundled-font")]
+    #[test]
+    fn a_face_from_bytes_and_a_file_keeps_the_fonts_own_name() {
+        let bytes = term_font::data::decompress(BUNDLED_ZSTD);
+        let from_bytes = Face::from_bytes(bytes.clone(), 0);
+        assert_eq!(from_bytes.family(), BUNDLED_FAMILY);
+        assert!(from_bytes.valid());
+
+        let path = std::env::temp_dir().join(format!("term-atlas-{}.ttf", std::process::id()));
+        std::fs::write(&path, &bytes).expect("write font");
+        let from_file = Face::from_file(&path).expect("read font");
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(from_file.family(), BUNDLED_FAMILY);
+        assert!(from_file.valid());
+    }
 
     #[cfg(feature = "bundled-font")]
     #[test]
