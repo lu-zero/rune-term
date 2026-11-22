@@ -794,8 +794,8 @@ impl Atlas {
             .builder(font)
             .size(scale.ppem)
             // Autohinting a fallback glyph rebuilds a cmap-derived style map;
-            // unhinted outlines are visually equivalent at cell sizes.
-            .hint(false)
+            // only wide CJK glyphs skip it, narrow fallback text stays hinted.
+            .hint(cells == 1)
             .normalized_coords(scale.coords.iter().copied())
             .build();
         let image = Render::new(&[Source::Outline]).render(&mut scaler, gid);
