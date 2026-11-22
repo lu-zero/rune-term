@@ -1,0 +1,10 @@
+[package]
+name = "term-font-data-emoji"
+version.workspace = true
+edition.workspace = true
+license = "OFL-1.1"
+publish = true
+description = "zstd-compressed font bytes for rune-term: monochrome Noto Emoji fallback."
+repository.workspace = true
+
+[dependencies]

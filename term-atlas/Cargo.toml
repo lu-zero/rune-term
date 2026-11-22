@@ -1,6 +1,6 @@
 [package]
 name = "term-atlas"
-version = "0.1.3"
+version = "0.1.4"
 edition.workspace = true
 license.workspace = true
 publish = true
@@ -8,7 +8,7 @@ repository.workspace = true
 description = "CPU glyph atlas with font fallback and cell sprites. No rendering backend, no Rune and no librio."
 
 [features]
-default = ["bundled-font", "fallback-common"]
+default = ["bundled-font", "fallback-common", "emoji-fallback"]
 # The one face every normal build embeds, so text always has a font.
 bundled-font = [
     "dep:core-foundation", "dep:core-graphics", "dep:core-text", "dep:term-font-data-maple",
@@ -17,6 +17,8 @@ bundled-font = [
 fallback-common = ["dep:term-font-data-common"]
 fallback-ja = ["dep:term-font-data-ja"]
 fallback-zh-full = ["dep:term-font-data-zh-full"]
+# A monochrome emoji face for hosts with no installed emoji font.
+emoji-fallback = ["dep:term-font-data-emoji"]
 # A second selectable face, off by default.
 cascadia = ["dep:term-font-data-cascadia"]
 
@@ -28,6 +30,7 @@ term-font.workspace = true
 term-font-data-maple = { workspace = true, optional = true }
 term-font-data-cascadia = { workspace = true, optional = true }
 term-font-data-common = { workspace = true, optional = true }
+term-font-data-emoji = { workspace = true, optional = true }
 term-font-data-ja = { workspace = true, optional = true }
 term-font-data-zh-full = { workspace = true, optional = true }
 tiny-skia.workspace = true

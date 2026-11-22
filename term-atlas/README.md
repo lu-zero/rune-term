@@ -40,9 +40,11 @@ A codepoint missing from the profile's face is looked up in:
 2. an installed font found by [`term-font`](https://crates.io/crates/term-font),
 3. CoreText's cascade on macOS.
 
-Color glyphs come from COLR/sbix strikes through `term-font`; no color emoji
-font is embedded. Grapheme clusters spanning several codepoints (flags, ZWJ
-emoji, modifiers) are shaped with rustybuzz against the installed emoji face.
+Color glyphs come from COLR/sbix strikes through `term-font`. Grapheme clusters
+spanning several codepoints (flags, ZWJ emoji, modifiers) are shaped with
+rustybuzz against the installed emoji face, and every glyph it produces is
+composited into one cell. If the host has no emoji face, a bundled monochrome
+Noto Emoji subset is used; no color emoji font is embedded.
 
 ## Features
 
@@ -50,6 +52,7 @@ emoji, modifiers) are shaped with rustybuzz against the installed emoji face.
 | --- | --- | --- |
 | `bundled-font` | yes | Embed Maple Mono NF as the always-usable face |
 | `fallback-common` | yes | Common Han, kana and all modern Hangul |
+| `emoji-fallback` | yes | Monochrome Noto Emoji subset when no system emoji face exists |
 | `fallback-ja` | no | JIS X 0208 kanji |
 | `fallback-zh-full` | no | Full GBK Hanzi |
 | `cascadia` | no | A second selectable face |

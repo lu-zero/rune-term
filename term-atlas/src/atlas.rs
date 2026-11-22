@@ -408,46 +408,143 @@ impl Atlas {
         rect
     }
 
-    /// Shape a cluster with rustybuzz, then rasterize its leading glyph through
-    /// the same colour or outline path a single codepoint uses.
+    /// Shape a cluster with rustybuzz, then composite every glyph it produces
+    /// into one slot. A keycap can shape to a digit plus an enclosing ring;
+    /// drawing only the first glyph loses the ring.
     fn rasterize_cluster(&mut self, text: &str, cells: u8) -> Option<GlyphRect> {
+        let (blob, index) = crate::face::emoji_font()?;
+        self.rasterize_cluster_with(text, cells, blob.data(), *index)
+    }
+
+    fn rasterize_cluster_with(
+        &mut self,
+        text: &str,
+        cells: u8,
+        bytes: &[u8],
+        index: u32,
+    ) -> Option<GlyphRect> {
         if !self.has_font || self.ppem <= 0.0 {
             return None;
         }
-        let (blob, index) = crate::face::emoji_font()?;
-        let bytes: &[u8] = blob.data();
-        let face = rustybuzz::Face::from_slice(bytes, *index)?;
+        let face = rustybuzz::Face::from_slice(bytes, index)?;
         let mut buffer = rustybuzz::UnicodeBuffer::new();
         buffer.push_str(text);
         let shaped = rustybuzz::shape(&face, &[], buffer);
-        let gid = u16::try_from(shaped.glyph_infos().first()?.glyph_id).ok()?;
-        if gid == 0 {
-            return None;
-        }
-        if let Some((image, _)) =
-            term_font::color::rasterize(bytes, *index, u32::from(gid), self.ppem, &[])
-        {
-            return self.place_color_image(cells, image);
-        }
-        if let Some((image, _)) = term_font::color::rasterize_bitmap(bytes, *index, gid, self.ppem)
-        {
-            return self.place_color_image(cells, image);
-        }
-        let font = swash::FontRef::from_index(bytes, *index as usize)?;
+        let font = swash::FontRef::from_index(bytes, index as usize)?;
         let coords = regular_coords(&font);
         let upem = f32::from(font.metrics(&coords).units_per_em.max(1));
-        let advance = font.glyph_metrics(&coords).advance_width(gid) * self.ppem / upem;
-        self.place_face_glyph(
-            font,
-            gid,
-            text.chars().next()?,
-            cells,
-            FallbackScale {
-                ppem: self.ppem,
-                glyph_advance: advance,
-                coords,
-            },
-        )
+        let scale = self.ppem / upem;
+        let slot_w = u32::from(cells.max(1)) * self.cell.0;
+        let slot_h = self.cell.1;
+        let mut color = vec![0u8; (slot_w * slot_h * 4) as usize];
+        let mut gray = vec![0u8; (slot_w * slot_h) as usize];
+        let mut has_color = false;
+        let mut has_ink = false;
+        let mut pen = 0.0f32;
+        for (info, pos) in shaped.glyph_infos().iter().zip(shaped.glyph_positions()) {
+            let advance = pos.x_advance as f32 * scale;
+            let x = pen + pos.x_offset as f32 * scale;
+            let y = pos.y_offset as f32 * scale;
+            pen += advance;
+            let gid = u16::try_from(info.glyph_id).ok()?;
+            if gid == 0 {
+                continue;
+            }
+            if let Some((image, place)) =
+                term_font::color::rasterize(bytes, index, u32::from(gid), self.ppem, &[])
+            {
+                blit_rgba(
+                    &mut color,
+                    (slot_w, slot_h),
+                    &image.rgba,
+                    (image.width, image.height),
+                    (x + place.left as f32, self.baseline - place.top as f32 - y),
+                );
+                has_color = true;
+                has_ink = true;
+                continue;
+            }
+            if let Some((image, place)) =
+                term_font::color::rasterize_bitmap(bytes, index, gid, self.ppem)
+            {
+                blit_rgba(
+                    &mut color,
+                    (slot_w, slot_h),
+                    &image.rgba,
+                    (image.width, image.height),
+                    (x + place.left as f32, self.baseline - place.top as f32 - y),
+                );
+                has_color = true;
+                has_ink = true;
+                continue;
+            }
+            let mut scaler = self
+                .context
+                .builder(font)
+                .size(self.ppem)
+                .normalized_coords(coords.iter().copied())
+                .build();
+            let Some(image) = Render::new(&[Source::Outline]).render(&mut scaler, gid) else {
+                continue;
+            };
+            blit_gray(
+                &mut gray,
+                (slot_w, slot_h),
+                &image.data,
+                (image.placement.width, image.placement.height),
+                (
+                    x + image.placement.left as f32,
+                    self.baseline - image.placement.top as f32 - y,
+                ),
+            );
+            has_ink = true;
+        }
+        if !has_ink {
+            return None;
+        }
+        if has_color {
+            let origin = self.alloc_color(cells)?;
+            if self.color.is_empty() {
+                self.color = vec![0u8; (COLOR_ATLAS_SIZE * COLOR_ATLAS_SIZE * 4) as usize];
+            }
+            for row in 0..slot_h {
+                for col in 0..slot_w {
+                    let i = ((row * slot_w + col) * 4) as usize;
+                    let sample = [color[i], color[i + 1], color[i + 2], color[i + 3]];
+                    let sample = self.to_format(sample);
+                    stamp_color(&mut self.color, origin, col, row, sample);
+                }
+            }
+            self.color_dirty = true;
+            Some(GlyphRect {
+                x: origin.0,
+                y: origin.1,
+                w: slot_w,
+                h: slot_h,
+                atlas: 1,
+            })
+        } else {
+            let origin = self.alloc(cells)?;
+            for row in 0..slot_h {
+                for col in 0..slot_w {
+                    stamp(
+                        &mut self.pixels,
+                        origin,
+                        col,
+                        row,
+                        gray[(row * slot_w + col) as usize],
+                    );
+                }
+            }
+            self.dirty = true;
+            Some(GlyphRect {
+                x: origin.0,
+                y: origin.1,
+                w: slot_w,
+                h: slot_h,
+                atlas: 0,
+            })
+        }
     }
 
     /// A stroke `cells` wide (1 or 2) where the face puts its underline, drawn under a cell.
@@ -1292,6 +1389,64 @@ fn bilinear_rgba(src: &[u8], w: u32, h: u32, x: f32, y: f32) -> [u8; 4] {
     out
 }
 
+fn blit_rgba(dst: &mut [u8], size: (u32, u32), src: &[u8], src_size: (u32, u32), at: (f32, f32)) {
+    let (dw, dh) = size;
+    let (sw, sh) = src_size;
+    let (x, y) = at;
+    if sw == 0 || sh == 0 {
+        return;
+    }
+    for row in 0..sh {
+        for col in 0..sw {
+            let px = (x + col as f32).round() as i32;
+            let py = (y + row as f32).round() as i32;
+            if px < 0 || py < 0 || px >= dw as i32 || py >= dh as i32 {
+                continue;
+            }
+            let si = ((row * sw + col) * 4) as usize;
+            if si + 4 > src.len() {
+                continue;
+            }
+            let di = ((py as u32 * dw + px as u32) * 4) as usize;
+            let a = u16::from(src[si + 3]);
+            let inv = 255 - a;
+            for c in 0..3 {
+                let v = u16::from(src[si + c]) + ((u16::from(dst[di + c]) * inv + 127) / 255);
+                dst[di + c] = v.min(255) as u8;
+            }
+            let out = a + ((u16::from(dst[di + 3]) * inv + 127) / 255);
+            dst[di + 3] = out.min(255) as u8;
+        }
+    }
+}
+
+fn blit_gray(dst: &mut [u8], size: (u32, u32), src: &[u8], src_size: (u32, u32), at: (f32, f32)) {
+    let (dw, dh) = size;
+    let (sw, sh) = src_size;
+    let (x, y) = at;
+    if sw == 0 || sh == 0 {
+        return;
+    }
+    for row in 0..sh {
+        for col in 0..sw {
+            let px = (x + col as f32).round() as i32;
+            let py = (y + row as f32).round() as i32;
+            if px < 0 || py < 0 || px >= dw as i32 || py >= dh as i32 {
+                continue;
+            }
+            let si = (row * sw + col) as usize;
+            if si >= src.len() {
+                continue;
+            }
+            let di = (py as u32 * dw + px as u32) as usize;
+            let v = u16::from(src[si]);
+            let inv = 255 - v;
+            let out = v + ((u16::from(dst[di]) * inv + 127) / 255);
+            dst[di] = out.min(255) as u8;
+        }
+    }
+}
+
 fn stamp_color(pixels: &mut [u8], origin: (u32, u32), x: u32, y: u32, sample: [u8; 4]) {
     if sample[3] == 0 {
         return;
@@ -1543,6 +1698,25 @@ mod tests {
         assert!(atlas.take_dirty());
         assert_eq!(atlas.ensure('\u{276F}', 1), Some(mark));
         assert!(!atlas.take_dirty());
+    }
+
+    #[cfg(feature = "emoji-fallback")]
+    #[test]
+    fn a_two_glyph_cluster_keeps_both_glyphs() {
+        let mut atlas = Atlas::with_cell(18, 34);
+        let (blob, index) = crate::face::bundled_emoji();
+        let man = atlas
+            .rasterize_cluster_with("\u{1F468}", 4, blob.data(), index)
+            .expect("man");
+        let both = atlas
+            .rasterize_cluster_with("\u{1F468}\u{200D}\u{1F40D}", 4, blob.data(), index)
+            .expect("man and snake");
+        assert_eq!(man.atlas, 0);
+        assert_eq!(both.atlas, 0);
+        assert!(
+            ink_count(&atlas, both) > ink_count(&atlas, man) + 20,
+            "the second glyph is missing"
+        );
     }
 
     #[cfg(all(target_os = "macos", feature = "bundled-font"))]

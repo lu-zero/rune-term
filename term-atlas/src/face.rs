@@ -32,6 +32,8 @@ pub(crate) const FAILOVER_ZSTD: &[u8] = term_font_data_common::ZSTD;
 pub(crate) const FAILOVER_JA_ZSTD: &[u8] = term_font_data_ja::ZSTD;
 #[cfg(feature = "fallback-zh-full")]
 pub(crate) const FAILOVER_ZH_FULL_ZSTD: &[u8] = term_font_data_zh_full::ZSTD;
+#[cfg(feature = "emoji-fallback")]
+pub(crate) const EMOJI_ZSTD: &[u8] = term_font_data_emoji::ZSTD;
 
 /// The default face's bytes, decoded once for CoreText's descriptor.
 #[cfg(all(feature = "bundled-font", target_os = "macos"))]
@@ -59,9 +61,9 @@ pub fn fallback_bytes() -> &'static [Blob<u8>] {
     })
 }
 
-/// An installed emoji face, for shaping multi-codepoint clusters. Cached for
-/// the process: Apple's color emoji file is large enough that a scan per frame
-/// would be wasteful.
+/// An installed emoji face, or the bundled monochrome subset when the host
+/// has none. Cached for the process: Apple's color emoji file is large enough
+/// that a scan per frame would be wasteful.
 pub(crate) fn emoji_font() -> Option<&'static (Blob<u8>, u32)> {
     static EMOJI: OnceLock<Option<(Blob<u8>, u32)>> = OnceLock::new();
     EMOJI
@@ -87,9 +89,23 @@ pub(crate) fn emoji_font() -> Option<&'static (Blob<u8>, u32)> {
                 };
                 return Some((data, font.index()));
             }
+            #[cfg(feature = "emoji-fallback")]
+            {
+                Some(bundled_emoji())
+            }
+            #[cfg(not(feature = "emoji-fallback"))]
             None
         })
         .as_ref()
+}
+
+#[cfg(feature = "emoji-fallback")]
+pub(crate) fn bundled_emoji() -> (Blob<u8>, u32) {
+    static DATA: OnceLock<Blob<u8>> = OnceLock::new();
+    let data = DATA
+        .get_or_init(|| Blob::new(Arc::new(term_font::data::decompress(EMOJI_ZSTD))))
+        .clone();
+    (data, 0)
 }
 
 #[derive(Clone, Debug)]
@@ -360,6 +376,18 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         assert_eq!(from_file.family(), BUNDLED_FAMILY);
         assert!(from_file.valid());
+    }
+
+    #[cfg(feature = "emoji-fallback")]
+    #[test]
+    fn the_bundled_emoji_face_shapes_flags() {
+        let (blob, index) = bundled_emoji();
+        let face = rustybuzz::Face::from_slice(blob.data(), index).expect("emoji face");
+        let mut buffer = rustybuzz::UnicodeBuffer::new();
+        buffer.push_str("\u{1F1FA}\u{1F1E6}");
+        let shaped = rustybuzz::shape(&face, &[], buffer);
+        assert_eq!(shaped.glyph_infos().len(), 1);
+        assert_ne!(shaped.glyph_infos()[0].glyph_id, 0);
     }
 
     #[cfg(feature = "bundled-font")]

@@ -72,6 +72,10 @@ recorded in `LICENSE-OFL.txt` in each data crate:
 - Cascadia Code NF: (c) 2021 Microsoft Corporation. All Rights Reserved.
   "Cascadia Code is a trademark of the Microsoft group of companies." Its
   notice carries Microsoft's supplementary terms and the OFL-based license.
+- Noto Emoji: Copyright 2013 Google LLC, SIL OFL 1.1. `term-font-data-emoji`
+  carries a subset (regional indicators, ZWJ, variation selectors, modifiers,
+  keycaps and common emoji) with GSUB retained so clusters still shape. Its
+  `LICENSE-OFL.txt` is the upstream notice.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

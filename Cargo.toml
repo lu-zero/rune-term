@@ -9,6 +9,7 @@ members = [
     "term-font-data-common",
     "term-font-data-ja",
     "term-font-data-zh-full",
+    "term-font-data-emoji",
     "term-input",
     "term-control",
     "term-host",
@@ -47,6 +48,7 @@ term-font-data-cascadia = { path = "term-font-data-cascadia", version = "0.1.0" 
 term-font-data-common = { path = "term-font-data-common", version = "0.1.0" }
 term-font-data-ja = { path = "term-font-data-ja", version = "0.1.0" }
 term-font-data-zh-full = { path = "term-font-data-zh-full", version = "0.1.0" }
+term-font-data-emoji = { path = "term-font-data-emoji", version = "0.1.0" }
 term-grid = { path = "term-grid", default-features = false }
 term-input = { path = "term-input" }
 term-mux = { path = "term-mux" }

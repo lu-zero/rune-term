@@ -19,7 +19,9 @@ rules for coding agents.
 - **Font tiers**: `font-bundled` is the one always-usable face (Maple Mono NF).
   `font-fallback-common` is on by default; `font-fallback-ja` and
   `font-fallback-zh-full` add coverage and weight; `font-cascadia` adds a
-  second face. `--no-default-features` embeds no fonts at all: the GUI picks
+  second face. A small monochrome Noto Emoji subset (`emoji-fallback`) backs
+  emoji shaping when the host has no emoji face. `--no-default-features` embeds
+  no fonts at all: the GUI picks
   any installed family (monospaced first) and exits with a download link only
   if no font is installed.
 - **Fallback fonts**: the `term-font-data-*` crates hold zstd-compressed TTFs,
