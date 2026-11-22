@@ -11,7 +11,8 @@ change.
 
 This tree was largely written with an agent. Be skeptical of existing code,
 comments, and docs: a pattern being there does not make it correct.
-`images`, `ime`, `search`, `selection`, and `sprite` are empty on purpose.
+`term-grid/src/sixel.rs` is empty on purpose; the earlier empty seams for
+images, IME, search, selection and sprites are now implemented.
 
 ## Working here
 
@@ -50,8 +51,7 @@ comments, and docs: a pattern being there does not make it correct.
   guarantees rule out.
 - `#[allow(dead_code)]` does not keep something "just in case": delete it.
 - An empty seam stays empty until the work it stands for is asked for.
-  Filling `sprite`, `images`, `ime`, `search`, or `selection` in passing is
-  that work.
+  `term-grid/src/sixel.rs` is the one left; filling it in passing is that work.
 
 **Dependencies**
 - Every dependency, external or in-tree, is declared once in the root
@@ -86,6 +86,7 @@ comments, and docs: a pattern being there does not make it correct.
   with the window.
 - The cell is `face_cell()` of Maple Mono NF at 14 points. A cmap miss uses
   the bundled fallback tiers, then a system font `term-font` finds; CoreText
-  is the last resort on macOS. Faces are Cargo features; a build with none
-  uses any installed font, or reports where to download one if there is none.
-  No color emoji file is embedded.
+  is the last resort on macOS. Multi-codepoint emoji are shaped with rustybuzz
+  against an installed emoji face or the bundled monochrome subset. Faces are
+  Cargo features; a build with none uses any installed font, or reports where
+  to download one if there is none. No color emoji file is embedded.

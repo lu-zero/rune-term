@@ -1,69 +1,78 @@
 # Contributing to rune-term
 
-How to build and test, and how the PTY handover works. `AGENTS.md` keeps the
-rules for coding agents.
+This page covers the build, the tests, the crate layout, and the PTY handover.
+`AGENTS.md` has the rules we follow when an agent helps with the code; you do
+not need it just to build.
 
-## Building and testing
+## Getting set up
 
-- **macOS**, the platform this builds on: Rune draws with Metal, so the Xcode
+- **macOS** is the platform we build on. Rune draws with Metal, so the Xcode
   command-line tools are all it needs.
-- **Linux**: the window needs `libxkbcommon`; linking fails without it.
-  Wayland or X11 client libraries, fontconfig and dbus may be needed as well,
-  depending on the session and the features built. Package names vary by
-  distribution.
+- **Linux** needs `libxkbcommon` to link the window. Depending on your session
+  and the features built, Wayland or X11 client libraries, fontconfig and dbus
+  may be needed too. Package names vary by distribution.
 - **Headless GPU tests** (`grid_pipeline`, and `headless` without default
-  features) render through wgpu and need a graphics adapter: Vulkan or OpenGL
-  drivers, or a software one such as Mesa's lavapipe on a machine without a
-  GPU.
-- **wgpu stays pinned at `=30.0.1`. `Cargo.lock` is gitignored.**
-- **Font tiers**: `font-bundled` is the one always-usable face (Maple Mono NF).
-  `font-fallback-common` is on by default; `font-fallback-ja` and
-  `font-fallback-zh-full` add coverage and weight; `font-cascadia` adds a
-  second face. A small monochrome Noto Emoji subset (`emoji-fallback`) backs
-  emoji shaping when the host has no emoji face. `--no-default-features` embeds
-  no fonts at all: the GUI picks
-  any installed family (monospaced first) and exits with a download link only
-  if no font is installed.
-- **Fallback fonts**: the `term-font-data-*` crates hold zstd-compressed TTFs,
-  decoded once at runtime by pure-Rust `ruzstd`. `term-atlas/fallback-subset.py`
-  regenerates them from the installed V8 NF CN/JP/KR faces (needs `fonttools`
-  and the `zstd` CLI).
-- **Host**: `term-host` owns the generic terminal state (surfaces, grid sync,
-  scrollback, selection, search and input delivery). `rune-term-core` is the
-  Rune adapter: Rune-side key, pointer-phase and colour conversions live there.
-- **Keys**: `term-input` owns its key types and encoder; `term-vt` consumes
-  them directly. It has no Rune or Rio dependency and can be used by
-  another frontend.
-- **VT**: `term-vt` is librio's host layer without the C ABI. It depends on
-  Rio's patched `rio-vt` for the parser and grid, so it cannot be published
-  until those fixes land upstream in a released 0.6.0.
-- **Atlas**: `term-atlas` owns the CPU glyph atlas, sprites and fallback;
-  `term-grid` only uploads its `pixels()`/`color_pixels()` to wgpu. The color
-  byte order is chosen at construction (RGBA for wgpu, ARGB for softbuffer).
-  A glyph the profile's face misses is drawn from it before asking `term-font`
-  for a system font. Multi-codepoint clusters (flags, ZWJ emoji, modifiers)
-  are shaped with rustybuzz against the installed emoji face, then rasterized
-  by the same colour path. `term-font` also rasterizes COLR v1 color glyphs; its
-  parser is adapted from Rune and lives outside `term-grid` so that crate
-  stays free of Rune and Rio.
-- **Published**: `term-font`, `term-atlas` and the `term-font-data-*` faces are
-  on crates.io. The rest wait on Rune or Rio releases, or on names already
-  taken; 0.0.1 placeholders reserve those names.
-- **Licenses**: code adapted from Rio and Rune is credited in
-  `THIRD-PARTY-NOTICES.md`. The `term-font-data-*` crates are OFL-1.1, not MIT,
-  and each ships its font's notice in `LICENSE-OFL.txt`. Keep both up to date
-  when lifting code or adding a face.
+  features) render through wgpu. They need a Vulkan or OpenGL driver, or a
+  software renderer such as Mesa's lavapipe.
+- wgpu stays pinned at `=30.0.1`. `Cargo.lock` is gitignored.
+
+## How the crates fit together
+
+`term-vt` holds the host layer copied from librio without its C ABI: `Surface`,
+`RenderState`, the delegate and the terminal modes. It calls Rio's patched
+`rio-vt`, `rio-graphics`, `corcovado` and `teletypewriter` directly.
+`term-input` owns the key types and encoder and depends on neither Rune nor Rio.
+
+`term-host` owns generic terminal state — surfaces, grid sync, scrollback,
+selection, search and input delivery — with no Rune dependency.
+`rune-term-core` is the Rune adapter: Rune-side key, pointer-phase and colour
+conversions live there.
+
+`term-atlas` rasterizes glyphs, sprites and fallback into CPU pixel buffers;
+`term-grid` uploads those buffers to wgpu. The atlas stores either RGBA or ARGB
+bytes, chosen at construction, so a CPU frontend can share it. `term-font`
+finds system faces and rasterizes COLR v1 colour glyphs; its parser is adapted
+from Rune and stays out of `term-grid`.
+
+## Fonts
+
+`font-bundled` embeds Maple Mono NF, the default face. `font-fallback-common`
+adds common Han, kana and Hangul and is on by default. `font-fallback-ja` and
+`font-fallback-zh-full` add more coverage and weight; `font-cascadia` adds a
+second selectable face. `emoji-fallback` adds a small monochrome Noto Emoji
+subset for hosts with no emoji face. Multi-codepoint emoji are shaped with
+rustybuzz against the installed emoji face or that subset.
+
+With `--no-default-features` no fonts are embedded at all. The GUI then picks
+any installed family (monospaced first) and shows a download link only if no
+font is installed.
+
+The `term-font-data-*` crates hold zstd-compressed TTFs, decoded once at
+runtime by the pure-Rust `ruzstd`. `term-atlas/fallback-subset.py` regenerates
+them from the installed V8 NF CN/JP/KR faces; it needs `fonttools` and the
+`zstd` CLI.
+
+## Dependencies and patches
 
 Sibling checkouts (`../rune`, `../rio`, `../wezterm`) are for reading. The
-workspace depends on upstream `rune` and Rio's crates. `[patch]` replaces those
-sources with branches `physical-key-text` and `for-rune-term`; a local
-checkout replaces the patch entry with a path. winit, parley_engine and the
-AccessKit adapters are rune's `vendor/` copies, from the same branch. Never
-copy WezTerm source in. Never link `sugarloaf`, `rio-window`, `rioterm`,
-`rio-backend`, or WezTerm's `window` or `mux`.
+workspace depends on upstream `rune` and Rio's crates; `[patch]` replaces those
+sources with the `physical-key-text` and `for-rune-term` branches. A local
+checkout can replace a patch entry with a path. Never copy WezTerm source in,
+and never link `sugarloaf`, `rio-window`, `rioterm`, `rio-backend`, or WezTerm's
+`window` or `mux`.
 
-The gate before a commit is `just check-all`: formatting, clippy with
-`-D warnings` on both feature sets, and the lib tests:
+`term-font`, `term-atlas` and the `term-font-data-*` crates are on crates.io.
+The rest wait on Rune or Rio releases, or on names already taken; 0.0.1
+placeholders reserve those names.
+
+Code adapted from Rio and Rune is credited in `THIRD-PARTY-NOTICES.md`. The
+font data crates are OFL-1.1, not MIT, and each ships its font's notice in
+`LICENSE-OFL.txt`. Keep both up to date when you lift code or add a face.
+
+## Tests and the pre-commit gate
+
+Run `just check-all` before committing. It checks formatting, runs clippy with
+`-D warnings` on both feature sets, and runs the library tests:
 
 ```
 cargo test -p term-grid --lib
@@ -74,21 +83,26 @@ cargo test -p rune-term --test grid_pipeline
 cargo test -p rune-term --no-default-features --test headless
 ```
 
-## Site
+`just test-headless` adds the headless snapshots;
+`cargo build --release -p rune-term` checks the full link.
+
+## Site and generated docs
 
 `just shots` regenerates the captures in `docs/images`. `just site` stages
 README.md, the docs pages and those images into `target/site-src`, then builds
 an mdBook into `target/site`; `just site-serve` previews it on port 3000. mdBook
 is needed (`cargo install mdbook`), and edits under `docs/` need a re-run of
-either site recipe. `just docs-cli` regenerates `docs/cli/` and `man/` from the
-`winnow-args` derive spec; commit both with CLI changes.
+either site recipe.
+
+`just docs-cli` regenerates `docs/cli/` and `man/` from the `winnow-args`
+derive spec. Commit both with CLI changes.
 
 ## The PTY handover
 
-The handover lets local shells survive the app. Launching
-`rune-term --handover` opts in; while a running instance is up,
-`rune-term-ctl handover` flips its exit handover on — the marker it writes
-makes the next launch adopt the shells. Default: off, as before.
+The handover lets local shells survive the app. It is off by default. Pass
+`rune-term --handover` at startup, or run `rune-term-ctl handover` against a
+running instance. Either writes a marker that makes the next launch adopt the
+shells when this one exits.
 
 ### The keeper (`rune-term-keeper`)
 
