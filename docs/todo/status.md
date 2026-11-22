@@ -9,11 +9,14 @@ The numbers are that plan's.
 - [x] **1. Foundation.** One window, one surface, a tab strip, and the
       headless inject harness.
 - [x] **2. term-grid.** The cell pass, the gray atlas, and dirty-row upload.
-      The face is the profile's, Cascadia Code NF at 14 points by default, and
+      The face is the profile's, Maple Mono NF at 14 points by default, and
       a codepoint the face misses is drawn by the macOS cascade, color emoji
       included. An underlined cell, from SGR 4 or a hovered link, gets a
       stroke where the face puts its underline, in the text's color. The
       underline styles (double, curly, dotted, dashed) all draw single.
+      Multi-codepoint clusters (flags, ZWJ emoji, modifiers) are shaped with
+      rustybuzz against the installed emoji face, or the bundled monochrome
+      subset when there is none.
 - [x] **5. term-input.** `map_key` copies platform text and `consumed_mods`.
       App chords, scroll chords, and `cell_at` are here. There is no
       US-QWERTY table.
@@ -101,7 +104,7 @@ The numbers are that plan's.
       written back and the change is pushed into the running terminal, where a
       font size or family change keeps the grid's cell count and snaps the
       window. The grid draws the profile's family, the regular face of an
-      installed one, and the bundled Cascadia Code NF when it is not
+      installed one, and the bundled Maple Mono NF when it is not
       installed. The editor picks it from the bundled family and the installed
       monospaced ones, searchable, with `font-picker` over rune-kit's
       `Combobox`. A dark and a light theme with the same base name share one
@@ -176,13 +179,17 @@ These items extend [`rune-term.md`](./rune-term.md). Each links its design.
       [`settings-profiles.md`](./settings-profiles.md),
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md),
       [`tear-out.md`](./tear-out.md).
-- [ ] **21. IPC and automation.** Owner-scoped local control plane
+- [~] **21. IPC and automation.** Owner-scoped local control plane
       (versioned, capability-gated): query/events, then create-from-profile /
       focus / close / resize, then input/capture, targeting `it2`-like
-      scripting. Design: [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
-- [ ] **22. CLI, docs, and tooling.** CLI aligned with IPC using `winnow-args`,
+      scripting. `term-control` holds the messages, codec and transport, and
+      `rune-term-ctl` has info/profiles/tabs queries; the mutation and
+      input/capture surface is not built.
+      Design: [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
+- [~] **22. CLI, docs, and tooling.** CLI aligned with IPC using `winnow-args`,
       with generated man pages/reference docs; `justfile` for build/test/run and
-      install across lean/fat/helper compositions. Design:
+      install across lean/fat/helper compositions. The CLI and the queries
+      above exist; generated docs and the compositions do not. Design:
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md).
 - [~] **23. Multiplexer-backed sessions.** Explicit session concept and
       backend abstraction (local `term-vt` vs multiplexer), covering create /
@@ -242,7 +249,7 @@ These items extend [`rune-term.md`](./rune-term.md). Each links its design.
       [`profiles-ipc-cli.md`](./profiles-ipc-cli.md). Roaming, and shells that
       outlive the UI, are `rune-term-agent`: rmux control mode over QUIC
       first, then recovery streams, then a local PTY host. Phase 0, the
-      rmux-sdk spike, passed: a keyframe rebuilds a librio surface exactly,
+      rmux-sdk spike, passed: a keyframe rebuilds a term-vt surface exactly,
       and a stalled reader gets one rebase, not a backlog. Phase 1 is built: a
       profile's Transport, or `attach --roam`, starts `rune-term-agent serve`
       over ssh and reaches control mode over QUIC after. A link that drops
@@ -278,8 +285,8 @@ takes any 30.x.
 - [~] **3. Reflow.** `lu-zero/rio` branch `for-rune-term`: Rio main at
       `e7c05e43` plus our prompt and resize commits, the only rio-vt fixes
       still needed; neither has an upstream issue or PR. A multi-line bash
-      prompt survives a width
-      change only with OSC 133 marks, from `rune-term shell-integration bash`
-      or `zsh`. `preserve_scrollback` is still false on macOS in the plan.
+      prompt survives a width change only with OSC 133 marks, from
+      `rune-term shell-integration bash` or `zsh`. `preserve_scrollback` is
+      still false on macOS in the plan.
 
 The design header still records an empty workspace. This page is the status.
