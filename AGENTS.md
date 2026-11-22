@@ -20,6 +20,8 @@ images, IME, search, selection and sprites are now implemented.
   blocked by the `pre-merge-commit` hook; use rebase or cherry-pick.
 - A change that has to land in Rune or Rio is reported. Those trees are not
   committed from this repository.
+- Do not bump versions or publish immediately after a fix. Wait for the user's
+  go-ahead so more fixes and improvements can land in the same release.
 - `docs/todo/` is committed. It is the design, so nothing cites it as
   scratch and nothing gitignores it.
 - A commit you assisted carries `Assisted-by: AGENT:MODEL`
