@@ -1,16 +1,21 @@
-# rune-term: a Rune shell over librio
+# rune-term: a Rune shell over term-vt
 
 | | |
 |---|---|
-| Author | _placeholder_ |
+| Author | Luca Barbato |
 | Date | 2026-11-07 |
-| Status | Draft |
-| Workspace | `/Users/lu_zero/Sources/rust/rune-term` (empty) |
+| Status | Design; implementation progress is in [`status.md`](./status.md) |
+| Workspace | `/Users/lu_zero/Sources/rust/rune-term` |
 | Read-only siblings | `/Users/lu_zero/Sources/rust/rune`, `/Users/lu_zero/Sources/rust/rio`, `/Users/lu_zero/Sources/rust/wezterm` |
+
+This is the original design. Where it says `librio`, the implementation uses
+the in-tree `term-vt`: librio's host layer without the C ABI. Key types and
+encoding moved to `term-input`, and Rio's patched crates are reached directly
+as `rio-vt`, `rio-graphics`, `corcovado` and `teletypewriter`.
 
 ## Overview
 
-rune-term is a new terminal emulator. Rune owns the window, tabs, splits, focus, clipboard, overlays, and headless PNG snapshots. librio owns the PTY, the VT, and the pull-based `RenderState`. The cell grid is one Rune compositor effect per pane: a wgpu pipeline on the device Rune already created, ported from Sugarloaf's cell layout and aimed at `EffectSite::format` with `Frame::srgb_blend()`. Column reflow is WezTerm's join-then-split, implemented as a tested change inside `rio-vt`'s `Grid::resize`, which is the only function `Surface::resize` calls. rune-term does not carry a second VT, a second GPU device, Sugarloaf, or WezTerm's GUI.
+rune-term is a new terminal emulator. Rune owns the window, tabs, splits, focus, clipboard, overlays, and headless PNG snapshots. `term-vt` owns the host layer — `Engine`, `Surface`, `SurfaceDelegate` and the pull-based `RenderState` — over Rio's `rio-vt` parser and grid; rune-term spawns the shell on a teletypewriter PTY and feeds its output through `Surface::inject_output`. The cell grid is one Rune compositor effect per pane: a wgpu pipeline on the device Rune already created, fed by the CPU atlas in `term-atlas` and aimed at `EffectSite::format` with `Frame::srgb_blend()`. Column reflow is WezTerm's join-then-split, implemented as a tested change inside `rio-vt`'s `Grid::resize`, which is the only function `Surface::resize` calls. rune-term does not carry a second VT, a second GPU device, Sugarloaf, or WezTerm's GUI.
 
 A burst of PTY output wakes Rune once, presents one frame, uploads dirty rows, and leaves the view tree alone. Interactive echo is budgeted at under one present after the bytes arrive on the UI thread, and at most two frames end to end with the shell. `cat` of a large file coalesces to one `RenderState::update_rearm` per presented frame.
 
@@ -20,9 +25,9 @@ Three existing codebases each own a piece that rune-term needs, and each owns ot
 
 Rune (`crates/rune`) is a retained-ish view shell: `AppSpec::view` rebuilds elements when `poll` returns true, `El::effect(mark)` reserves a compositor slot, and `Compositor::render` paints that slot with `Renderer::draw_with`. The window host's `setup_waker` (`crates/rune/src/window.rs`) is `AppHandle::wake`. A wake redraws a visible window without requiring the view to commit. On macOS the default GPU is Rune's own Metal backend exposed as a wgpu 30 device (`crates/rune/src/gpu/metal/mod.rs`, feature `metal-backend`). Both trees resolve wgpu `30.0.1` (identical lock checksum). The Metal backend panics on binding arrays, depth, MSAA, indirect draws, and more than four color targets. Read-only storage buffers work (`gpu/metal/layout.rs`, `gpu/metal/tests.rs`).
 
-librio (`rio/librio`) is the embedder contract already extracted from Rio: `Engine`, `Surface`, `SurfaceDelegate::wakeup`, `RenderState` (`row_dirty`, `style_at`, `square`, `term_colors`, `kitty_geometry`, `kitty_image_rgba`), `Surface::key` / `mouse_button` / `mouse_motion` / `resize` / `scroll` / `scroll_wheel`, and `librio::key::encode`. `rio-vt` and `teletypewriter` come in through that rlib. librio's README tells Rust callers to depend on `rio-vt` directly, because the crate also exists as a C ABI. The host contract rune-term needs is the `Surface` plus `RenderState` plus the key encoder, which `rio-vt` does not wrap by itself. Rio's own GUI (`rio-window`, `frontends/rioterm`, `rio-backend`, Sugarloaf) stays out of the link.
+The host contract was originally librio's (`rio/librio`): `Engine`, `Surface`, `SurfaceDelegate::wakeup`, `RenderState` (`row_dirty`, `style_at`, `square`, `term_colors`, `kitty_geometry`, `kitty_image_rgba`), `Surface::key` / `mouse_button` / `mouse_motion` / `resize` / `scroll` / `scroll_wheel`, and the key encoder. librio also ships as a C ABI. `term-vt` is that host layer copied into this workspace without the C ABI, and it calls Rio's crates directly: `rio-vt` for the parser and grid, `rio-graphics` for graphics, `corcovado` and `teletypewriter` where a PTY is owned. `term-input` owns the key types and encoder, adapted from `librio/src/key.rs`. `rio-vt` alone does not wrap the host contract. Rio's own GUI (`rio-window`, `frontends/rioterm`, `rio-backend`, Sugarloaf) stays out of the link.
 
-Rio's grid resize is the Alacritty pairwise shuffle in `rio-vt/src/crosswords/grid/resize.rs` (Apache-2.0 header). It walks wrapped rows and pulls or pushes cells one row at a time. WezTerm joins every soft-wrapped row into one logical line, drops trailing spaces, and splits at the new width (`wezterm/term/src/screen.rs` `rewrap_lines`, `wezterm-surface/src/line/line.rs` `Line::wrap`), and it deletes blank rows below the cursor before they fall into scrollback. That is the behavior to ship. It has to land in `Grid::resize`, because `Surface::resize` (`librio/src/lib.rs`) always calls `Crosswords::resize` (`rio-vt/src/crosswords/mod.rs`), which always calls `grid.resize`. A snapshot rewriter in rune-term would fork a second VT that the next `Surface::resize` would immediately overwrite.
+Rio's grid resize is the Alacritty pairwise shuffle in `rio-vt/src/crosswords/grid/resize.rs` (Apache-2.0 header). It walks wrapped rows and pulls or pushes cells one row at a time. WezTerm joins every soft-wrapped row into one logical line, drops trailing spaces, and splits at the new width (`wezterm/term/src/screen.rs` `rewrap_lines`, `wezterm-surface/src/line/line.rs` `Line::wrap`), and it deletes blank rows below the cursor before they fall into scrollback. That is the behavior to ship. It has to land in `Grid::resize`, because `Surface::resize` (`term-vt/src/lib.rs`) always calls `Crosswords::resize` (`rio-vt/src/crosswords/mod.rs`), which always calls `grid.resize`. A snapshot rewriter in rune-term would fork a second VT that the next `Surface::resize` would immediately overwrite.
 
 Rio's windowed frontend also reports the wrong PTY pixel size: `frontends/rioterm/src/renderer/utils.rs` `terminal_dimensions` sets `width` and `height` to the content box after margins, remainder pixels included. WezTerm `wezterm-gui/src/termwindow/resize.rs` `apply_dimensions` reports `cols * cell_width` by `rows * cell_height` (issue 535). rune-term follows WezTerm. Splits follow WezTerm's integer-cell tree (`mux/src/tab.rs` `adjust_x_size` / `adjust_y_size`), where a divider costs one cell. Rio's `set_panel_size` (`frontends/rioterm/src/layout/mod.rs`) stores a Taffy `flex_grow` in pixels and lets each pane floor independently.
 
@@ -32,23 +37,23 @@ Sugarloaf's grid (`sugarloaf/src/grid/cell.rs`, `shaders/grid.wgsl`, `grid/webgp
 
 ### Goals
 
-- One window, tabs, and integer-cell splits, each leaf a `librio::Surface` and one `El::effect` mark.
+- One window, tabs, and integer-cell splits, each leaf a `term_vt::Surface` and one `El::effect` mark.
 - PTY output presents through dirty-row upload. The view function does not run for output, cursor blink, or cursor motion.
 - WezTerm join-then-split reflow inside `rio-vt`, with the active alt grid still skipping reflow, image `ReflowRemap` preserved, and a Windows `preserve_scrollback` flag that does not change `Surface::resize`'s four-argument signature.
 - PTY winsize in exact cell pixels, `cols * cell_px` by `rows * cell_px`, at most the effect slot. Leftover device pixels are padding inside the slot, outside the reported grid.
-- Physical keys mapped onto `librio::KeyEvent` from the platform text and `consumed_mods` Rune pairs onto `PhysicalInput::Key`, app chords returned to Rune, mouse hit-testing in cells, scrollback through `Surface::scroll`.
+- Physical keys mapped onto `term_input::KeyEvent` from the platform text and `consumed_mods` Rune pairs onto `PhysicalInput::Key`, app chords returned to Rune, mouse hit-testing in cells, scrollback through `Surface::scroll`.
 - Headless inject-and-snapshot tests on Rune's headless GPU.
-- Later milestones, specified here so the seams exist: selection and clipboard, scrollback viewport, search overlay, IME preedit drawn by the grid, kitty images from the existing `RenderState` getters, sixel and iTerm2 only after librio grows a placement snapshot, settings and palette, CPU-rasterized box-drawing and braille.
+- Later milestones, specified here so the seams exist: selection and clipboard, scrollback viewport, search overlay, IME preedit drawn by the grid, kitty images from the existing `RenderState` getters, sixel and iTerm2 only after `term-vt` grows a placement snapshot, settings and palette, CPU-rasterized box-drawing and braille.
 
 ### Non-goals
 
 - SSH domains, a client/server mux, Lua config, serial ports, CRT filters.
-- Bidirectional text and HarfBuzz ligatures. Mode 2027 clusters are stored by rio-vt; v1 draws the cluster's primary width and does not shape.
-- WezTerm shell integration (OSC 133 and the like), beyond this note: do not parse it in the shell.
+- Bidirectional text and general HarfBuzz shaping. `term-atlas` shapes emoji clusters (flags, ZWJ sequences, modifiers) with rustybuzz against the installed emoji face, or the bundled monochrome subset; other text still draws one glyph per codepoint.
+Shell integration is not parsed by rune-term itself; `rune-term shell-integration bash|zsh` emits the OSC 133 marks that keep a prompt through a resize.
 - Resize increments. If a later change adds them, the base includes padding and chrome, as `wezterm-gui/src/resize_increment_calculator.rs` `ResizeIncrementCalculator`.
 - Linking `sugarloaf`, `rio-window`, `rioterm`, `rio-backend`, `wezterm-gui`, `wezterm` `window`, or `wezterm` `mux`.
 - A second wgpu device, a second VT, or reading cell contents from `AppSpec::view`.
-- Publishing to crates.io. Rune is pre-release; the dependency is a path.
+Publishing the app. The standalone crates (`term-font`, `term-atlas`, the `term-font-data-*` faces) are on crates.io; the app still reaches Rune and Rio through git patches.
 
 ## Proposed Design
 
@@ -56,50 +61,59 @@ Sugarloaf's grid (`sugarloaf/src/grid/cell.rs`, `shaders/grid.wgsl`, `grid/webgp
 
 ```
 rune-term/                     workspace root
-  Cargo.toml                   members = ["term-grid", "term-input", "rune-term"]
-  term-grid/                   wgpu pipeline, atlas, dirty-row upload. No rune, no librio.
-  term-input/                  PhysicalKeyCode + Mods → KeyEvent, chord predicate, cell hit-test.
-  rune-term/                   binary and AppSpec. Depends on rune, librio, the two crates above.
+  term-vt/                     librio's host layer without the C ABI: Surface, RenderState
+  term-host/                   generic terminal state and input delivery; no Rune
+  term-input/                  key types and encoder; no Rune, no Rio
+  term-atlas/                  CPU atlas, sprites, faces, fallback; no backend
+  term-grid/                   wgpu cell pass over term-atlas pixels
+  term-font/, term-font-data-*/ system faces and zstd-compressed bundled faces
+  rune-term-core/              Rune adapter over term-host
+  rune-term/                   binary and AppSpec
 ```
 
-`rune` and `librio` are git dependencies on the upstream repositories. The `[patch]` table replaces those sources with the forks. A local checkout replaces a patch entry with a path.
+`rune` and Rio's crates are git dependencies on the upstream repositories. The `[patch]` table replaces those sources with the forks. A local checkout replaces a patch entry with a path.
 
 - `rune` → `https://github.com/anomalyco/rune` branch `dev`, patched to `https://github.com/lu-zero/rune` branch `physical-key-text`
-- `librio` → `https://github.com/raphamorim/rio` branch `main`, `default-features = false`, patched to `https://github.com/lu-zero/rio` branch `librio-update-rearm`. Key types and `key::encode`; no PTY spawn unless a feature asks.
-- `term-grid` → `wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }`. Cascadia Code NF is vendored at `term-grid/CascadiaCodeNF.ttf`.
+- `rio-vt`, `rio-graphics`, `corcovado` and `teletypewriter` → `https://github.com/raphamorim/rio` branch `main`, `default-features = false` where relevant, patched to `https://github.com/lu-zero/rio` branch `for-rune-term`
+- `term-grid` → `wgpu = { version = "=30.0.1", default-features = false, features = ["wgsl"] }`. The bundled faces live in `term-font-data-*`, not in `term-grid`.
 
 `=30.0.1` is required. Rune's lock and Rio's lock both resolve wgpu `30.0.1` with checksum `527ccdf43…`. `Frame::device` is that crate's `wgpu::Device`. A looser requirement can resolve a different 30.0 patch and fail the type check, or pull a second wgpu. When Rune bumps wgpu, term-grid bumps in the same change. term-grid requests no extra `wgpu::Features`. `default-features = false` keeps term-grid from pulling wgpu's hal backends on its own; Cargo still unions features with Rune's `wgpu` dependency (`std`, `parking_lot`, `metal`, `wgsl`, and the `custom` backend on Apple) when the app links both. Rune's Metal backend panics on features it does not implement.
 
-Feature wiring. `--no-default-features` only drops features of the package you named, so librio must not be depended with its own defaults (`pty`, `graphics` in `librio/Cargo.toml`). Those defaults are what make `Surface::new` spawn a login shell when `shell` is `None`.
+Feature wiring. `--no-default-features` only drops features of the package you named, so `term-vt` is depended with `default-features = false` and the app enables only what it uses. rune-term's defaults are `pty`, `font-bundled` and `font-fallback-common`; `term-atlas` also defaults `emoji-fallback`. `pty` enables `term-vt/graphics` but not `term-vt/pty`: rune-term owns the teletypewriter PTY itself, so `term-vt`'s own PTY path is compiled only when checked directly. A build with `--no-default-features` is the inject harness with no shell and no embedded fonts; it picks an installed font instead.
 
 ```toml
-# Cargo.toml
+# Cargo.toml (excerpt)
 [workspace.dependencies]
 rune = { git = "https://github.com/anomalyco/rune", branch = "dev" }
-librio = { git = "https://github.com/raphamorim/rio", branch = "main", default-features = false }
+rio-vt = { git = "https://github.com/raphamorim/rio", branch = "main", default-features = false }
+rio-graphics = { git = "https://github.com/raphamorim/rio", branch = "main", default-features = false }
+corcovado = { git = "https://github.com/raphamorim/rio", branch = "main" }
+teletypewriter = { git = "https://github.com/raphamorim/rio", branch = "main" }
+term-vt = { path = "term-vt", default-features = false }
 
 [patch."https://github.com/anomalyco/rune"]
 rune = { git = "https://github.com/lu-zero/rune", branch = "physical-key-text" }
 
 [patch."https://github.com/raphamorim/rio"]
-librio = { git = "https://github.com/lu-zero/rio", branch = "librio-update-rearm" }
+rio-vt = { git = "https://github.com/lu-zero/rio", branch = "for-rune-term" }
+rio-graphics = { git = "https://github.com/lu-zero/rio", branch = "for-rune-term" }
+corcovado = { git = "https://github.com/lu-zero/rio", branch = "for-rune-term" }
+teletypewriter = { git = "https://github.com/lu-zero/rio", branch = "for-rune-term" }
 
-# rune-term/Cargo.toml
+# rune-term/Cargo.toml (excerpt)
 [dependencies]
 rune.workspace = true
-librio.workspace = true
+term-vt.workspace = true
 
 [features]
-default = ["pty"]
-pty = ["librio/pty", "librio/graphics"]
-graphics = ["librio/graphics"]
+default = ["pty", "font-bundled", "font-fallback-common"]
+pty = ["dep:teletypewriter", "dep:libc", "dep:rune-term-keeper", "term-vt/graphics", "rune-term-core/pty"]
+graphics = ["term-vt/graphics", "rune-term-core/graphics"]
 ```
 
-`term-input` depends with `librio.workspace = true` and enables no features.
+`cargo test -p rune-term --no-default-features` is the inject harness with no shell. `just check-all` is the pre-commit gate: formatting, clippy on both feature sets, and the lib tests. `just test-headless` adds the headless snapshots; `cargo build --release -p rune-term` is the link check. `term-vt` can also be checked directly with `--features pty,graphics`, though the app does not use that path.
 
-`cargo test -p rune-term --no-default-features` builds librio without `pty` and is the inject harness. `cargo test -p rune-term --no-default-features --features graphics` is the same harness plus kitty pixel decode, still with no shell. `cargo build -p rune-term` (default `pty`) is the link check. A `cargo test --workspace` that builds rune-term with default features unifies `librio/pty` on for every crate in that invocation; term-input tests must not call `create_surface` in that configuration. Tests that enable `pty` must not call `create_surface` against the login shell.
-
-All three projects are MIT. `rio-vt/src/crosswords/grid/resize.rs` carries an Alacritty Apache-2.0 file header. The reflow patch edits that file in place and does not paste WezTerm source into it. Sugarloaf's `CellBg`, `CellText`, `GridUniforms`, and `grid.wgsl` are Rio MIT and may be ported.
+Rune and Rio are MIT; WezTerm is MIT. Code lifted from Rune and Rio is credited in `THIRD-PARTY-NOTICES.md`, and the bundled fonts are OFL-1.1 with notices in the data crates. `rio-vt/src/crosswords/grid/resize.rs` carries an Alacritty Apache-2.0 file header. The reflow patch edits that file in place and does not paste WezTerm source into it. Sugarloaf's `CellBg`, `CellText`, `GridUniforms`, and `grid.wgsl` are Rio MIT and were ported into `term-grid`.
 
 ### Process and frame path
 
@@ -129,7 +143,7 @@ sequenceDiagram
   Comp->>Comp: upload row_dirty rows, write cursor uniforms
 ```
 
-`Machine::notify_damage` (`rio-vt/src/performer/mod.rs`) sends at most one `RioEvent::TerminalDamaged` while `Crosswords::damage_event_in_flight` is set. It runs on the PTY reader thread while that thread holds the terminal mutex: `pty_read` keeps the `try_lock_unfair` / `lock_unfair` guard through the `notify_damage` call. `Listener::dispatch` (`librio/src/lib.rs`) invokes `SurfaceDelegate` inline on that same stack. `inject_output` on the UI thread also advances the parser and can call the delegate. The two callers interleave. The delegate must not lock the terminal (the PTY caller already holds it) and must not write `Model`, `Surface`, or the view tree.
+`Machine::notify_damage` (`rio-vt/src/performer/mod.rs`) sends at most one `RioEvent::TerminalDamaged` while `Crosswords::damage_event_in_flight` is set. It runs on the PTY reader thread while that thread holds the terminal mutex: `pty_read` keeps the `try_lock_unfair` / `lock_unfair` guard through the `notify_damage` call. `Listener::dispatch` (`term-vt/src/lib.rs`) invokes `SurfaceDelegate` inline on that same stack. `inject_output` on the UI thread also advances the parser and can call the delegate. The two callers interleave. The delegate must not lock the terminal (the PTY caller already holds it) and must not write `Model`, `Surface`, or the view tree.
 
 `TerminalDamaged`, `Render`, and `RenderRoute` map to `wakeup`. Title, bell, progress, and `CursorBlinkingChange` map to `action` only. A title or bell with no grid damage never enters the wakeup match, so `wakeup` alone cannot refresh chrome. `close_surface` and `clipboard_write` are the same kind of cross-thread call.
 
@@ -146,7 +160,7 @@ enum HostEvent {
 
 `poll` starts by draining that queue onto `Model` and returns true only when the drained events change chrome the view reads (title, bell, progress, blink mode, closed leaf). A damage-only wake drains an empty queue and returns false. `Runtime::frame` then does not commit the view (`CommitWhy::POLL` is only when poll returns true, `runtime/frame.rs`). The compositor still draws: `a_compositor_s_frame_never_counts_as_unchanged` in `window/tests.rs`. A shown window `request_redraw`s because the drain is not quiet (`window.rs` `drain_frame`). `AppHandle::wake` on a window does not invalidate the view. (`overlay/input.rs` does invalidate; this app is a window, not an overlay.)
 
-Grid damage uses a second flag, cleared under the same lock that consumes the damage. `wakeup` only does `frame_flag.store(true)` and calls the waker when the previous value was false. The compositor calls `RenderState::update_rearm(&frame_flag)`, a new method next to `update` in `librio/src/render_state.rs`. `update()` stays void and unchanged for the C ABI. `update_rearm` is the same body, and after `reset_damage` and `damage_event_in_flight = false`, still holding the `FairMutex` guard, it `frame_flag.store(false, Release)`.
+Grid damage uses a second flag, cleared under the same lock that consumes the damage. `wakeup` only does `frame_flag.store(true)` and calls the waker when the previous value was false. The compositor calls `RenderState::update_rearm(&frame_flag)`, a new method next to `update` in `term-vt/src/render_state.rs`. `update()` stays void and unchanged for the C ABI. `update_rearm` is the same body, and after `reset_damage` and `damage_event_in_flight = false`, still holding the `FairMutex` guard, it `frame_flag.store(false, Release)`.
 
 That store has to be inside the lock. The PTY sets the host flag from `notify_damage` while it holds the same mutex, so it cannot run between the clear and the unlock. A wakeup that arrived before `update_rearm` took the lock is the damage this call consumes; leaving the flag true would make the next frame call `update` with `peek_damage_event() == None`, and `render_state.rs` substitutes `TerminalDamage::Full` whenever the snapshot is non-empty. Swapping the flag to false before taking the lock loses that race on every `cat` burst and pays an extra full upload. A wakeup that arrives after the unlock sets the flag again and is a real next frame.
 
@@ -235,7 +249,7 @@ flowchart LR
 Port these layouts from `sugarloaf/src/grid/cell.rs`. Keep them `#[repr(C)]`, `Pod`, and assert the sizes.
 
 - `CellBg` is 4 bytes, `rgba: [u8; 4]`, straight sRGB plus alpha. Do not copy Sugarloaf's "Premultiplied RGBA8" field comment into the Rust struct. `rio-grid` `cell_bg` returns straight RGB plus a separate alpha, and `CellSample` stores the same straight bytes. The fragment premultiplies once, after the `FLAG_LINEAR_BLENDING` branch. Premultiplying on the CPU as well fails the alpha-128 snapshot even with the correct blend factors. Alpha 0 means default background (`CellBg::TRANSPARENT`): the shader leaves the target untouched so Rune's clear and the chrome show through the slot and through leftover padding. The window clear color is the theme background.
-- `CellText` is 32 bytes: `glyph_pos [u32; 2]`, `glyph_size [u32; 2]`, `bearings [i16; 2]`, `grid_pos [u16; 2]`, `color [u8; 4]` (straight sRGB plus alpha, same as `CellBg`), `atlas u8` (0 gray, 1 color), `bools u8` (bit 0 no-min-contrast, bit 1 cursor glyph), `page u8`, pad. v1 uses atlas 0, page 0, one glyph per occupied cell. Decorations (underline, strike) are extra `CellText`s, matching Sugarloaf, and can wait until the box-drawing PR if the pipeline PR only emits the base glyph. The instance stride stays 32 either way. The text vertex stage premultiplies `color` once, after the same linear-blend branch.
+- `CellText` is 48 bytes: `glyph_pos [u32; 2]`, `glyph_size [u32; 2]`, `bearings [i32; 2]`, `grid_pos [u32; 2]`, `color [u8; 4]` (straight sRGB plus alpha, same as `CellBg`), `atlas u32` (0 gray, 1 color), `bools u32`, `page u32`. The 32-byte Sugarloaf layout was widened for Rune's Metal backend, which declares bearings as `Sint32x2` and the atlas id as `Uint32`. One `CellText` per occupied cell; decorations (underline, strike) are extra instances. The text vertex stage premultiplies `color` once, after the same linear-blend branch.
 - `GridUniforms` must be a multiple of 16. The comment "Current layout: 144 bytes" is stale: the scalar block starts at offset 144 (`min_contrast`, `flags`, `padding_extend`, `input_colorspace`) and `size_of` is 160 with that field list. Assert `size_of` is a multiple of 16 after the port, and point the WGSL uniform at the same offsets. Do not trust the 144 figure.
 
 Flag mapping:
@@ -255,9 +269,9 @@ Pipeline subset, matching `sugarloaf/src/grid/webgpu.rs` reduced to what Metal a
 - Atlas: 2048² `R8Unorm`, `TEXTURE_BINDING | COPY_DST`, one per `DeviceKey`, shared by every pane. Color atlas (`Rgba8Unorm`) waits for the image and sprite PRs.
 - Cell buffers: per pane, two copies (`FRAMES_IN_FLIGHT = 2`). `Frame::write_buffer` writes the copy the previous encoder is not still reading. `offset` and length are multiples of 4, which `CellBg` (4) and `CellText` (32) already satisfy. Do not map buffers. Do not allocate a buffer for scrollback.
 
-v1 glyph coverage is one monospace face, one glyph per codepoint. `CellSample::width` comes from `Square::wide()` (`square.rs`): `Wide::Narrow` is 1, `Wide::Wide` is 2 and emits the glyph, `Wide::Spacer` and `Wide::LeadingSpacer` are 0 and emit nothing. Those spacers are the second cell of a wide character, not a separate codepoint. `PLACEHOLDER` (`rio_vt::ansi::kitty_virtual::PLACEHOLDER`, `U+10EEEE`) is also width 0: no glyph, the kitty image owns the cell. `RenderState` does not emit glyphs. The `square.c() != PLACEHOLDER` check in `render_state.rs` only skips virtual-placement runs while scanning text. Skipping `PLACEHOLDER` and then drawing every other codepoint paints the spacer of a wide character and treats image placeholders as text.
+v1 glyph coverage is one monospace face, one glyph per codepoint apart from the shaped clusters described below. `CellSample::width` comes from `Square::wide()` (`square.rs`): `Wide::Narrow` is 1, `Wide::Wide` is 2 and emits the glyph, `Wide::Spacer` and `Wide::LeadingSpacer` are 0 and emit nothing. Those spacers are the second cell of a wide character, not a separate codepoint. `PLACEHOLDER` (`rio_vt::ansi::kitty_virtual::PLACEHOLDER`, `U+10EEEE`) is also width 0: no glyph, the kitty image owns the cell. `RenderState` does not emit glyphs. The `square.c() != PLACEHOLDER` check in `render_state.rs` only skips virtual-placement runs while scanning text. Skipping `PLACEHOLDER` and then drawing every other codepoint paints the spacer of a wide character and treats image placeholders as text.
 
-Combining-character and mode-2027 cluster tails come from `cluster_of` and are not shaped; the primary cell's glyph is the only quad. The pipeline PR can raster ASCII from a baked 8×16 bitmap. term-grid takes a `FontSource` of gray bitmaps so the library does not depend on swash. The app may use `swash` 0.2 (Rune already does) when wiring the live face.
+Grapheme clusters that span several codepoints are shaped with rustybuzz in `term-atlas` against the installed emoji face, or its bundled monochrome Noto Emoji subset. Every glyph the shaper returns is composited into one cell; flags, ZWJ families and modifiers become one ligature, and sequences that do not ligate keep all their glyphs. `term-grid` consumes the atlas pixels and does not depend on swash or rustybuzz. General text shaping and bidirectional layout remain out of scope.
 
 Color packing follows `rio-grid/src/lib.rs` `cell_bg`, not a glyph emitter inside `RenderState`. The adapter resolves `style_at` against `term_colors()`:
 
@@ -328,7 +342,7 @@ flowchart TD
 
 - Cell size in device pixels is `cell_px(cell_points, scale) = max(1, round(cell_points * scale))`. That integer is the raster pitch and the winsize factor.
 - The column count is a pure function of the slot Rune already laid out, the scale, and that pitch. `slot_device_px` is `round(slot_points * scale)`, the same rounding as `frame::snap` (`window/frame.rs`). `cols = floor(slot_device_px / cell_px)`, and the same for rows. `Layout` does not write that count back into the slot's point size. An unchanged slot and scale return the same count on the next frame.
-- `Surface::resize(cols, rows, pixel_width, pixel_height)` is called with `pixel_width = cols * cell_w_px` and `pixel_height = rows * cell_h_px`, saturated at `u16::MAX`. librio forwards those two pixel fields straight into `Msg::Resize(WindowSize { width, height, .. })` (`librio/src/lib.rs` `Surface::resize`). Both products are at most the effect slot. Remainder pixels are padding inside the slot, not a second column.
+- `Surface::resize(cols, rows, pixel_width, pixel_height)` is called with `pixel_width = cols * cell_w_px` and `pixel_height = rows * cell_h_px`, saturated at `u16::MAX`. term-vt forwards those two pixel fields straight into `Msg::Resize(WindowSize { width, height, .. })` (`librio/src/lib.rs` `Surface::resize`). Both products are at most the effect slot. Remainder pixels are padding inside the slot, not a second column.
 - The same cols and rows with a different cell pixel size still calls `Surface::resize`. `Crosswords::resize` treats equal grid dimensions as a graphics-metrics update and rescales kitty placements, then returns (`crosswords/mod.rs`, the `dimensions unchanged` branch). The host still sets `resized` so one `update` runs.
 - Equal count and equal cell pixels: do not call `Surface::resize`. `on_layout` calls `live_only`. A count change also calls `live_only`. The slot rect is already the one the window laid out, so the view does not commit a new point size for it.
 - Do not assign the content slot `cols * cell_points` after the floor. That write is the shrink loop: an 1184 px slot floors to 78, `78 * 7.4` points is 1154.4 px, and the next floor is 76.
@@ -479,15 +493,15 @@ pub enum PhysicalInput {
 
 `physical_with_fallback` and `physical_then` already queue a logical `KeyEvent` beside the physical event. `offer_physical` forwards only `&PhysicalInput`, so the handler never sees that string today. `physical_then` copies `Key::Text` into `text` when the field is still `None`, before the event is queued. `offer_physical` then hands the handler an event that includes the paired string. If the handler returns false, `route_key` still sees the logical key. Returning true consumes the key and skips shortcuts, paste, and `AppSpec::on_key`. The test `physical_dispatch_precedes_modal_app_and_paste_after_same_frame_click` is the proof that a consuming handler blocks paste.
 
-`librio::key::encode` (`librio/src/key.rs`) prefers `KeyEvent::text` for `Key::Char` (`plain_char_uses_platform_text`). Without text it emits the unshifted character. `KeyEvent::key` is defined as unshifted: shift+a is `Char('a')` and `"A"` lives in `text`. `Modifiers::SUPER` makes `encode` return `None`, so `Surface::key` returns false and Command chords are not written to the shell. `composing` returns `None`. A text-only event (`key: None`, `text: Some`) passes the bytes through (`text_only_events_pass_text_through`), which is the IME commit path later.
+`term_input::key::encode` (`term-input/src/key.rs`) prefers `KeyEvent::text` for `Key::Char` (`plain_char_uses_platform_text`). Without text it emits the unshifted character. `KeyEvent::key` is defined as unshifted: shift+a is `Char('a')` and `"A"` lives in `text`. `Modifiers::SUPER` makes `encode` return `None`, so `Surface::key` returns false and Command chords are not written to the shell. `composing` returns `None`. A text-only event (`key: None`, `text: Some`) passes the bytes through (`text_only_events_pass_text_through`), which is the IME commit path later.
 
-`encode_legacy` reads that platform string. A private US-QWERTY table in `term-input` would mis-encode other layouts and dead keys. `shortcuts::keys::us_char` stays `pub(crate)` inside Rune and is not a text source for the pane. `map_key` copies `text` and `consumed_mods` onto `librio::KeyEvent` and calls `encode`. It does not synthesize a US-QWERTY string.
+`encode_legacy` reads that platform string. A private US-QWERTY table in `term-input` would mis-encode other layouts and dead keys. `shortcuts::keys::us_char` stays `pub(crate)` inside Rune and is not a text source for the pane. `map_key` copies `text` and `consumed_mods` onto `term_input::KeyEvent` and calls `encode`. It does not synthesize a US-QWERTY string.
 
-`Mods` (`edit/keys.rs`): `shift`, `alt`, `ctrl`, and `logo` are keys. `cmd` is the primary shortcut modifier: ⌘ on macOS (reported with `logo`) and Ctrl elsewhere (reported with `ctrl`). Off macOS, Ctrl+C is `{ cmd, ctrl }`. Mapping `cmd` to `librio::Modifiers::CTRL` would be wrong on macOS, and treating every `mods.cmd` as an app chord would swallow Ctrl+C off macOS.
+`Mods` (`edit/keys.rs`): `shift`, `alt`, `ctrl`, and `logo` are keys. `cmd` is the primary shortcut modifier: ⌘ on macOS (reported with `logo`) and Ctrl elsewhere (reported with `ctrl`). Off macOS, Ctrl+C is `{ cmd, ctrl }`. Mapping `cmd` to `term_input::Modifiers::CTRL` would be wrong on macOS, and treating every `mods.cmd` as an app chord would swallow Ctrl+C off macOS.
 
 Modifier mapping onto `librio::Modifiers`:
 
-| Rune `Mods` | `librio::Modifiers` |
+| Rune `Mods` | `term_input::Modifiers` |
 |---|---|
 | `shift` | `SHIFT` |
 | `ctrl` | `CTRL` |
@@ -498,7 +512,7 @@ Modifier mapping onto `librio::Modifiers`:
 
 The window path fills both fields. `window/events.rs` `KeyboardInput` already calls `physical_then` with the logical key from `map_key_event` and `key_base`. It sets `text` from winit `KeyEvent::text` and sets `consumed_mods` by comparing that string with `key_without_modifiers` (the same method `window/keys.rs` `key_base` uses):
 
-- Alt is consumed when it is held and the platform text differs from the unmodified key. Nordic Alt+8 produces `[`. macOS Option+d produces `∂`. `encode` emits that text. An unconsumed alt, with `alt_is_meta` still true, would ESC-prefix instead (`consumed_alt_is_not_meta` in `librio/src/key.rs`).
+- Alt is consumed when it is held and the platform text differs from the unmodified key. Nordic Alt+8 produces `[`. macOS Option+d produces `∂`. `encode` emits that text. An unconsumed alt, with `alt_is_meta` still true, would ESC-prefix instead (`consumed_alt_is_not_meta` in `term-input/src/key.rs`).
 - Shift is consumed when it is held, Ctrl is not, and the platform text differs from the unmodified key. shift+a produces `A`.
 - Ctrl stays unconsumed on a control chord. `encode_legacy` applies `ctrl_byte` itself and ignores `text` while Ctrl remains. `text_with_all_modifiers` (`Ctrl+a` → `"\x01"`) is not the string stored in `text`.
 - On Windows, Left Ctrl+Left Alt that `map_key` (`window/keys.rs`) already classifies as `Key::Text` is AltGr. Both `ctrl` and `alt` are consumed, so the character is written and is not also a control sequence.
@@ -506,7 +520,7 @@ The window path fills both fields. `window/events.rs` `KeyboardInput` already ca
 
 `physical_then` does not invent `consumed_mods`. Hosts other than the window pass the field they know, or leave it empty. The scripted path gets its `text` from the paired `Key::Text`.
 
-Representative `PhysicalKeyCode` → `librio::Key`. This is the key identity `ctrl_byte` and the CSI forms use. `text` and `consumed_mods` are copied from the event and are not looked up in this table.
+Representative `PhysicalKeyCode` → `term_input::Key`. This is the key identity `ctrl_byte` and the CSI forms use. `text` and `consumed_mods` are copied from the event and are not looked up in this table.
 
 | Physical key | `Key` |
 |---|---|
@@ -546,7 +560,7 @@ Mouse, on the effect slot. Coordinates are layout points, the same space as `Whe
 
 - pointer down/up → `Surface::mouse_button(col, row, button, pressed, mods)` with button 0 left, 1 middle, 2 right. True means the program took it; do not start a local selection. False, or Shift held (`mouse_button` returns false on Shift), is a local selection in the selection PR. v1 only forwards.
 - motion → `Surface::mouse_motion`.
-- `El::on_wheel` accumulates fractional lines and does not `round` each event. `scroll_wheel` returns immediately when `lines == 0` (`librio/src/lib.rs`). Rune's `wheel_delta` (`runtime/scroll/x.rs`) turns a notched `LineDelta` into 40 points, and a trackpad `PixelDelta` into `pixels / scale` points. A cell is about 16–20 points, so one macOS trackpad event is a fraction of a line. Rounding that fraction to 0 and returning true eats the gesture: the remainder is discarded and `display_offset` never moves. Each focused pane keeps `HostSurface::wheel_remainder`. Add the point delta divided by the drawn row pitch `f32::from(cell_px.1) / scale`, pass the truncated integer to `scroll_wheel`, and keep the fraction, including across momentum. The `col` and `row` passed to `scroll_wheel` are the same `cell_at` result as a click. Do not clear it on `GesturePhase::Ended`. Clear it when focus moves to another pane. Do not call `scroll_wheel` with 0. Return true for every event in the gesture, including a zero-line event, so no ancestor `El::scroll` also moves. Call `Tx::live_only` when the focused pane did not change.
+- `El::on_wheel` accumulates fractional lines and does not `round` each event. `scroll_wheel` returns immediately when `lines == 0` (`term-vt/src/lib.rs`). Rune's `wheel_delta` (`runtime/scroll/x.rs`) turns a notched `LineDelta` into 40 points, and a trackpad `PixelDelta` into `pixels / scale` points. A cell is about 16–20 points, so one macOS trackpad event is a fraction of a line. Rounding that fraction to 0 and returning true eats the gesture: the remainder is discarded and `display_offset` never moves. Each focused pane keeps `HostSurface::wheel_remainder`. Add the point delta divided by the drawn row pitch `f32::from(cell_px.1) / scale`, pass the truncated integer to `scroll_wheel`, and keep the fraction, including across momentum. The `col` and `row` passed to `scroll_wheel` are the same `cell_at` result as a click. Do not clear it on `GesturePhase::Ended`. Clear it when focus moves to another pane. Do not call `scroll_wheel` with 0. Return true for every event in the gesture, including a zero-line event, so no ancestor `El::scroll` also moves. Call `Tx::live_only` when the focused pane did not change.
 
 ```rust
 let points = if dy != 0.0 {
@@ -581,7 +595,7 @@ Paste: `El::on_paste` on the pane calls `Surface::paste`. Cmd+V is an app chord,
 
 ```rust
 struct HostSurface {
-    surface: librio::Surface,
+    surface: term_vt::Surface,
     render: RenderState,
     mark: u32,                 // El::effect mark, unique in the window
     title: String,
@@ -610,7 +624,7 @@ struct Model {
 }
 ```
 
-`SurfaceId` is `usize` (`librio`). Marks are `u32` and are not the same integer as `SurfaceId`; the map is explicit so a recycled surface id cannot paint the wrong slot. The foundation has one tab, one leaf, mark `1`, and a solid effect. Later PRs hang real grids and more leaves off this struct without renaming it.
+`SurfaceId` is `usize` (`term-vt`). Marks are `u32` and are not the same integer as `SurfaceId`; the map is explicit so a recycled surface id cannot paint the wrong slot. The foundation has one tab, one leaf, mark `1`, and a solid effect. Later PRs hang real grids and more leaves off this struct without renaming it.
 
 `SurfaceDelegate::{action, close_surface, clipboard_write}` only enqueue `HostEvent`s and call the waker, as specified in the frame path. `poll` drains the queue on the UI thread. A drained `Action::SetTitle`, `RingBell`, `Progress`, or `CursorBlinkingChange` writes the matching field on `HostSurface`. A drained `Close` removes the leaf. `clipboard_write` drops the text in the delegate and queues the length; `poll` logs that length and does not touch the system clipboard. See Security. `output` exists only on non-`pty` builds, where the host owns the child transport; the PTY build never calls it. The headless test records those bytes and does not spawn a process. The delegate never removes a leaf itself, and it never writes `HostSurface`.
 
@@ -618,7 +632,7 @@ struct Model {
 
 `Surface::text` and `Surface::write` are PTY input. They snap scrollback to the bottom and clear the selection. They are how a key reaches the child. librio's README example `surface.text("ls\r"); state.update();` types into the PTY.
 
-Display injection is `Surface::inject_output(&[u8])` (`librio/src/lib.rs`). The doc comment states the bytes enter the VT parser as child output and the shell never sees them. The parser is persistent across calls. There is no `Surface::feed`. A comment in `librio/Cargo.toml` still says child output comes back through `Surface::feed`; that method is not in the crate.
+Display injection is `Surface::inject_output(&[u8])` (`term-vt/src/lib.rs`). The doc comment states the bytes enter the VT parser as child output and the shell never sees them. The parser is persistent across calls. There is no `Surface::feed`. A comment in `librio/Cargo.toml` still says child output comes back through `Surface::feed`; that method is not in the crate.
 
 `inject_output` does not call `notify_damage`. The grid's own `TerminalDamaged` sends inside `damage_cursor` / `damage_cursor_blink` are commented out. Damage bits and `peek_damage_event` update, and `wakeup` does not run. The harness, after `inject_output`, sets `frame_flag` and calls the `Waker` (or steps `Runtime` one frame directly). The compositor then calls `update_rearm` once, which clears the flag inside the terminal lock. A later `update_rearm` with the flag still false is not called. Calling plain `update` when the peek is `None` recopies every visible row. Headless tests do not inject DEC 2026; see the synchronized-output paragraph. Sync-update expiry is covered by rio-vt's PTY tests, which have the `sync_deadline` poll this harness does not.
 
@@ -923,7 +937,7 @@ The manual macOS marked-text check in the IME PR is a test obligation, not a sec
 - rio-vt: `rio-vt/src/crosswords/mod.rs` `Crosswords::resize`, `snapshot_visible`, `TermDamageState::resize`, `damage_cursor_blink`. `rio-vt/src/crosswords/grid/resize.rs` (Alacritty pairwise, Apache-2.0 header). `rio-vt/src/crosswords/grid/mod.rs` `ReflowRemap`, `Grid::new`. `rio-vt/src/crosswords/grid/storage.rs` `MAX_CACHE_SIZE`. `rio-vt/src/crosswords/square.rs` 8-byte `Square`, `WRAPLINE`. `rio-vt/src/performer/mod.rs` `notify_damage`, `sync_deadline`. `rio-vt/src/event/mod.rs` `TerminalDamage`.
 - Rio frontend, cited to avoid: `frontends/rioterm/src/renderer/utils.rs` `terminal_dimensions`, `frontends/rioterm/src/layout/mod.rs` `set_panel_size`. Sugarloaf, cited to port: `sugarloaf/src/grid/cell.rs`, `sugarloaf/src/grid/shaders/grid.wgsl`, `sugarloaf/src/grid/webgpu.rs`, `sugarloaf/src/sprite/`.
 - WezTerm, cited as the algorithm: `term/src/screen.rs` `rewrap_lines` and `Screen::resize` (blank prune, `is_conpty`), `wezterm-surface/src/line/line.rs` `Line::wrap`, `wezterm-gui/src/termwindow/resize.rs` `apply_dimensions` and `live_resizing`, `mux/src/tab.rs` `adjust_x_size` / `adjust_y_size` / `compute_min_size`, `wezterm-gui/src/resize_increment_calculator.rs`. Issue 535 for exact cell pixels.
-- Licenses: Rune, Rio, and WezTerm are MIT. The reflow file's header remains Alacritty Apache-2.0. Do not paste WezTerm bodies into it. Implementation commits inside Rune or Rio must not add home-directory paths (Rune `AGENTS.md`); this design file lives outside those repos and cites the sibling checkouts by absolute path. The workspace `[patch]` table points `rune` and `librio` at `https://github.com/lu-zero/rune` branch `physical-key-text` and `https://github.com/lu-zero/rio` branch `librio-update-rearm`.
+- Licenses: Rune, Rio, and WezTerm are MIT. The reflow file's header remains Alacritty Apache-2.0. Do not paste WezTerm bodies into it. Implementation commits inside Rune or Rio must not add home-directory paths (Rune `AGENTS.md`); this design file lives outside those repos and cites the sibling checkouts by absolute path. The workspace `[patch]` table points `rune` at `https://github.com/lu-zero/rune` branch `physical-key-text` and the Rio crates at `https://github.com/lu-zero/rio` branch `for-rune-term`.
 
 ## Key Decisions
 

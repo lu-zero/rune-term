@@ -308,4 +308,4 @@ takes any 30.x.
       `rune-term shell-integration bash` or `zsh`. `preserve_scrollback` is
       still false on macOS in the plan.
 
-The design header still records an empty workspace. This page is the status.
+This page is the status; the design doc is the original plan.
