@@ -41,7 +41,8 @@ adds common Han, kana and Hangul and is on by default. `font-fallback-ja` and
 `font-fallback-zh-full` add more coverage and weight; `font-cascadia` adds a
 second selectable face. `emoji-fallback` adds a small monochrome Noto Emoji
 subset for hosts with no emoji face. Multi-codepoint emoji are shaped with
-rustybuzz against the installed emoji face or that subset.
+rustybuzz against the installed emoji face or that subset. The `hint_fallback` setting (default `true`) skips autohinting fallback glyphs
+when false; only turn it off when the installed faces already look right.
 
 With `--no-default-features` no fonts are embedded at all. The GUI then picks
 any installed family (monospaced first) and shows a download link only if no

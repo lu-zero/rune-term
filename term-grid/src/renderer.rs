@@ -120,6 +120,11 @@ impl GridRenderer {
         }
     }
 
+    /// Whether fallback glyphs are autohinted. The profile face always is.
+    pub fn set_hint_fallback(&mut self, enabled: bool) {
+        self.atlas.set_hint_fallback(enabled);
+    }
+
     /// Pack dirty rows into the CPU cache. `force` rebuilds after a resize.
     pub fn upload(
         &mut self,

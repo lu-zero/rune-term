@@ -127,6 +127,8 @@ pub struct Atlas {
     cluster_color: Vec<u8>,
     cluster_gray: Vec<u8>,
     cluster_coords: Vec<NormalizedCoord>,
+    /// Whether fallback outlines are autohinted; the profile face always is.
+    hint_fallback: bool,
     /// Cached misses in `extra` and `clusters`.
     misses: usize,
     /// The next free slot in each atlas, and where a reset starts again.
@@ -275,6 +277,7 @@ impl Atlas {
             cluster_gray: Vec::new(),
             cluster_coords: Vec::new(),
             misses: 0,
+            hint_fallback: true,
             color_cursor: 0,
             color_cols: (COLOR_ATLAS_SIZE / cell_w).max(1),
             reset_cursor: ascii_rows.max(2) * cols,
@@ -320,6 +323,7 @@ impl Atlas {
             cluster_gray: Vec::new(),
             cluster_coords: Vec::new(),
             misses: 0,
+            hint_fallback: true,
             color_cursor: 0,
             color_cols: (COLOR_ATLAS_SIZE / cell.0).max(1),
             reset_cursor: 0,
@@ -366,6 +370,11 @@ impl Atlas {
         } else {
             None
         }
+    }
+
+    /// Whether fallback glyphs are autohinted. The profile face is unaffected.
+    pub fn set_hint_fallback(&mut self, enabled: bool) {
+        self.hint_fallback = enabled;
     }
 
     /// Rasterize the outlines of `keys` that are not cached yet, in parallel.
@@ -441,11 +450,12 @@ impl Atlas {
         }
         let threads = std::thread::available_parallelism()
             .map_or(1, |n| n.get())
-            .min(10)
+            .min(16)
             .min(work.len());
         if threads < 2 {
             return;
         }
+        let hint_fallback = self.hint_fallback;
         let chunk_size = work.len().div_ceil(threads);
         let mut rendered: Vec<(usize, GlyphKey, char, Image, f32)> = Vec::new();
         std::thread::scope(|scope| {
@@ -464,7 +474,7 @@ impl Atlas {
                         let mut scaler = context
                             .builder(font)
                             .size(ppem)
-                            .hint(true)
+                            .hint(hint_fallback)
                             .normalized_coords(coords.iter().copied())
                             .build();
                         if let Some(image) =
@@ -925,7 +935,7 @@ impl Atlas {
             .context
             .builder(font)
             .size(scale.ppem)
-            .hint(true)
+            .hint(self.hint_fallback)
             .normalized_coords(scale.coords.iter().copied())
             .build();
         let image = Render::new(&[Source::Outline]).render(&mut scaler, gid);

@@ -15,6 +15,10 @@ pub fn sync(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
 ) {
+    let hint_fallback = model.config.settings.hint_fallback;
+    for pane in panes.iter_mut() {
+        pane.grid.set_hint_fallback(hint_fallback);
+    }
     let shown = search::shown(model);
     let hover_active_mods = crate::hyperlink::open_mods(rune_term_core::input::host_modifiers(
         model.terminal.held_mods(),

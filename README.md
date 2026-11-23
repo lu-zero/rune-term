@@ -34,6 +34,10 @@ This project provides a [justfile](https://github.com/casey/just) to automate in
 | `just agent-install` | Installs `rune-term-agent` into `~/.local/bin` for roaming sessions. |
 | `just install-shell-integration DIR` | Installs the bash and zsh prompt-mark files into `DIR`. |
 
+Set `hint_fallback = false` under `[settings]` in `config.toml` to skip
+autohinting fallback glyphs for a faster first render; leave it on unless the
+installed faces already look right.
+
 ## Docs
 
 - [Configuration](./docs/config.md) and [shell integration](./docs/shell-integration.md).

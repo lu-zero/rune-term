@@ -44,6 +44,7 @@ light = "Flexoki Light"
 - `confirm_close`: default `true`. Closing a tab or the window asks first while a program runs in it; a shell at its prompt closes without asking.
 - `on_close`: `"kill"`, the default, or `"detach"`. Closing a session tab kills its tmux or rmux window, or detaches it, which hides the tab and leaves the window running. A session profile's `on_close` wins.
 - `report_right_click`: default `false`. A right-click opens the pane's menu, as in iTerm2, even while a program such as vim or opencode takes the mouse. With `true` that program gets the click, and Shift+right-click opens the menu.
+- `hint_fallback`: default `true`. Autohint glyphs from fallback faces. Set `false` for a faster first render when the installed faces already look right; the profile's own face is always hinted.
 - `adaptive_theme`: two theme names. When both are non-empty and the profile has no theme, the desktop appearance picks `dark` or `light`. On macOS that is `AppleInterfaceStyle`. Elsewhere, and when the appearance cannot be read, `dark` is used. The pair is not watched while the app is running. Duplicating a theme clears the pair and pins the copy; so does choosing Dark or Light for a paired entry.
 
 `version` is required. Unknown keys are ignored.

@@ -59,6 +59,8 @@ pub struct Settings {
     pub on_close: OnClose,
     /// A right-click goes to a program that reports the mouse instead of opening the menu.
     pub report_right_click: bool,
+    /// Autohint fallback glyphs; turn off for a faster first render when installed faces look right.
+    pub hint_fallback: bool,
 }
 
 impl Default for Settings {
@@ -71,6 +73,7 @@ impl Default for Settings {
             confirm_close: true,
             on_close: OnClose::Kill,
             report_right_click: false,
+            hint_fallback: true,
         }
     }
 }

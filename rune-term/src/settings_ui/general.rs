@@ -43,6 +43,17 @@ pub fn editor(kit: &Kit, model: &SettingsModel) -> El {
         .build(kit)
         .key("report-right-click");
 
+    let hint = Switch::new(settings.hint_fallback)
+        .label("Hint fallback glyphs")
+        .hide_label()
+        .on_toggle(|m: &mut SettingsModel| {
+            change(m, |settings| {
+                settings.hint_fallback = !settings.hint_fallback
+            });
+        })
+        .build(kit)
+        .key("hint-fallback");
+
     let body = col()
         .w_full()
         .grow(1.0)
@@ -93,6 +104,17 @@ pub fn editor(kit: &Kit, model: &SettingsModel) -> El {
                 "Send right-clicks to a program",
                 "When the program reports the mouse, pass the right-click through instead of opening the menu.",
                 report,
+            )],
+        ))
+        .child(section(
+            kit,
+            "general-rendering",
+            "Rendering",
+            vec![setting(
+                kit,
+                "Hint fallback glyphs",
+                "Turn off for a faster first render when your installed faces already look right.",
+                hint,
             )],
         ));
     super::with_actions(None, Vec::new(), body)
