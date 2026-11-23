@@ -400,9 +400,14 @@ fn push_glyph(
     // A wide glyph's bitmap already fills both cells. The spacer cell has width 0.
     let cells = if sample.width >= 2 { 2 } else { 1 };
     let underline = sample.underline.then(|| atlas.underline(cells)).flatten();
-    let glyph = match &sample.cluster {
-        Some(cluster) => atlas.ensure_str(cluster, cells),
-        None => atlas.ensure(sample.ch, cells),
+    // Control cells (rio-vt stores tab stops as '\t') and spaces have no ink.
+    let glyph = if sample.ch.is_control() || sample.ch == ' ' {
+        None
+    } else {
+        match &sample.cluster {
+            Some(cluster) => atlas.ensure_str(cluster, cells),
+            None => atlas.ensure(sample.ch, cells),
+        }
     };
     for rect in [glyph, underline].into_iter().flatten() {
         text.push(CellText {
@@ -702,6 +707,30 @@ fn color_target(format: wgpu::TextureFormat) -> wgpu::ColorTargetState {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::cell::CellSample;
+    use term_atlas::Atlas;
+
+    #[test]
+    fn control_and_space_cells_emit_no_glyph() {
+        let mut atlas = Atlas::with_cell(18, 34);
+        let mut text = Vec::new();
+        let sample = |ch, underline| CellSample {
+            ch,
+            cluster: None,
+            width: 1,
+            fg: [255, 255, 255, 255],
+            bg: [0, 0, 0, 0],
+            underline,
+        };
+        for ch in ['\t', ' ', '\x1b', '\u{85}'] {
+            push_glyph(&mut text, &mut atlas, &sample(ch, false), 0, 0);
+        }
+        assert!(text.is_empty(), "a control cell must not allocate a glyph");
+        push_glyph(&mut text, &mut atlas, &sample(' ', true), 0, 0);
+        assert_eq!(text.len(), 1, "an underlined space still draws its rule");
+    }
+
     #[test]
     fn the_grid_shader_premultiplies_from_straight_color() {
         let src = include_str!("grid.wgsl");
