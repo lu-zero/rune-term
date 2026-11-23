@@ -132,12 +132,22 @@ fn codepoint(
             .map(String::into_boxed_str)
     };
     CellSample {
-        ch: if width == 0 { ' ' } else { sq.c() },
+        ch: glyph_char(sq, width),
         cluster,
         width,
         fg,
         bg,
         underline: style.flags.intersects(StyleFlags::ALL_UNDERLINES),
+    }
+}
+
+/// rio-vt keeps tab stops as literal `\t` cells; they are positioning, not glyphs.
+fn glyph_char(sq: Square, width: u8) -> char {
+    let c = sq.c();
+    if width == 0 || c.is_control() {
+        ' '
+    } else {
+        c
     }
 }
 
