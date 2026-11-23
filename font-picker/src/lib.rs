@@ -23,6 +23,7 @@ pub struct FontPicker<S> {
 }
 
 impl<S: 'static> FontPicker<S> {
+    /// Create a font picker for the current family.
     pub fn new(
         key: impl Into<String>,
         state: &ComboboxState,
@@ -59,11 +60,13 @@ impl<S: 'static> FontPicker<S> {
         self
     }
 
+    /// Call `choose` with the family the user picks.
     pub fn on_choose(mut self, choose: impl Fn(&mut S, &str, &mut Tx) + 'static) -> Self {
         self.choose = Some(Rc::new(choose));
         self
     }
 
+    /// Append the picker elements to `layer`.
     pub fn build(self, k: &Kit, layer: &mut Vec<El>) -> El {
         let listing = self.families.is_none();
         let mut families = self.families.unwrap_or_default();

@@ -22,6 +22,7 @@ pub struct PointerMoveOutcome {
     pub moved: bool,
 }
 
+/// Drop transient input state on focus loss.
 pub fn focus_lost(host: &mut HostSurface) {
     host.wheel_remainder = 0.0;
     host.pointer_button = None;
@@ -64,6 +65,7 @@ pub fn wheel(
     (lines, true)
 }
 
+/// Open a linked cell under a pointer, with modifiers.
 pub fn try_open_link_at(host: &mut HostSurface, x: f32, y: f32, scale: f32) -> LinkAction {
     let cell = input::cell_under(host, x, y, scale);
     let Some(link) = cell.and_then(|(col, row)| {
@@ -122,6 +124,7 @@ fn update_local_selection(host: &mut HostSurface, cell: Option<(u16, u16)>, x: f
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Advance a drag gesture with a phase and point.
 pub fn gesture(
     host: &mut HostSurface,
     phase: Phase,
@@ -177,6 +180,7 @@ pub fn gesture(
     LinkAction::None
 }
 
+/// Handle pointer motion over the focused pane.
 pub fn pointer_move(
     host: &mut HostSurface,
     x: f32,
@@ -224,6 +228,7 @@ pub fn pointer_move(
     }
 }
 
+/// Open the pane menu on a right-click.
 pub fn secondary_press(
     host: &mut HostSurface,
     x: f32,
@@ -244,10 +249,12 @@ pub fn secondary_press(
     false
 }
 
+/// Scroll the focused pane by whole lines.
 pub fn scroll_by_lines(host: &mut HostSurface, lines: i32) {
     host.surface.scroll(lines);
 }
 
+/// Send a mapped key to the focused surface.
 pub fn deliver_mapped_key(host: &mut HostSurface, mapped: &term_input::KeyEvent) -> bool {
     if mapped.key.is_none() && mapped.text.is_none() {
         return false;

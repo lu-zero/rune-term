@@ -22,6 +22,7 @@ use crate::pane_input;
 use crate::resize::{self, ResizeEffect};
 use crate::scrollback::{self, Bars};
 
+/// Open the terminal window and run the event loop.
 pub fn run() {
     with_settings_window(app()).run();
 }
@@ -52,6 +53,7 @@ fn with_settings_window(mut app: App<Model>) -> App<Model> {
     })
 }
 
+/// Build the app with its settings window attached.
 pub fn app() -> App<Model> {
     #[cfg(all(unix, feature = "pty"))]
     fast_exit(delegate::handover_all);

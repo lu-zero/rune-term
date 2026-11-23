@@ -57,6 +57,7 @@ impl Default for Surfaces {
 }
 
 impl Surfaces {
+    /// Create an empty surface set.
     pub fn new() -> Self {
         Self {
             inner: HashMap::new(),
@@ -64,6 +65,7 @@ impl Surfaces {
         }
     }
 
+    /// Add a surface.
     pub fn insert(&mut self, host: HostSurface) {
         let id = host.surface.id();
         self.inner.insert(id, host);
@@ -86,10 +88,12 @@ impl Surfaces {
         }
     }
 
+    /// The surface currently shown.
     pub fn shown_id(&self) -> Option<SurfaceId> {
         self.shown.filter(|id| self.inner.contains_key(id))
     }
 
+    /// Remove and return a surface by id.
     pub fn remove(&mut self, id: SurfaceId) -> Option<HostSurface> {
         let host = self.inner.remove(&id)?;
         if self.shown == Some(id) {
@@ -98,22 +102,27 @@ impl Surfaces {
         Some(host)
     }
 
+    /// A surface by id.
     pub fn get(&self, id: SurfaceId) -> Option<&HostSurface> {
         self.inner.get(&id)
     }
 
+    /// A mutable surface by id.
     pub fn get_mut(&mut self, id: SurfaceId) -> Option<&mut HostSurface> {
         self.inner.get_mut(&id)
     }
 
+    /// Number of surfaces.
     pub fn len(&self) -> usize {
         self.inner.len()
     }
 
+    /// Whether no surfaces remain.
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
 
+    /// Iterate over all surfaces mutably.
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut HostSurface> {
         self.inner.values_mut()
     }
@@ -123,6 +132,7 @@ impl Surfaces {
         self.resolve().and_then(|id| self.inner.get(&id))
     }
 
+    /// The first surface, mutably.
     pub fn primary_mut(&mut self) -> Option<&mut HostSurface> {
         let id = self.resolve()?;
         self.inner.get_mut(&id)
@@ -139,14 +149,17 @@ impl Surfaces {
             .or_else(|| self.inner.keys().next().copied())
     }
 
+    /// A surface by its effect mark.
     pub fn by_mark(&self, mark: u32) -> Option<&HostSurface> {
         self.inner.values().find(|host| host.mark == mark)
     }
 
+    /// A mutable surface by its effect mark.
     pub fn by_mark_mut(&mut self, mark: u32) -> Option<&mut HostSurface> {
         self.inner.values_mut().find(|host| host.mark == mark)
     }
 
+    /// Whether the surface with this mark is focused.
     pub fn focus(&self, mark: u32) -> bool {
         if let Some(host) = self.by_mark(mark) {
             host.surface.set_focus(true);

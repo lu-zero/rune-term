@@ -5,6 +5,7 @@ pub use term_host::input::*;
 use rune::{Key, Mods, PhysicalKeyCode, PointerButton};
 use term_vt::Modifiers;
 
+/// The terminal button number for a pointer button.
 pub fn button_code(button: PointerButton) -> Option<u8> {
     match button {
         PointerButton::Primary => Some(0),
@@ -32,6 +33,7 @@ pub fn host_modifiers(mods: term_input::Mods) -> Modifiers {
     out
 }
 
+/// The host modifier set as terminal modifiers.
 pub fn modifiers(mods: Mods) -> Modifiers {
     let mut out = Modifiers::empty();
     if mods.shift {
@@ -74,6 +76,7 @@ pub fn consumed_logical(mods: Mods, text: Option<&str>, base: Option<char>) -> M
     consumed
 }
 
+/// The physical key that produced a logical key event.
 pub fn logical_code(key: &Key) -> term_input::PhysicalKeyCode {
     use term_input::PhysicalKeyCode as C;
     match key {
@@ -132,6 +135,7 @@ pub fn mods_of(mods: Mods) -> term_input::Mods {
     }
 }
 
+/// The terminal key a physical key maps to.
 pub fn code(key: PhysicalKeyCode) -> term_input::PhysicalKeyCode {
     use rune::PhysicalKeyCode as W;
     use term_input::PhysicalKeyCode as C;

@@ -11,6 +11,7 @@ pub struct SolidSlot {
 }
 
 impl SolidSlot {
+    /// Create the solid-fill pass for a device and format.
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("solid-slot"),
@@ -95,6 +96,7 @@ impl SolidSlot {
         }
     }
 
+    /// The target color format this renderer draws.
     pub fn format(&self) -> wgpu::TextureFormat {
         self.format
     }
@@ -108,6 +110,7 @@ impl SolidSlot {
         queue.write_buffer(&self.color, 0, &bytes);
     }
 
+    /// Draw the solid fill into the pass.
     pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
         pass.set_pipeline(&self.pipeline);
         pass.set_bind_group(0, &self.bind_group, &[]);

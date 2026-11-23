@@ -16,6 +16,19 @@ A terminal emulator built on [Rune](https://github.com/anomalyco/rune). [Rune](h
 
 ![A second tab in the same session, split into two panes](./docs/images/terminal-tmux-splits.png)
 
+## Performance
+
+Headless four-pane frames run at ~0.4 ms p50. A first render of 337 unique
+kanji takes ~520 ms with fallback hinting, or ~280 ms with `hint_fallback =
+false`; scrolling after that stays at ASCII speed.
+
+## Crates
+
+On crates.io: `term-font`, `term-atlas` and the five `term-font-data-*` faces.
+In this workspace: `term-vt` (host layer), `term-host` (generic terminal state),
+`term-input` (keys), `term-grid` (wgpu pass), `rune-term-core` (Rune adapter),
+plus the app and helpers. See [`docs/building.md`](./docs/building.md).
+
 ## Install
 
 The app is not published yet. Build it from source:
@@ -38,11 +51,10 @@ Set `hint_fallback = false` under `[settings]` in `config.toml` to skip
 autohinting fallback glyphs for a faster first render; leave it on unless the
 installed faces already look right.
 
-## Docs
+## Documents
 
 - [Configuration](./docs/config.md) and [shell integration](./docs/shell-integration.md).
 - [Control CLI reference](./docs/cli/) and [headless captures](./docs/shots.md).
-- [Crate layout, features and build notes](./docs/building.md).
 - [Design and implementation status](./docs/todo/) and [contributing](./CONTRIBUTING.md).
 
 ## License

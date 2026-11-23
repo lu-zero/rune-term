@@ -1,5 +1,5 @@
 //! One window, one surface, and the seams later changes fill in.
-//! The design lives in `docs/todo/rune-term.md`.
+//! The rune-term application: a Rune window over a terminal host.
 
 mod app;
 mod chrome;

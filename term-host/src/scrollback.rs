@@ -28,6 +28,7 @@ impl Default for ScrollbarState {
 }
 
 impl ScrollbarState {
+    /// Mark the viewport as recently used.
     pub fn note_activity(&mut self) {
         self.active_until = f64::INFINITY;
         self.opacity = 1.0;
@@ -35,6 +36,7 @@ impl ScrollbarState {
         self.fade_from = 1.0;
     }
 
+    /// Show the bar without fading in.
     pub fn show_immediate(&mut self) {
         self.active_until = 0.0;
         self.opacity = 1.0;

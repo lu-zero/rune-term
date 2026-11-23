@@ -8,6 +8,7 @@ pub struct Preedit {
     pub cursor: Option<(usize, usize)>,
 }
 
+/// Overlay preedit text and the IME caret on a grid source.
 pub fn overlay<S: GridSource>(
     source: S,
     preedit: Option<&Preedit>,
@@ -213,6 +214,7 @@ pub struct CaretRect {
     pub h: f32,
 }
 
+/// Caret rectangle from cell metrics.
 pub fn caret_rect(
     cursor_cell: (u16, u16),
     cell_px: (u16, u16),
@@ -238,6 +240,7 @@ pub fn caret_rect(
     }
 }
 
+/// Set or clear preedit text and its cursor range.
 pub fn set_preedit(preedit: &mut Option<Preedit>, text: String, cursor: Option<(usize, usize)>) {
     if text.is_empty() {
         *preedit = None;
@@ -246,6 +249,7 @@ pub fn set_preedit(preedit: &mut Option<Preedit>, text: String, cursor: Option<(
     }
 }
 
+/// Commit text to a surface; false when nothing was sent.
 pub fn commit_text(surface: &term_vt::Surface, text: &str) -> bool {
     if text.is_empty() {
         return false;

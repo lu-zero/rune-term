@@ -351,18 +351,22 @@ impl Atlas {
         }
     }
 
+    /// The face whose glyphs this atlas draws.
     pub fn face(&self) -> &Face {
         &self.face
     }
 
+    /// Cell width and height in pixels.
     pub fn cell(&self) -> (u32, u32) {
         self.cell
     }
 
+    /// Coverage bytes of the gray atlas, row-major at `ATLAS_SIZE`.
     pub fn pixels(&self) -> &[u8] {
         &self.pixels
     }
 
+    /// The pre-placed ASCII glyph for `ch`, if any.
     pub fn glyph(&self, ch: char) -> Option<GlyphRect> {
         let code = u32::from(ch);
         if (0x20..0x7f).contains(&code) {
@@ -749,6 +753,7 @@ impl Atlas {
         std::mem::take(&mut self.color_dirty)
     }
 
+    /// Premultiplied color atlas bytes in the chosen format.
     pub fn color_pixels(&self) -> Option<&[u8]> {
         if self.color.is_empty() {
             None

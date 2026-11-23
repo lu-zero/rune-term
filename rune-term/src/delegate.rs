@@ -52,6 +52,7 @@ pub(crate) fn publish(shared: &Arc<Shared>) {
     *PUBLISHED.lock().expect("harness") = Some(Arc::clone(shared));
 }
 
+/// The delegate's headless harness, when installed.
 pub fn harness() -> Option<Harness> {
     PUBLISHED
         .lock()

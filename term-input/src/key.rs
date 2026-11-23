@@ -166,6 +166,7 @@ impl Keypad {
 }
 
 impl Key {
+    /// Whether this key is a bare modifier.
     pub fn is_modifier(self) -> bool {
         matches!(
             self,
@@ -700,6 +701,7 @@ fn needs_disambiguation(key: Key, mods: Modifiers) -> bool {
     matches!(key, Key::Escape | Key::Keypad(Keypad::Enter))
 }
 
+/// Bytes the event sends to the terminal, or `None` if it sends none.
 pub fn encode(event: &KeyEvent, ctx: &EncodeContext) -> Option<Vec<u8>> {
     // An input method owns the key. Its text arrives on commit.
     if event.composing {
@@ -1213,7 +1215,7 @@ mod tests {
 
     #[test]
     fn yazi_sees_shift_g_as_capital_g() {
-        // Issue #2119: shift was lost because only `CSI 103 ; 2 u` went out.
+        // Shift was lost when only `CSI 103 ; 2 u` went out.
         let event = typed('g', Modifiers::SHIFT, "G");
         assert_eq!(encode(&event, &yazi()), Some(b"\x1b[103:71;2;71u".to_vec()));
     }

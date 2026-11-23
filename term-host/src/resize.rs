@@ -111,6 +111,7 @@ pub fn content_points(cols: u16, cell_points: f32, scale: f32) -> f32 {
     (f32::from(cols) * pitch) / scale
 }
 
+/// Compute a resize effect without applying it.
 pub fn apply(request: ResizeRequest) -> ResizeEffect {
     match request {
         ResizeRequest::Layout {

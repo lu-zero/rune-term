@@ -51,6 +51,7 @@ pub struct Client {
 }
 
 impl Client {
+    /// Advance the parser with control-mode bytes; returns the updates.
     pub fn feed(&mut self, bytes: &[u8]) -> Vec<Update> {
         let mut updates = Vec::new();
         for event in self.parser.feed(bytes) {
@@ -193,6 +194,7 @@ fn redraw(lines: &[Vec<u8>], x: u16, y: u16) -> Vec<u8> {
     bytes
 }
 
+/// Pane ids in stream order from a layout.
 pub fn panes(layout: &Layout) -> Vec<u32> {
     sizes(layout).into_iter().map(|(pane, _)| pane).collect()
 }
@@ -228,10 +230,12 @@ pub fn send_keys(pane: u32, bytes: &[u8]) -> String {
     out
 }
 
+/// Command reporting the cell size to tmux.
 pub fn refresh_client(cols: u16, rows: u16) -> String {
     format!("refresh-client -C {cols}x{rows}\n")
 }
 
+/// Command selecting a window and pane.
 pub fn select(window: u32, pane: u32) -> String {
     format!("select-window -t @{window} ; select-pane -t %{pane}\n")
 }
@@ -247,6 +251,7 @@ pub fn resize_pane(pane: u32, axis: Axis, cells: u16) -> String {
     format!("resize-pane -t %{pane} -{flag} {cells}\n")
 }
 
+/// Command selecting a window with a layout.
 pub fn select_layout(window: u32, layout: &Layout) -> String {
     format!(
         "select-layout -t @{window} '{}'\n",
@@ -254,18 +259,22 @@ pub fn select_layout(window: u32, layout: &Layout) -> String {
     )
 }
 
+/// Command closing a pane.
 pub fn kill_pane(pane: u32) -> String {
     format!("kill-pane -t %{pane}\n")
 }
 
+/// Command closing a window.
 pub fn kill_window(window: u32) -> String {
     format!("kill-window -t @{window}\n")
 }
 
+/// Command creating a window.
 pub fn new_window() -> String {
     "new-window\n".to_owned()
 }
 
+/// Command splitting a pane on an axis.
 pub fn split_window(pane: u32, axis: Axis) -> String {
     let flag = match axis {
         Axis::Horizontal => 'h',

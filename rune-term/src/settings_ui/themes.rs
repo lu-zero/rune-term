@@ -74,6 +74,7 @@ impl ThemeDraft {
         }
     }
 
+    /// Draft a theme from a stored name.
     pub fn from_name(name: &str, config: &ConfigFile) -> Self {
         let custom = config.custom_themes.get(name).cloned();
         let scheme = match &custom {
@@ -117,6 +118,7 @@ impl ThemeDraft {
         self.show_hex(shown_rgb(&self.scheme, slot));
     }
 
+    /// Set an ANSI or UI color by index.
     pub fn set_slot_color(&mut self, rgb: u32) {
         if let Slot::Indexed(index) = self.slot {
             if theme::hex(rgb) == theme::xterm_index(index) {
@@ -215,6 +217,7 @@ pub struct ThemeEntry {
 }
 
 impl ThemeEntry {
+    /// The stored theme name for an appearance.
     pub fn name_for(&self, variant: Appearance) -> Option<&str> {
         match variant {
             Appearance::Dark => self.dark.as_deref().or(self.light.as_deref()),
@@ -222,10 +225,12 @@ impl ThemeEntry {
         }
     }
 
+    /// Whether the entry pairs a dark and light theme.
     pub fn is_pair(&self) -> bool {
         self.dark.is_some() && self.light.is_some()
     }
 
+    /// The appearance pill's label.
     pub fn label(&self) -> &'static str {
         match (self.dark.is_some(), self.light.is_some()) {
             (true, true) => "Adaptive",
@@ -248,6 +253,7 @@ fn base_name(name: &str) -> String {
     name[..name.len() - suffix].trim_end().to_owned()
 }
 
+/// The appearance of a named theme.
 pub fn appearance(config: &ConfigFile, name: &str) -> Appearance {
     match config.custom_themes.get(name) {
         Some(scheme) => scheme.appearance,
@@ -293,6 +299,7 @@ pub fn entries(config: &ConfigFile) -> Vec<ThemeEntry> {
     entries
 }
 
+/// The adaptive or pinned mode for an entry.
 pub fn initial_mode(entry: &ThemeEntry) -> ThemeMode {
     match (entry.dark.is_some(), entry.light.is_some()) {
         (false, true) => ThemeMode::Light,
@@ -330,6 +337,7 @@ pub fn preview_selected(model: &mut SettingsModel) {
     super::preview(model, palette);
 }
 
+/// Build the theme editor, appending overlays.
 pub fn editor(kit: &Kit, model: &SettingsModel, overlays: &mut Vec<El>) -> El {
     let body = col()
         .w_full()

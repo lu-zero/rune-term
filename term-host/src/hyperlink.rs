@@ -103,6 +103,7 @@ pub fn resolve(host: &HostSurface, line: usize, col: usize) -> Option<HoverLink>
     resolve_surface(&host.surface, &host.render, line, col)
 }
 
+/// The link at a viewport cell, OSC 8 before plain URLs.
 pub fn resolve_surface(
     surface: &term_vt::Surface,
     render: &term_vt::RenderState,

@@ -12,6 +12,7 @@ use crate::codec::{read_message, write_message};
 use crate::{Request, Response};
 
 #[cfg(unix)]
+/// Connect to the control socket at `path`.
 pub fn connect(path: &Path) -> io::Result<UnixStream> {
     let stream = UnixStream::connect(path)?;
     let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
@@ -20,6 +21,7 @@ pub fn connect(path: &Path) -> io::Result<UnixStream> {
 }
 
 #[cfg(unix)]
+/// Bind a control socket at `path`.
 pub fn bind(path: &Path) -> io::Result<UnixListener> {
     if let Some(dir) = path.parent() {
         fs::create_dir_all(dir)?;
@@ -35,12 +37,14 @@ pub fn bind(path: &Path) -> io::Result<UnixListener> {
 }
 
 #[cfg(unix)]
+/// Write one request to a connected stream.
 pub fn send_request(stream: &UnixStream, req: &Request) -> io::Result<()> {
     let mut writer = BufWriter::new(stream.try_clone()?);
     write_message(&mut writer, req)
 }
 
 #[cfg(unix)]
+/// Read one response from a connected stream.
 pub fn read_response(stream: &UnixStream) -> io::Result<Response> {
     let mut reader = BufReader::new(stream.try_clone()?);
     match read_message::<_, Response>(&mut reader)? {
@@ -53,6 +57,7 @@ pub fn read_response(stream: &UnixStream) -> io::Result<Response> {
 }
 
 #[cfg(unix)]
+/// Send a request to `path` and read its response.
 pub fn round_trip(path: &Path, req: &Request) -> io::Result<Response> {
     let stream = connect(path)?;
     send_request(&stream, req)?;

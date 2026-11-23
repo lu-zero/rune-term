@@ -189,6 +189,7 @@ pub fn map_key(
     }
 }
 
+/// Whether a key and modifiers are an app chord, kept from the shell.
 pub fn is_app_chord(key: PhysicalKeyCode, mods: Mods) -> bool {
     if matches!(key, PhysicalKeyCode::Tab) && mods.ctrl && !mods.alt && !mods.logo {
         return true;

@@ -178,8 +178,11 @@ pub trait SurfaceDelegate: MaybeSendSync + 'static {
     /// Only flag or schedule work here; calling back into the surface
     /// deadlocks.
     fn wakeup(&self, surface: SurfaceId);
+    /// Receive a terminal action for this surface.
     fn action(&self, _surface: SurfaceId, _action: Action) {}
+    /// Receive OSC 52 clipboard text for this surface.
     fn clipboard_write(&self, _surface: SurfaceId, _kind: ClipboardType, _text: String) {}
+    /// The terminal session for this surface ended.
     fn close_surface(&self, _surface: SurfaceId) {}
     /// Whether this delegate acts on `Action::ProgramStatus` (OSC 7501).
     /// Read once per surface at creation. While false, the terminal
@@ -481,6 +484,7 @@ pub struct Engine {
 }
 
 impl Engine {
+    /// Create an engine that numbers surfaces from one.
     pub fn new(delegate: Arc<dyn SurfaceDelegate>) -> Self {
         Self {
             delegate,
@@ -829,10 +833,12 @@ impl Surface {
         }
     }
 
+    /// This surface's id.
     pub fn id(&self) -> SurfaceId {
         self.id
     }
 
+    /// Send bytes to the child as terminal input.
     pub fn write<B: Into<Cow<'static, [u8]>>>(&self, bytes: B) {
         // Input snaps the view back to the live screen and drops any
         // selection, the scroll-to-bottom / clear-on-typing convention
@@ -904,6 +910,7 @@ impl Surface {
         self.delegate.output(self.id, &bytes.into());
     }
 
+    /// Send text to the child as terminal input.
     pub fn text(&self, text: &str) {
         self.write(text.as_bytes().to_vec());
     }
@@ -965,6 +972,7 @@ impl Surface {
         self.alt_is_meta.store(enabled, Ordering::Relaxed);
     }
 
+    /// Whether alt prefixes with ESC instead of sending platform text.
     pub fn alt_is_meta(&self) -> bool {
         self.alt_is_meta.load(Ordering::Relaxed)
     }
@@ -1008,6 +1016,7 @@ impl Surface {
             .store(enabled, std::sync::atomic::Ordering::Relaxed);
     }
 
+    /// Encode and send a key event; false when it sends nothing.
     pub fn key(&self, event: &KeyEvent) -> bool {
         // The encoding depends on terminal state the embedder does not track,
         // which is the reason this lives here and not in the host.
@@ -1030,6 +1039,7 @@ impl Surface {
         }
     }
 
+    /// Resize the grid and its pixel metrics.
     pub fn resize(&self, cols: u16, rows: u16, pixel_width: u16, pixel_height: u16) {
         self.terminal.lock().resize(GridSize::new(
             cols as usize,
@@ -1197,6 +1207,7 @@ impl Surface {
         true
     }
 
+    /// Move the viewport by `delta_lines`.
     pub fn scroll(&self, delta_lines: i32) {
         use rio_vt::crosswords::grid::Scroll;
         self.terminal
@@ -1217,6 +1228,7 @@ impl Surface {
         term.request_render();
     }
 
+    /// Extend a selection to a viewport cell.
     pub fn selection_update(&self, viewport_line: i32, col: usize, side: Side) {
         let mut term = self.terminal.lock();
         let offset = term.display_offset() as i32;
@@ -1228,6 +1240,7 @@ impl Surface {
         }
     }
 
+    /// Drop the selection.
     pub fn selection_clear(&self) {
         let mut term = self.terminal.lock();
         if term.selection.take().is_some() {
@@ -1236,6 +1249,7 @@ impl Surface {
         }
     }
 
+    /// The selected text, if any.
     pub fn selection_text(&self) -> Option<String> {
         self.terminal.lock().selection_to_string()
     }

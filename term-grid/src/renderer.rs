@@ -51,6 +51,7 @@ struct Slot {
 }
 
 impl GridRenderer {
+    /// Create the cell renderer with its textures and pipelines.
     pub fn new(device: &wgpu::Device, queue: &wgpu::Queue, format: wgpu::TextureFormat) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("grid"),
@@ -258,11 +259,13 @@ impl GridRenderer {
         queue.write_buffer(&gpu.uniform, 0, bytemuck::bytes_of(&uniforms));
     }
 
+    /// Draw the background and text passes.
     pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
         self.draw_bg(pass);
         self.draw_text(pass);
     }
 
+    /// Draw only the background pass.
     pub fn draw_bg(&self, pass: &mut wgpu::RenderPass<'_>) {
         if !self.ready || self.bg.is_empty() {
             return;
@@ -273,6 +276,7 @@ impl GridRenderer {
         pass.draw(0..3, 0..1);
     }
 
+    /// Draw only the text pass.
     pub fn draw_text(&self, pass: &mut wgpu::RenderPass<'_>) {
         if !self.ready || self.bg.is_empty() || self.text_count == 0 {
             return;

@@ -71,15 +71,18 @@ fn finish(mut palette: Palette) -> Arc<Palette> {
 }
 
 impl Palette {
+    /// Split an sRGB color into float channels.
     pub fn channels(&self, value: u32) -> [f32; 4] {
         channels(value)
     }
 
+    /// Convert an sRGB byte triple to float channels.
     pub fn from_bytes(&self, rgb: [u8; 3]) -> [f32; 4] {
         from_bytes(rgb)
     }
 }
 
+/// The built-in palettes.
 pub fn builtins() -> &'static [Arc<Palette>] {
     static ALL: OnceLock<Vec<Arc<Palette>>> = OnceLock::new();
     ALL.get_or_init(|| {
@@ -97,10 +100,12 @@ pub fn builtins() -> &'static [Arc<Palette>] {
     })
 }
 
+/// The default palette.
 pub fn default_palette() -> Arc<Palette> {
     flexoki_black()
 }
 
+/// A built-in palette by name.
 pub fn resolve_builtin(name: &str) -> Option<Arc<Palette>> {
     let name = name.trim();
     builtins()
@@ -109,6 +114,7 @@ pub fn resolve_builtin(name: &str) -> Option<Arc<Palette>> {
         .cloned()
 }
 
+/// A palette by name, falling back to the default.
 pub fn resolve(name: &str) -> Arc<Palette> {
     resolve_builtin(name).unwrap_or_else(default_palette)
 }
@@ -131,6 +137,7 @@ pub fn xterm_index(index: u8) -> [u8; 3] {
     [0, 0, 0]
 }
 
+/// Parse a packed RGB value into bytes.
 pub const fn hex(value: u32) -> [u8; 3] {
     [
         ((value >> 16) & 0x0000_00FF) as u8,
@@ -139,6 +146,7 @@ pub const fn hex(value: u32) -> [u8; 3] {
     ]
 }
 
+/// Split an sRGB color into float channels.
 pub fn channels(value: u32) -> [f32; 4] {
     let [r, g, b] = hex(value);
     [
@@ -149,6 +157,7 @@ pub fn channels(value: u32) -> [f32; 4] {
     ]
 }
 
+/// Convert an sRGB byte triple to float channels.
 pub fn from_bytes(rgb: [u8; 3]) -> [f32; 4] {
     [
         f32::from(rgb[0]) / 255.0,

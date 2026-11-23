@@ -8,6 +8,7 @@ use term_vt::{SelectionKind, ViewportSelection};
 use crate::grid_source::SurfaceGrid;
 use crate::theme::Palette;
 
+/// Wrap a grid source, tinting selected cells.
 pub fn tint(source: SurfaceGrid<'_>) -> Tint<'_> {
     let selection = source.render.selection();
     let palette = source.palette.clone();

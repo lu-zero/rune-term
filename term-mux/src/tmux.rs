@@ -243,6 +243,7 @@ fn write_cell(layout: &Layout, x: u16, y: u16, out: &mut String) {
     out.push(close);
 }
 
+/// Parse a tmux layout string into a tree.
 pub fn parse_layout(text: &str) -> Option<Layout> {
     let (_checksum, root) = text.split_once(',')?;
     let mut rest = root.as_bytes();

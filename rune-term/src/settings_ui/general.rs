@@ -7,6 +7,7 @@ use rune_kit::{Kit, SegmentedControl, Switch};
 use super::SettingsModel;
 use crate::settings::{OnClose, Settings};
 
+/// Build the General tab.
 pub fn editor(kit: &Kit, model: &SettingsModel) -> El {
     let settings = &model.config.settings;
     let confirm = Switch::new(settings.confirm_close)

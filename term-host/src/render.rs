@@ -23,6 +23,7 @@ pub struct SyncResult {
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Fill one pane's grid from its surface.
 pub fn sync_active_host(
     host: &mut HostSurface,
     grid: &mut GridRenderer,
@@ -118,6 +119,7 @@ pub struct GridDrawStamp {
 }
 
 impl GridDrawStamp {
+    /// Forget the cached theme colors.
     pub fn invalidate_theme(&mut self) {
         self.theme.clear();
     }

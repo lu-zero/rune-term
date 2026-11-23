@@ -89,10 +89,16 @@ pub struct CursorSample {
 }
 
 pub trait GridSource {
+    /// Grid width in cells.
     fn columns(&self) -> usize;
+    /// Grid height in cells.
     fn lines(&self) -> usize;
+    /// Whether a row changed since the last reset.
     fn row_dirty(&self, line: usize) -> bool;
+    /// The cell to draw at a position.
     fn cell(&self, line: usize, col: usize) -> CellSample;
+    /// Cursor placement and colors.
     fn cursor(&self) -> CursorSample;
+    /// Clear the dirty flags after an upload.
     fn reset_dirty(&mut self);
 }

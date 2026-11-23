@@ -24,6 +24,7 @@ pub enum Layout {
 }
 
 impl Layout {
+    /// Layout size in cells.
     pub fn size(&self) -> (u16, u16) {
         match self {
             Layout::Pane { cols, rows, .. } | Layout::Split { cols, rows, .. } => (*cols, *rows),

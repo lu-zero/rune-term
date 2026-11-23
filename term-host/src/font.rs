@@ -3,6 +3,7 @@ pub const DEFAULT_FONT_SIZE: f32 = 14.0;
 pub const MIN_FONT_SIZE: f32 = 6.0;
 pub const MAX_FONT_SIZE: f32 = 96.0;
 
+/// Clamp a profile font size to the supported range.
 pub fn clamp_font_size(size: f32) -> f32 {
     if !size.is_finite() {
         return DEFAULT_FONT_SIZE;
@@ -15,6 +16,7 @@ pub fn cell_points() -> (f32, f32) {
     term_grid::face_cell()
 }
 
+/// Cell size in points for a face at a font size.
 pub fn cell_points_for(face: &term_grid::Face, font_size: f32) -> (f32, f32) {
     term_grid::face_cell_for(face, clamp_font_size(font_size))
 }

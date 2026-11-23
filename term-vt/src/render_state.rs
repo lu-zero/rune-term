@@ -255,6 +255,7 @@ pub struct RenderState {
 }
 
 impl RenderState {
+    /// Snapshot a surface's visible rows for rendering.
     pub fn new(surface: &Surface) -> Self {
         let terminal = surface.terminal();
         let inline_images = surface.inline_images();
@@ -290,6 +291,7 @@ impl RenderState {
         }
     }
 
+    /// Refresh the snapshot from the terminal.
     pub fn update(&mut self) {
         self.update_inner(None);
     }
@@ -485,18 +487,22 @@ impl RenderState {
         self.images_view = view;
     }
 
+    /// Visible columns.
     pub fn columns(&self) -> usize {
         self.columns
     }
 
+    /// Visible lines.
     pub fn lines(&self) -> usize {
         self.rows.len()
     }
 
+    /// Whether a visible row changed.
     pub fn row_dirty(&self, line: usize) -> bool {
         self.rows.get(line).map(|row| row.dirty).unwrap_or(false)
     }
 
+    /// Clear dirty flags after an upload.
     pub fn reset_dirty(&mut self) {
         for row in &mut self.rows {
             row.dirty = false;
@@ -535,6 +541,7 @@ impl RenderState {
         Some(text)
     }
 
+    /// The cell at a visible position.
     pub fn square(&self, line: usize, column: usize) -> Option<&Square> {
         let row = self.rows.get(line)?;
         if column >= self.columns {
@@ -543,6 +550,7 @@ impl RenderState {
         Some(&row[Column(column)])
     }
 
+    /// Resolved style for a cell.
     pub fn style_at(&self, line: usize, column: usize, square: &Square) -> Style {
         // Bg-only cells (erase fills, blank lines after `clear`) encode
         // their background inline instead of carrying a style id; the
@@ -597,6 +605,7 @@ impl RenderState {
         self.cursor_shape
     }
 
+    /// Cursor row and column in the viewport.
     pub fn cursor(&self) -> (usize, usize) {
         (self.cursor_line, self.cursor_column)
     }
@@ -607,6 +616,7 @@ impl RenderState {
         self.cursor_visible
     }
 
+    /// How far the viewport is scrolled into history.
     pub fn display_offset(&self) -> usize {
         self.display_offset
     }
@@ -617,6 +627,7 @@ impl RenderState {
         self.alt_screen
     }
 
+    /// The selection in viewport coordinates.
     pub fn selection(&self) -> Option<ViewportSelection> {
         self.selection
     }
@@ -948,6 +959,7 @@ impl RenderState {
         Some((start, end))
     }
 
+    /// Visible text of a row, blank cells as spaces.
     pub fn text_row(&self, line: usize) -> String {
         let Some(row) = self.rows.get(line) else {
             return String::new();

@@ -28,7 +28,9 @@ pub struct ImageInfo {
 }
 
 pub trait ImageProvider {
+    /// Placement and size metadata for an image.
     fn image_info(&self, image_id: u32) -> Option<ImageInfo>;
+    /// Copy an image's RGBA pixels into `buf`; returns the byte count.
     fn image_rgba(&self, image_id: u32, buf: &mut [u8]) -> usize;
 }
 
@@ -73,6 +75,7 @@ pub struct ImagePass {
 }
 
 impl ImagePass {
+    /// Create the image pass for a device and target format.
     pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("images"),
@@ -279,6 +282,7 @@ impl ImagePass {
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// Draw all uploaded image quads into the pass.
     pub fn draw(
         &mut self,
         device: &wgpu::Device,

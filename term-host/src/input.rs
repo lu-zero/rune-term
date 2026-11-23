@@ -12,6 +12,7 @@ pub enum Phase {
     Up,
 }
 
+/// Cell and side under a window point.
 pub fn cell_under(host: &HostSurface, x: f32, y: f32, scale: f32) -> Option<(u16, u16)> {
     term_input::cell_at(
         x,
@@ -36,6 +37,7 @@ pub fn cell_for_wheel(host: &HostSurface, x: f32, y: f32, scale: f32) -> (u16, u
     )
 }
 
+/// Clamp a local position to a cell edge.
 pub fn edge_cell(local: f32, pitch: f32, count: u16) -> u16 {
     if count == 0 || pitch.partial_cmp(&0.0) != Some(std::cmp::Ordering::Greater) || local < 0.0 {
         0
@@ -58,6 +60,7 @@ pub fn side_at(x: f32, col: u16, pitch: f32) -> term_vt::Side {
     }
 }
 
+/// Drawn cell size in points from device pixels and scale.
 pub fn drawn_pitch(cell_px: u16, scale: f32) -> f32 {
     if !(scale.is_finite() && scale > 0.0) {
         return 0.0;
@@ -89,6 +92,7 @@ pub fn command_code(c: char) -> term_input::PhysicalKeyCode {
     }
 }
 
+/// The digit of a numpad key, if it has one.
 pub fn tab_digit(code: term_input::PhysicalKeyCode) -> Option<u8> {
     use term_input::PhysicalKeyCode::*;
     Some(match code {

@@ -10,6 +10,7 @@ pub struct Images {
 }
 
 impl Images {
+    /// Create the image state for a device and target format.
     pub fn new(device: &Device, format: TextureFormat) -> Self {
         Self {
             pass: ImagePass::new(device, format),
@@ -17,6 +18,7 @@ impl Images {
         }
     }
 
+    /// Upload changed image placements from a render state.
     pub fn sync(
         &mut self,
         device: &Device,
@@ -47,11 +49,13 @@ impl Images {
         self.pass.sync(device, queue, &self.placements, &provider);
     }
 
+    /// Drop all cached images.
     pub fn clear(&mut self) {
         self.placements.clear();
     }
 
     #[allow(clippy::too_many_arguments)]
+    /// Draw one z-bucket of image quads into the pass.
     pub fn draw_bucket(
         &mut self,
         device: &Device,

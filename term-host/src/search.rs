@@ -17,6 +17,7 @@ pub struct Hit {
     pub end: usize,
 }
 
+/// Visible search hits for a pattern.
 pub fn collect(surface: &Surface, render: &RenderState, pattern: &str) -> Vec<Hit> {
     if pattern.is_empty() {
         return Vec::new();
@@ -82,6 +83,7 @@ pub fn viewport_hits(
     hits
 }
 
+/// Wrap a grid source, tinting the hit rows.
 pub fn tint<'a, S>(source: S, hits: &'a [Hit], palette: Arc<Palette>) -> Tint<'a, S> {
     Tint {
         source,

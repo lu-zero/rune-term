@@ -96,6 +96,7 @@ pub struct SettingsModel {
 }
 
 impl SettingsModel {
+    /// Create settings state over the terminal app.
     pub fn new(terminal: AppHandle<Model>) -> Self {
         Self::with_config(ConfigFile::load(), Some(terminal))
     }
@@ -330,6 +331,7 @@ pub fn show_tab(model: &mut SettingsModel, tab: Tab) {
     reload_draft(model);
 }
 
+/// Build the settings window's view.
 pub fn view(model: &SettingsModel, cx: &mut Cx<SettingsModel>) -> El {
     let kit = kit(&previewed_palette(model));
     let mut overlays = Vec::new();

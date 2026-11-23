@@ -55,6 +55,7 @@ impl ProfileDraft {
         Self::from_profile(&name, &profile)
     }
 
+    /// Draft a profile from a stored profile.
     pub fn from_profile(name: &str, profile: &Profile) -> Self {
         let (shell_program, shell_args) = profile
             .shell
@@ -189,6 +190,7 @@ fn format_size(size: f32) -> String {
     }
 }
 
+/// Build the profile editor.
 pub fn editor(
     kit: &Kit,
     model: &SettingsModel,
@@ -564,6 +566,7 @@ pub fn preview_theme(model: &mut SettingsModel) {
     super::preview(model, palette);
 }
 
+/// Build the profile list's action bar.
 pub fn actions(kit: &Kit, model: &SettingsModel) -> Vec<El> {
     let dirty = model.profile.is_dirty();
     vec![

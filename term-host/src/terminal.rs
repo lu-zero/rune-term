@@ -38,6 +38,7 @@ pub struct State {
 }
 
 impl State {
+    /// Create terminal state for a theme name.
     pub fn new(theme_name: String) -> Self {
         Self {
             surfaces: Surfaces::new(),
@@ -52,70 +53,87 @@ impl State {
         }
     }
 
+    /// The first surface.
     pub fn primary(&self) -> Option<&HostSurface> {
         self.surfaces.primary()
     }
 
+    /// The first surface, mutably.
     pub fn primary_mut(&mut self) -> Option<&mut HostSurface> {
         self.surfaces.primary_mut()
     }
 
+    /// A surface by its effect mark.
     pub fn by_mark(&self, mark: u32) -> Option<&HostSurface> {
         self.surfaces.by_mark(mark)
     }
 
+    /// A mutable surface by its effect mark.
     pub fn by_mark_mut(&mut self, mark: u32) -> Option<&mut HostSurface> {
         self.surfaces.by_mark_mut(mark)
     }
 
+    /// The shown surface id.
     pub fn shown_id(&self) -> Option<SurfaceId> {
         self.surfaces.shown_id()
     }
 
+    /// Show a surface.
     pub fn show(&mut self, id: SurfaceId) {
         self.surfaces.show(id);
     }
 
+    /// Add a surface.
     pub fn insert(&mut self, host: HostSurface) {
         self.surfaces.insert(host);
     }
 
+    /// Remove and return a surface by id.
     pub fn remove(&mut self, id: SurfaceId) -> Option<HostSurface> {
         self.surfaces.remove(id)
     }
 
+    /// A surface by id.
     pub fn get(&self, id: SurfaceId) -> Option<&HostSurface> {
         self.surfaces.get(id)
     }
 
+    /// A mutable surface by id.
     pub fn get_mut(&mut self, id: SurfaceId) -> Option<&mut HostSurface> {
         self.surfaces.get_mut(id)
     }
 
+    /// Number of surfaces.
     pub fn len(&self) -> usize {
         self.surfaces.len()
     }
 
+    /// Whether no surfaces remain.
     pub fn is_empty(&self) -> bool {
         self.surfaces.is_empty()
     }
 
+    /// Whether the surface with this mark is focused.
     pub fn focus(&self, mark: u32) -> bool {
         self.surfaces.focus(mark)
     }
 
+    /// Iterate over all surfaces mutably.
     pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut HostSurface> {
         self.surfaces.iter_mut()
     }
 
+    /// Forget the cached theme colors.
     pub fn invalidate_theme(&mut self) {
         self.grid_draw.invalidate_theme();
     }
 
+    /// Drop the preedit overlay.
     pub fn clear_preedit(&mut self) {
         self.preedit = None;
     }
 
+    /// Set the preedit text and cursor range.
     pub fn set_preedit(&mut self, text: String, cursor: Option<(usize, usize)>) {
         crate::ime::set_preedit(&mut self.preedit, text, cursor);
     }
@@ -127,34 +145,41 @@ impl State {
             .is_some_and(|host| crate::ime::commit_text(&host.surface, text))
     }
 
+    /// Update held modifiers; true when focus should redraw.
     pub fn set_held_mods(&mut self, mods: Mods) -> bool {
         let changed = self.held_mods != mods;
         self.held_mods = mods;
         changed
     }
 
+    /// Currently held modifiers.
     pub fn held_mods(&self) -> Mods {
         self.held_mods
     }
 
+    /// Cursor cell in the active surface.
     pub fn cursor_cell(&self) -> (u16, u16) {
         self.cursor_cell
     }
 
+    /// Current cursor blink phase.
     pub fn blink_phase_on(&self) -> bool {
         self.blink_phase_on
     }
 
+    /// The active preedit, if any.
     pub fn preedit(&self) -> Option<&Preedit> {
         self.preedit.as_ref()
     }
 
+    /// Whether any surface has a hovered link.
     pub fn any_hover_link(&mut self) -> bool {
         self.surfaces
             .iter_mut()
             .any(|host| host.hover_link.is_some())
     }
 
+    /// The hovered link URI, if any.
     pub fn hover_for_render(&self) -> Option<HoverLink> {
         self.primary().and_then(|host| host.hover_link.clone())
     }
@@ -248,10 +273,12 @@ impl State {
         report
     }
 
+    /// Set the cursor blink phase.
     pub fn set_blink_phase(&mut self, on: bool) {
         self.blink_phase_on = on;
     }
 
+    /// The surface for a tmux pane.
     pub fn host_for_pane(&self, pane: u32, shown_pane: u32) -> Option<&HostSurface> {
         if pane == shown_pane {
             self.primary()
@@ -260,14 +287,17 @@ impl State {
         }
     }
 
+    /// Cell size of the first surface.
     pub fn primary_cell_px(&self) -> (u16, u16) {
         self.primary().map(|h| h.cell_px).unwrap_or((0, 0))
     }
 
+    /// Effect mark of the first surface.
     pub fn primary_mark(&self) -> Option<u32> {
         self.primary().map(|h| h.mark)
     }
 
+    /// Mutable surface for a tmux pane.
     pub fn host_for_pane_mut(&mut self, pane: u32, shown_pane: u32) -> Option<&mut HostSurface> {
         if pane == shown_pane {
             self.primary_mut()

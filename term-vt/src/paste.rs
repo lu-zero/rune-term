@@ -127,7 +127,7 @@ pub fn encode(text: &str, bracketed: bool) -> Vec<u8> {
 /// how it marks the end of a line, not part of the text. Pasted as is into
 /// a shell, it doubles every line break: readline reads each CR in a
 /// bracketed paste as a newline, so CRLF is two, and unbracketed it is two
-/// Enters (#1669). CRLF becomes LF, so a paste reads the same on every
+/// Enters. CRLF becomes LF, so a paste reads the same on every
 /// platform; a lone CR stays.
 ///
 /// Text without a CR, the usual case, is handed back as is after one

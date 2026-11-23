@@ -103,6 +103,7 @@ pub struct ShellSpec {
 }
 
 impl ShellSpec {
+    /// Whether the config holds no custom themes or extra profiles.
     pub fn is_empty(&self) -> bool {
         self.program.as_ref().is_none_or(|p| p.trim().is_empty()) && self.args.is_empty()
     }
@@ -225,6 +226,7 @@ impl ConfigFile {
             .unwrap_or(self.settings.on_close)
     }
 
+    /// Load configuration from the user's config directory.
     pub fn load() -> Self {
         let dir = config_dir();
         match Self::open(&dir) {
@@ -325,22 +327,27 @@ impl ConfigFile {
         }
     }
 
+    /// Names of all profiles.
     pub fn profile_names(&self) -> impl Iterator<Item = &str> {
         self.profiles.keys().map(String::as_str)
     }
 
+    /// A profile by name.
     pub fn profile(&self, name: &str) -> Option<&Profile> {
         self.profiles.get(name)
     }
 
+    /// A mutable profile by name.
     pub fn profile_mut(&mut self, name: &str) -> Option<&mut Profile> {
         self.profiles.get_mut(name)
     }
 
+    /// Settings resolved through the default profile.
     pub fn resolve(&self) -> Resolved {
         self.resolve_profile(self.default_profile_name())
     }
 
+    /// Settings resolved through a named profile.
     pub fn resolve_profile(&self, name: &str) -> Resolved {
         let profile = self
             .profiles
@@ -378,10 +385,12 @@ impl ConfigFile {
         }
     }
 
+    /// The default profile's palette.
     pub fn resolve_palette(&self) -> Arc<Palette> {
         self.resolve_palette_for(self.default_profile_name())
     }
 
+    /// A named profile's palette.
     pub fn resolve_palette_for(&self, profile: &str) -> Arc<Palette> {
         let name = self.resolve_profile(profile).theme;
         if let Some(custom) = self.custom_themes.get(&name) {
@@ -406,6 +415,7 @@ impl ConfigFile {
         }
     }
 
+    /// Set the default font size.
     pub fn set_font_size(&mut self, size: f32) {
         let size = clamp_font_size(size);
         self.settings.font_size = size;
@@ -413,6 +423,7 @@ impl ConfigFile {
         self.profiles.entry(name).or_default().font_size = Some(size);
     }
 
+    /// Set the default font family.
     pub fn set_font_family(&mut self, family: &str) {
         let family = family.trim();
         if family.is_empty() {
@@ -422,6 +433,7 @@ impl ConfigFile {
         self.profiles.entry(name).or_default().font_family = family.to_owned();
     }
 
+    /// Set the theme name.
     pub fn set_theme(&mut self, theme: String) {
         self.settings.theme = theme.clone();
         let name = self.default_profile_name().to_owned();
@@ -440,6 +452,7 @@ impl ConfigFile {
         self.profiles.entry(name).or_default().theme = None;
     }
 
+    /// Copy a theme under a new name; returns the new name.
     pub fn copy_theme(&mut self, source_name: &str) -> String {
         let source = if let Some(custom) = self.custom_themes.get(source_name) {
             custom.clone()
@@ -577,10 +590,12 @@ impl ConfigFile {
         }
     }
 
+    /// Get or create a profile by name.
     pub fn ensure_profile(&mut self, name: &str) -> &mut Profile {
         self.profiles.entry(name.to_owned()).or_default()
     }
 
+    /// Set the default profile; false when unknown.
     pub fn set_default_profile(&mut self, name: &str) -> bool {
         if self.profiles.contains_key(name) {
             self.settings.default_profile = name.to_owned();
@@ -609,6 +624,7 @@ impl ConfigFile {
         true
     }
 
+    /// Rename a profile; false when the source is missing or the name is taken.
     pub fn rename_profile(&mut self, from: &str, to: &str) -> bool {
         let to = to.trim();
         if to.is_empty() || from == to || !name_ok(to) || !self.profiles.contains_key(from) {
@@ -627,6 +643,7 @@ impl ConfigFile {
         true
     }
 
+    /// Check that a backend name is supported.
     pub fn validate_backend(&self, name: &str) -> Result<(), String> {
         let resolved = self.resolve_profile(name);
         match resolved.backend.as_str() {
@@ -635,10 +652,12 @@ impl ConfigFile {
         }
     }
 
+    /// Whether a name is a custom theme.
     pub fn is_custom_theme(&self, name: &str) -> bool {
         self.custom_themes.contains_key(name)
     }
 
+    /// Write the config, profiles and themes to disk.
     pub fn save(&self) -> io::Result<()> {
         if let Some(err) = &self.load_error {
             return Err(io::Error::new(
@@ -699,6 +718,7 @@ pub fn server_ok(name: &str) -> bool {
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.'))
 }
 
+/// Whether a name is valid for a profile or theme.
 pub fn name_ok(name: &str) -> bool {
     if name.is_empty() || name == "." || name == ".." || name.starts_with('.') {
         return false;
